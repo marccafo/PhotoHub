@@ -1,0 +1,7 @@
+﻿services:
+  photohub.api:
+    image: photohub.api
+    build:
+      context: .
+      dockerfile: Src/PhotoHub.Api/Dockerfile
+
