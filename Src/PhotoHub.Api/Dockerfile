@@ -8,7 +8,7 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["PhotoHub.Api/PhotoHub.Api.csproj", "PhotoHub.Api/"]
-RUN dotnet restore "PhotoHub.Api/PhotoHub.Api.csproj"
+RUN dotnet restore "Src/PhotoHub.Api/PhotoHub.Api.csproj"
 COPY . .
 WORKDIR "/src/PhotoHub.Api"
 RUN dotnet build "./PhotoHub.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build
