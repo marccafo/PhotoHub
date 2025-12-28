@@ -1,0 +1,17 @@
+### Variables
+@HostUrl = http://localhost:5000
+
+### Scan Photos - Scan photo directory (using host path)
+# When calling from outside Docker, use the Windows host path
+GET {{HostUrl}}/api/photos/scan?directoryPath=C:\test-photos
+Accept: application/json
+
+###
+
+### Scan Photos - Scan photo directory (using container path)
+# When calling from inside Docker or using the mapped path
+GET {{HostUrl}}/api/photos/scan?directoryPath=/photos
+Accept: application/json
+
+###
+

@@ -1,0 +1,9 @@
+### Variables
+@HostUrl = http://localhost:5000
+
+### Get Timeline - Get all scanned photos ordered by scan date
+GET {{HostUrl}}/api/photos/timeline
+Accept: application/json
+
+###
+

@@ -1,7 +1,64 @@
 ﻿services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: photohub-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-photohub}
+      POSTGRES_USER: ${POSTGRES_USER:-photohub_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-photohub_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-photohub_user} -d ${POSTGRES_DB:-photohub}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: photohub-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   photohub.api:
     image: photohub.api
     build:
       context: .
       dockerfile: Src/PhotoHub.Api/Dockerfile
+    container_name: photohub-api
+    ports:
+      - "5000:8080"
+      - "5001:8081"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=${POSTGRES_DB:-photohub};Username=${POSTGRES_USER:-photohub_user};Password=${POSTGRES_PASSWORD:-photohub_password}
+      - PHOTOS_DIR=${PHOTOS_DIR:-C:/test-photos}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Photo directory mapping: Host -> Container
+      # Configure PHOTOS_DIR environment variable to change the source directory
+      # Default: C:/test-photos (Windows) or /home/user/Pictures (Linux/Mac)
+      - type: bind
+        source: ${PHOTOS_DIR:-C:/test-photos}
+        target: /photos
+        read_only: true
+
+volumes:
+  postgres_data:
+  pgadmin_data:
 

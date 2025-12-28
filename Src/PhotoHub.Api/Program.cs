@@ -1,5 +1,6 @@
 using PhotoHub.Api;
 using PhotoHub.API.Features.ScanPhotos;
+using PhotoHub.API.Features.Timeline;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -9,9 +10,13 @@ var builder = WebApplication.CreateBuilder(args);
 //builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
 
+builder.AddPostgres();
+
 builder.AddApplicationServices();
 
 var app = builder.Build();
+
+app.ExecuteMigrations();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -22,7 +27,6 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// Registrar endpoints de features
-app.MapScanPhotosEndpoint();
+app.RegisterEndpoints();
 
 app.Run();
