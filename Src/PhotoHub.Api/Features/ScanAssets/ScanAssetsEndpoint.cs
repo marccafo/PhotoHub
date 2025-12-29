@@ -223,6 +223,85 @@ public class ScanAssetsEndpoint : IEndpoint
                     stats.OrphanedFilesRemoved = orphanedAssets.Count;
                 }
                 
+                // STEP 6b: Cleanup - Remove orphaned folders (directories that no longer exist or have no assets)
+                // Normalize processed directories for comparison
+                var normalizedProcessedDirs = processedDirectories
+                    .Select(d => d.Replace('\\', '/').TrimEnd('/'))
+                    .Where(d => !string.IsNullOrEmpty(d))
+                    .ToHashSet();
+                
+                // Get all folder IDs that have assets
+                var foldersWithAssets = await dbContext.Assets
+                    .Where(a => a.FolderId != null)
+                    .Select(a => a.FolderId!.Value)
+                    .Distinct()
+                    .ToHashSetAsync(cancellationToken);
+                
+                // Get all folders that exist in the filesystem (from processedDirectories)
+                var allFolders = await dbContext.Folders
+                    .Include(f => f.Assets)
+                    .Include(f => f.Permissions)
+                    .Include(f => f.SubFolders)
+                    .ToListAsync(cancellationToken);
+                
+                // Build a set of folder IDs that should be kept (have assets or are ancestors of folders with assets)
+                var foldersToKeep = new HashSet<int>();
+                
+                // Add folders that have assets directly
+                foldersToKeep.UnionWith(foldersWithAssets);
+                
+                // Recursively add parent folders of folders with assets
+                void AddParentFolders(int folderId)
+                {
+                    var folder = allFolders.FirstOrDefault(f => f.Id == folderId);
+                    if (folder?.ParentFolderId != null && !foldersToKeep.Contains(folder.ParentFolderId.Value))
+                    {
+                        foldersToKeep.Add(folder.ParentFolderId.Value);
+                        AddParentFolders(folder.ParentFolderId.Value);
+                    }
+                }
+                
+                foreach (var folderId in foldersWithAssets)
+                {
+                    AddParentFolders(folderId);
+                }
+                
+                var orphanedFolders = new List<Folder>();
+                
+                foreach (var folder in allFolders)
+                {
+                    var normalizedPath = folder.Path.Replace('\\', '/').TrimEnd('/');
+                    
+                    // Check if folder should be kept:
+                    // 1. Has assets associated
+                    // 2. Has permissions (don't delete folders with permissions)
+                    // 3. Is an ancestor of a folder that has assets (in foldersToKeep)
+                    // 4. Exists in the filesystem (normalizedProcessedDirs)
+                    
+                    bool hasAssets = folder.Assets.Any();
+                    bool hasPermissions = folder.Permissions.Any();
+                    bool existsInFilesystem = normalizedProcessedDirs.Contains(normalizedPath);
+                    bool isAncestorOfFolderWithAssets = foldersToKeep.Contains(folder.Id);
+                    
+                    // Only delete if folder has no assets, no permissions, doesn't exist in filesystem, 
+                    // and is not an ancestor of a folder with assets
+                    if (!hasAssets && !hasPermissions && !existsInFilesystem && !isAncestorOfFolderWithAssets)
+                    {
+                        orphanedFolders.Add(folder);
+                    }
+                }
+                
+                if (orphanedFolders.Any())
+                {
+                    // Delete folders from bottom to top (children first) to avoid foreign key issues
+                    var foldersToDelete = orphanedFolders
+                        .OrderByDescending(f => f.Path.Count(c => c == '/' || c == '\\'))
+                        .ToList();
+                    
+                    dbContext.Folders.RemoveRange(foldersToDelete);
+                    stats.OrphanedFoldersRemoved = foldersToDelete.Count;
+                }
+                
                 await dbContext.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
                 
@@ -234,7 +313,7 @@ public class ScanAssetsEndpoint : IEndpoint
                 {
                     Statistics = stats,
                     AssetsProcessed = assetsToCreate.Count + assetsToUpdate.Count,
-                    Message = $"Scan completed successfully. Processed {stats.NewFiles} new, {stats.UpdatedFiles} updated, {stats.OrphanedFilesRemoved} removed."
+                    Message = $"Scan completed successfully. Processed {stats.NewFiles} new, {stats.UpdatedFiles} updated, {stats.OrphanedFilesRemoved} files and {stats.OrphanedFoldersRemoved} folders removed."
                 };
                 
                 return Results.Ok(response);
@@ -326,6 +405,7 @@ public class ScanStatistics
     public int MovedFiles { get; set; }
     public int SkippedUnchanged { get; set; }
     public int OrphanedFilesRemoved { get; set; }
+    public int OrphanedFoldersRemoved { get; set; }
     public int HashesCalculated { get; set; }
     public int ExifExtracted { get; set; }
     public int ThumbnailsGenerated { get; set; }
