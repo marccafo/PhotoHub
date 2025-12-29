@@ -21,7 +21,7 @@ public class TimelineEndpoint : IEndpoint
         });
     }
 
-    private static async Task<IResult> Handle(
+    private async Task<IResult> Handle(
         [FromServices] PhotoDbContext dbContext,
         CancellationToken cancellationToken)
     {
@@ -55,7 +55,7 @@ public class TimelineEndpoint : IEndpoint
         }
     }
 
-    private static DateTime ConvertUtcToLocal(DateTime utcDateTime, int offsetMinutes)
+    private DateTime ConvertUtcToLocal(DateTime utcDateTime, int offsetMinutes)
     {
         return utcDateTime.AddMinutes(offsetMinutes);
     }

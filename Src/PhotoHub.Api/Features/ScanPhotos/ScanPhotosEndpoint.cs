@@ -27,7 +27,7 @@ public class ScanPhotosEndpoint : IEndpoint
         });
     }
 
-    private static async Task<IResult> Handle(
+    private async Task<IResult> Handle(
         [FromServices] DirectoryScanner directoryScanner,
         [FromServices] PhotoDbContext dbContext,
         string directoryPath,
@@ -44,8 +44,19 @@ public class ScanPhotosEndpoint : IEndpoint
             var localTimeZone = TimeZoneInfo.Local;
             var timeZoneOffsetMinutes = (int)localTimeZone.GetUtcOffset(DateTime.Now).TotalMinutes;
 
+            // Track unique directories to avoid duplicate folder creation
+            var processedDirectories = new HashSet<string>();
+
             foreach (var photo in scannedPhotos)
             {
+                // Ensure folder structure exists for this photo's directory
+                var photoDirectory = Path.GetDirectoryName(photo.FullPath);
+                if (!string.IsNullOrEmpty(photoDirectory) && !processedDirectories.Contains(photoDirectory))
+                {
+                    await EnsureFolderStructureExistsAsync(dbContext, photoDirectory, cancellationToken);
+                    processedDirectories.Add(photoDirectory);
+                }
+
                 // Verificar si la foto ya existe en la BD por FullPath
                 var existingPhoto = await dbContext.Photos
                     .FirstOrDefaultAsync(p => p.FullPath == photo.FullPath, cancellationToken);
@@ -125,9 +136,71 @@ public class ScanPhotosEndpoint : IEndpoint
         }
     }
     
-    private static DateTime ConvertUtcToLocal(DateTime utcDateTime, int offsetMinutes)
+    private DateTime ConvertUtcToLocal(DateTime utcDateTime, int offsetMinutes)
     {
         return utcDateTime.AddMinutes(offsetMinutes);
+    }
+
+    /// <summary>
+    /// Ensures that the folder structure exists in the database, creating all parent folders if necessary
+    /// </summary>
+    private async Task EnsureFolderStructureExistsAsync(
+        PhotoDbContext dbContext,
+        string folderPath,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(folderPath))
+            return;
+
+        // Normalize path: convert backslashes to forward slashes and remove trailing slashes
+        // Preserve Windows drive letters (C:, D:, etc.)
+        var normalizedPath = folderPath.Replace('\\', '/').TrimEnd('/');
+        if (string.IsNullOrEmpty(normalizedPath))
+            return;
+
+        // Check if folder already exists
+        var existingFolder = await dbContext.Folders
+            .FirstOrDefaultAsync(f => f.Path == normalizedPath, cancellationToken);
+
+        if (existingFolder != null)
+            return;
+
+        // Get parent directory using Path.GetDirectoryName (works with both / and \)
+        var parentPath = Path.GetDirectoryName(folderPath);
+        Folder? parentFolder = null;
+
+        // Recursively ensure parent folder exists
+        if (!string.IsNullOrEmpty(parentPath) && parentPath != folderPath)
+        {
+            // Normalize parent path
+            var normalizedParentPath = parentPath.Replace('\\', '/').TrimEnd('/');
+            
+            await EnsureFolderStructureExistsAsync(dbContext, normalizedParentPath, cancellationToken);
+            
+            // Get the parent folder after ensuring it exists
+            parentFolder = await dbContext.Folders
+                .FirstOrDefaultAsync(f => f.Path == normalizedParentPath, cancellationToken);
+        }
+
+        // Extract folder name from original path (Path.GetFileName handles both separators)
+        var folderName = Path.GetFileName(folderPath);
+        if (string.IsNullOrEmpty(folderName))
+        {
+            // If no name can be extracted, use the last part of normalized path
+            folderName = normalizedPath.Split('/').LastOrDefault() ?? normalizedPath;
+        }
+
+        // Create the folder
+        var folder = new Folder
+        {
+            Path = normalizedPath,
+            Name = folderName,
+            ParentFolderId = parentFolder?.Id,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        dbContext.Folders.Add(folder);
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 }
 

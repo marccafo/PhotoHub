@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PhotoHub.API.Shared.Data;
@@ -11,9 +12,11 @@ using PhotoHub.API.Shared.Data;
 namespace PhotoHub.Api.Migrations
 {
     [DbContext(typeof(PhotoDbContext))]
-    partial class PhotoDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251229144910_UserFolderPermission")]
+    partial class UserFolderPermission
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

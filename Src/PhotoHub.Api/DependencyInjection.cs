@@ -30,6 +30,8 @@ public static class DependencyInjection
 
         foreach (var type in endpointTypes)
         {
+            // Los endpoints ya no tienen dependencias scoped en el constructor,
+            // así que podemos crearlos directamente sin scope
             var endpoint = (IEndpoint)Activator.CreateInstance(type)!;
             endpoint.MapEndpoint(app);
         }
