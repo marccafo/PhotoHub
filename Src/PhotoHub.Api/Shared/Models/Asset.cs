@@ -2,7 +2,13 @@ using System.ComponentModel.DataAnnotations;
 
 namespace PhotoHub.API.Shared.Models;
 
-public class PhotoEntity
+public enum AssetType
+{
+    IMAGE,
+    VIDEO
+}
+
+public class Asset
 {
     public int Id { get; set; }
     
@@ -16,6 +22,12 @@ public class PhotoEntity
     
     public long FileSize { get; set; }
     
+    [Required]
+    [MaxLength(64)]
+    public string Checksum { get; set; } = string.Empty; // SHA256 hash
+    
+    public AssetType Type { get; set; }
+    
     public DateTime CreatedDate { get; set; }
     
     public DateTime ModifiedDate { get; set; }
@@ -26,7 +38,17 @@ public class PhotoEntity
     
     public DateTime ScannedAt { get; set; } = DateTime.UtcNow;
     
-    // Offset del timezone en minutos desde UTC (ej: -300 para UTC-5, 120 para UTC+2)
-    public int TimeZoneOffsetMinutes { get; set; }
+    public int? OwnerId { get; set; }
+    public User? Owner { get; set; }
+    
+    public int? FolderId { get; set; }
+    public Folder? Folder { get; set; }
+    
+    // For videos
+    public TimeSpan? Duration { get; set; }
+    
+    // Navigation properties
+    public AssetExif? Exif { get; set; }
+    public ICollection<AssetThumbnail> Thumbnails { get; set; } = new List<AssetThumbnail>();
 }
 

@@ -1,5 +1,5 @@
 using PhotoHub.Api;
-using PhotoHub.API.Features.ScanPhotos;
+using PhotoHub.API.Features.ScanAssets;
 using PhotoHub.API.Features.Timeline;
 using Scalar.AspNetCore;
 

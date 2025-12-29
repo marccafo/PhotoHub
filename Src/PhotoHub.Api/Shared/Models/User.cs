@@ -16,7 +16,8 @@ public class User
     
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     
-    // Navigation property
+    // Navigation properties
     public ICollection<FolderPermission> FolderPermissions { get; set; } = new List<FolderPermission>();
+    public ICollection<Asset> Assets { get; set; } = new List<Asset>();
 }
 

@@ -23,7 +23,7 @@ public class SetPermissionEndpoint : IEndpoint
     }
 
     private async Task<IResult> Handle(
-        [FromServices] PhotoDbContext dbContext,
+        [FromServices] ApplicationDbContext dbContext,
         [FromRoute] int folderId,
         [FromBody] SetPermissionRequest request,
         CancellationToken cancellationToken)

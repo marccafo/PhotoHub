@@ -10,6 +10,9 @@ public static class DependencyInjection
     public static void AddApplicationServices(this WebApplicationBuilder builder)
     {
         builder.Services.AddScoped<DirectoryScanner>();
+        builder.Services.AddScoped<FileHashService>();
+        builder.Services.AddScoped<ExifExtractorService>();
+        builder.Services.AddScoped<ThumbnailGeneratorService>();
     }
 
     public static void AddPostgres(this WebApplicationBuilder builder)
@@ -18,7 +21,7 @@ public static class DependencyInjection
         var connectionString = builder.Configuration.GetConnectionString("Postgres") 
             ?? throw new InvalidOperationException("Connection string 'Postgres' not found.");
 
-        builder.Services.AddDbContext<PhotoDbContext>(options =>
+        builder.Services.AddDbContext<ApplicationDbContext>(options =>
             options.UseNpgsql(connectionString));
     }
 
@@ -41,7 +44,7 @@ public static class DependencyInjection
     {
         using (var scope = app.Services.CreateScope())
         {
-            var dbContext = scope.ServiceProvider.GetRequiredService<PhotoDbContext>();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             try
             {
                 dbContext.Database.Migrate();

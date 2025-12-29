@@ -1,0 +1,15 @@
+### Variables
+@HostUrl = http://localhost:5000
+
+### Scan Assets - Scan media directory (using host path)
+GET {{HostUrl}}/api/assets/scan?directoryPath=C:\Photos
+Accept: application/json
+
+###
+
+### Scan Assets - Scan media directory (using container path)
+GET {{HostUrl}}/api/assets/scan?directoryPath=/photos
+Accept: application/json
+
+###
+

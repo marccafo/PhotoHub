@@ -1,0 +1,151 @@
+using PhotoHub.API.Shared.Models;
+using MetadataExtractor;
+using MetadataExtractor.Formats.Exif;
+using MetadataExtractor.Formats.Iptc;
+using MetadataExtractor.Formats.Xmp;
+
+namespace PhotoHub.API.Shared.Services;
+
+public class ExifExtractorService
+{
+    /// <summary>
+    /// Extracts EXIF/IPTC/XMP metadata from an image file
+    /// </summary>
+    public async Task<AssetExif?> ExtractExifAsync(string filePath, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            // Check if file is an image
+            var extension = Path.GetExtension(filePath).ToLowerInvariant();
+            if (!IsImageFile(extension))
+                return null;
+            
+            return await Task.Run(() =>
+            {
+                var directories = ImageMetadataReader.ReadMetadata(filePath);
+                
+                var exif = new AssetExif();
+                
+                foreach (var directory in directories)
+                {
+                    ExtractDirectoryMetadata(directory, exif);
+                }
+                
+                // Get image dimensions using ImageSharp
+                try
+                {
+                    var imageInfo = SixLabors.ImageSharp.Image.Identify(filePath);
+                    if (imageInfo != null)
+                    {
+                        exif.Width = imageInfo.Width;
+                        exif.Height = imageInfo.Height;
+                    }
+                }
+                catch
+                {
+                    // Ignore dimension extraction errors
+                }
+                
+                return exif;
+            }, cancellationToken);
+        }
+        catch
+        {
+            // Return null if extraction fails
+            return null;
+        }
+    }
+    
+    private void ExtractDirectoryMetadata(MetadataExtractor.Directory directory, AssetExif exif)
+    {
+        if (directory is ExifSubIfdDirectory exifDir)
+        {
+            // DateTimeOriginal (priority date)
+            var dateTimeOriginal = exifDir.GetDescription(ExifDirectoryBase.TagDateTimeOriginal);
+            if (!string.IsNullOrEmpty(dateTimeOriginal))
+            {
+                if (DateTime.TryParseExact(dateTimeOriginal, "yyyy:MM:dd HH:mm:ss", null, 
+                    System.Globalization.DateTimeStyles.None, out var dateTime))
+                {
+                    exif.DateTimeOriginal = dateTime.ToUniversalTime();
+                }
+            }
+            
+            // Camera info
+            exif.CameraMake = exifDir.GetDescription(ExifDirectoryBase.TagMake);
+            exif.CameraModel = exifDir.GetDescription(ExifDirectoryBase.TagModel);
+            
+            // Camera settings
+            var iso = exifDir.GetDescription(ExifDirectoryBase.TagIsoEquivalent);
+            if (!string.IsNullOrEmpty(iso) && int.TryParse(iso, out var isoValue))
+            {
+                exif.Iso = isoValue;
+            }
+            
+            var aperture = exifDir.GetDescription(ExifDirectoryBase.TagAperture);
+            if (!string.IsNullOrEmpty(aperture) && double.TryParse(aperture, out var apertureValue))
+            {
+                exif.Aperture = apertureValue;
+            }
+            
+            var shutterSpeed = exifDir.GetDescription(ExifDirectoryBase.TagShutterSpeed);
+            if (!string.IsNullOrEmpty(shutterSpeed) && double.TryParse(shutterSpeed, out var shutterValue))
+            {
+                exif.ShutterSpeed = shutterValue;
+            }
+            
+            var focalLength = exifDir.GetDescription(ExifDirectoryBase.TagFocalLength);
+            if (!string.IsNullOrEmpty(focalLength) && double.TryParse(focalLength, out var focalValue))
+            {
+                exif.FocalLength = focalValue;
+            }
+            
+            var orientation = exifDir.GetDescription(ExifDirectoryBase.TagOrientation);
+            if (!string.IsNullOrEmpty(orientation) && int.TryParse(orientation, out var orientationValue))
+            {
+                exif.Orientation = orientationValue;
+            }
+        }
+        else if (directory is GpsDirectory gpsDir)
+        {
+            // GPS coordinates
+            var location = gpsDir.GetGeoLocation();
+            if (location != null)
+            {
+                exif.Latitude = location.Latitude;
+                exif.Longitude = location.Longitude;
+            }
+            
+            var altitude = gpsDir.GetDescription(GpsDirectory.TagAltitude);
+            if (!string.IsNullOrEmpty(altitude) && double.TryParse(altitude, out var altitudeValue))
+            {
+                exif.Altitude = altitudeValue;
+            }
+        }
+        else if (directory is IptcDirectory iptcDir)
+        {
+            // IPTC metadata
+            exif.Description = iptcDir.GetDescription(IptcDirectory.TagCaption);
+            if (!string.IsNullOrEmpty(exif.Description) && exif.Description.Length > 500)
+            {
+                exif.Description = exif.Description.Substring(0, 500);
+            }
+            
+            var keywords = iptcDir.GetDescription(IptcDirectory.TagKeywords);
+            if (!string.IsNullOrEmpty(keywords))
+            {
+                exif.Keywords = keywords;
+                if (exif.Keywords.Length > 1000)
+                {
+                    exif.Keywords = exif.Keywords.Substring(0, 1000);
+                }
+            }
+        }
+    }
+    
+    private bool IsImageFile(string extension)
+    {
+        var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".gif", ".webp", ".heic", ".heif" };
+        return imageExtensions.Contains(extension);
+    }
+}

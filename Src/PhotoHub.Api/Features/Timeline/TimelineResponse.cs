@@ -10,5 +10,9 @@ public class TimelineResponse
     public DateTime ModifiedDate { get; set; }
     public string Extension { get; set; } = string.Empty;
     public DateTime ScannedAt { get; set; }
+    public string Type { get; set; } = string.Empty; // IMAGE or VIDEO
+    public string Checksum { get; set; } = string.Empty;
+    public bool HasExif { get; set; }
+    public bool HasThumbnails { get; set; }
 }
 
