@@ -230,6 +230,34 @@ public class ThumbnailGeneratorService
         return Path.Combine(_thumbnailsBasePath, assetId.ToString(), $"{sizeName}.jpg");
     }
     
+    /// <summary>
+    /// Checks if a thumbnail file exists physically on disk
+    /// </summary>
+    public bool ThumbnailExists(int assetId, ThumbnailSize size)
+    {
+        var thumbnailPath = GetThumbnailPath(assetId, size);
+        return File.Exists(thumbnailPath);
+    }
+    
+    /// <summary>
+    /// Verifies all thumbnails for an asset exist, returns missing sizes
+    /// </summary>
+    public List<ThumbnailSize> GetMissingThumbnailSizes(int assetId)
+    {
+        var sizes = new[] { ThumbnailSize.Small, ThumbnailSize.Medium, ThumbnailSize.Large };
+        var missing = new List<ThumbnailSize>();
+        
+        foreach (var size in sizes)
+        {
+            if (!ThumbnailExists(assetId, size))
+            {
+                missing.Add(size);
+            }
+        }
+        
+        return missing;
+    }
+    
     private bool IsImageFile(string extension)
     {
         var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".gif", ".webp", ".heic", ".heif" };

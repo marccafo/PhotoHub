@@ -59,6 +59,7 @@ public class ScanAssetsEndpoint : IEndpoint
             var assetsToCreate = new List<Asset>();
             var assetsToUpdate = new List<Asset>();
             var assetsToDelete = new HashSet<string>(); // Track paths that should exist
+            var allScannedAssets = new HashSet<Asset>(); // Track all assets found during scan (for thumbnail verification)
             
             // Process each file
             foreach (var file in scannedFiles)
@@ -82,6 +83,11 @@ public class ScanAssetsEndpoint : IEndpoint
                 
                 if (!needsFullCheck)
                 {
+                    // File hasn't changed, but we still need to track it for thumbnail verification
+                    if (existingByPath != null)
+                    {
+                        allScannedAssets.Add(existingByPath);
+                    }
                     stats.SkippedUnchanged++;
                     continue;
                 }
@@ -159,6 +165,7 @@ public class ScanAssetsEndpoint : IEndpoint
                 if (!isNew)
                 {
                     assetsToUpdate.Add(asset);
+                    allScannedAssets.Add(asset);
                 }
             }
             
@@ -172,7 +179,7 @@ public class ScanAssetsEndpoint : IEndpoint
                     dbContext.Assets.AddRange(assetsToCreate);
                     await dbContext.SaveChangesAsync(cancellationToken);
                     
-                    // Now generate thumbnails for new assets (need asset.Id)
+                    // STEP 4: Generate thumbnails for new assets (need asset.Id)
                     foreach (var asset in assetsToCreate.Where(a => a.Type == AssetType.IMAGE))
                     {
                         var thumbnails = await thumbnailService.GenerateThumbnailsAsync(
@@ -182,9 +189,15 @@ public class ScanAssetsEndpoint : IEndpoint
                         
                         if (thumbnails.Any())
                         {
-                            asset.Thumbnails = thumbnails;
+                            dbContext.AssetThumbnails.AddRange(thumbnails);
                             stats.ThumbnailsGenerated += thumbnails.Count;
                         }
+                    }
+                    
+                    // Save thumbnails for new assets
+                    if (assetsToCreate.Any(a => a.Type == AssetType.IMAGE))
+                    {
+                        await dbContext.SaveChangesAsync(cancellationToken);
                     }
                 }
                 
@@ -192,6 +205,113 @@ public class ScanAssetsEndpoint : IEndpoint
                 if (assetsToUpdate.Any())
                 {
                     await dbContext.SaveChangesAsync(cancellationToken);
+                    
+                    // STEP 4b: Regenerate missing thumbnails for existing assets
+                    foreach (var asset in assetsToUpdate.Where(a => a.Type == AssetType.IMAGE))
+                    {
+                        // Load thumbnails from database
+                        await dbContext.Entry(asset)
+                            .Collection(a => a.Thumbnails)
+                            .LoadAsync(cancellationToken);
+                        
+                        // Check which thumbnails are missing physically
+                        var missingSizes = thumbnailService.GetMissingThumbnailSizes(asset.Id);
+                        
+                        if (missingSizes.Any())
+                        {
+                            // Regenerate only missing thumbnails
+                            var existingThumbnails = asset.Thumbnails.ToList();
+                            var existingSizes = existingThumbnails.Select(t => t.Size).ToHashSet();
+                            
+                            // Remove database entries for thumbnails that don't exist physically
+                            var thumbnailsToRemove = existingThumbnails
+                                .Where(t => missingSizes.Contains(t.Size))
+                                .ToList();
+                            
+                            if (thumbnailsToRemove.Any())
+                            {
+                                dbContext.AssetThumbnails.RemoveRange(thumbnailsToRemove);
+                            }
+                            
+                            // Generate missing thumbnails
+                            var allThumbnails = await thumbnailService.GenerateThumbnailsAsync(
+                                asset.FullPath,
+                                asset.Id,
+                                cancellationToken);
+                            
+                            // Only add the ones that were missing
+                            var newThumbnails = allThumbnails
+                                .Where(t => missingSizes.Contains(t.Size))
+                                .ToList();
+                            
+                            if (newThumbnails.Any())
+                            {
+                                dbContext.AssetThumbnails.AddRange(newThumbnails);
+                                stats.ThumbnailsRegenerated += newThumbnails.Count;
+                            }
+                        }
+                    }
+                    
+                    // Save regenerated thumbnails
+                    if (assetsToUpdate.Any(a => a.Type == AssetType.IMAGE))
+                    {
+                        await dbContext.SaveChangesAsync(cancellationToken);
+                    }
+                }
+                
+                // STEP 4c: Verify and regenerate thumbnails for ALL scanned assets (including unchanged ones)
+                var unchangedImageAssets = allScannedAssets
+                    .Where(a => a.Type == AssetType.IMAGE && !assetsToUpdate.Contains(a))
+                    .ToList();
+                
+                if (unchangedImageAssets.Any())
+                {
+                    foreach (var asset in unchangedImageAssets)
+                    {
+                        // Load thumbnails from database
+                        await dbContext.Entry(asset)
+                            .Collection(a => a.Thumbnails)
+                            .LoadAsync(cancellationToken);
+                        
+                        // Check which thumbnails are missing physically
+                        var missingSizes = thumbnailService.GetMissingThumbnailSizes(asset.Id);
+                        
+                        if (missingSizes.Any())
+                        {
+                            // Remove database entries for thumbnails that don't exist physically
+                            var thumbnailsToRemove = asset.Thumbnails
+                                .Where(t => missingSizes.Contains(t.Size))
+                                .ToList();
+                            
+                            if (thumbnailsToRemove.Any())
+                            {
+                                dbContext.AssetThumbnails.RemoveRange(thumbnailsToRemove);
+                            }
+                            
+                            // Generate missing thumbnails
+                            var allThumbnails = await thumbnailService.GenerateThumbnailsAsync(
+                                asset.FullPath,
+                                asset.Id,
+                                cancellationToken);
+                            
+                            // Only add the ones that were missing
+                            var newThumbnails = allThumbnails
+                                .Where(t => missingSizes.Contains(t.Size))
+                                .ToList();
+                            
+                            if (newThumbnails.Any())
+                            {
+                                dbContext.AssetThumbnails.AddRange(newThumbnails);
+                                stats.ThumbnailsRegenerated += newThumbnails.Count;
+                            }
+                        }
+                    }
+                    
+                    // Save regenerated thumbnails for unchanged assets
+                    if (unchangedImageAssets.Any())
+                    {
+                        await dbContext.SaveChangesAsync(cancellationToken);
+                    }
                 }
                 
                 // STEP 6: Cleanup - Remove orphaned assets (files that no longer exist)
@@ -313,7 +433,7 @@ public class ScanAssetsEndpoint : IEndpoint
                 {
                     Statistics = stats,
                     AssetsProcessed = assetsToCreate.Count + assetsToUpdate.Count,
-                    Message = $"Scan completed successfully. Processed {stats.NewFiles} new, {stats.UpdatedFiles} updated, {stats.OrphanedFilesRemoved} files and {stats.OrphanedFoldersRemoved} folders removed."
+                    Message = $"Scan completed successfully. Processed {stats.NewFiles} new, {stats.UpdatedFiles} updated, {stats.OrphanedFilesRemoved} files and {stats.OrphanedFoldersRemoved} folders removed. Generated {stats.ThumbnailsGenerated} new thumbnails, regenerated {stats.ThumbnailsRegenerated} missing thumbnails."
                 };
                 
                 return Results.Ok(response);
@@ -409,6 +529,7 @@ public class ScanStatistics
     public int HashesCalculated { get; set; }
     public int ExifExtracted { get; set; }
     public int ThumbnailsGenerated { get; set; }
+    public int ThumbnailsRegenerated { get; set; }
     public DateTime ScanCompletedAt { get; set; }
     public TimeSpan ScanDuration { get; set; }
 }
