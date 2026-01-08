@@ -50,5 +50,7 @@ public class Asset
     // Navigation properties
     public AssetExif? Exif { get; set; }
     public ICollection<AssetThumbnail> Thumbnails { get; set; } = new List<AssetThumbnail>();
+    public ICollection<AssetTag> Tags { get; set; } = new List<AssetTag>();
+    public ICollection<AssetMlJob> MlJobs { get; set; } = new List<AssetMlJob>();
 }
 

@@ -33,6 +33,8 @@ public class ScanAssetsEndpoint : IEndpoint
         [FromServices] FileHashService hashService,
         [FromServices] ExifExtractorService exifService,
         [FromServices] ThumbnailGeneratorService thumbnailService,
+        [FromServices] MediaRecognitionService mediaRecognitionService,
+        [FromServices] IMlJobService mlJobService,
         [FromServices] ApplicationDbContext dbContext,
         string directoryPath,
         CancellationToken cancellationToken)
@@ -162,6 +164,27 @@ public class ScanAssetsEndpoint : IEndpoint
                     asset.Exif = extractedExif;
                 }
                 
+                // STEP 3b: Basic recognition - Detect media type tags
+                List<AssetTagType>? detectedTags = null;
+                if (asset.Type == AssetType.IMAGE && extractedExif != null)
+                {
+                    detectedTags = await mediaRecognitionService.DetectMediaTypeAsync(
+                        file.FullPath, 
+                        extractedExif, 
+                        cancellationToken);
+                    
+                    if (detectedTags.Any())
+                    {
+                        // Store tags for later saving (after asset has Id)
+                        asset.Tags = detectedTags.Select(t => new AssetTag
+                        {
+                            TagType = t,
+                            DetectedAt = DateTime.UtcNow
+                        }).ToList();
+                        stats.MediaTagsDetected += detectedTags.Count;
+                    }
+                }
+                
                 if (!isNew)
                 {
                     assetsToUpdate.Add(asset);
@@ -198,6 +221,22 @@ public class ScanAssetsEndpoint : IEndpoint
                     if (assetsToCreate.Any(a => a.Type == AssetType.IMAGE))
                     {
                         await dbContext.SaveChangesAsync(cancellationToken);
+                    }
+                    
+                    // STEP 3c: Queue ML jobs for new assets if applicable
+                    foreach (var asset in assetsToCreate.Where(a => a.Type == AssetType.IMAGE))
+                    {
+                        // Load EXIF if available
+                        await dbContext.Entry(asset)
+                            .Reference(a => a.Exif)
+                            .LoadAsync(cancellationToken);
+                        
+                        if (mediaRecognitionService.ShouldTriggerMlJob(asset, asset.Exif))
+                        {
+                            await mlJobService.EnqueueMlJobAsync(asset.Id, MlJobType.FaceDetection, cancellationToken);
+                            await mlJobService.EnqueueMlJobAsync(asset.Id, MlJobType.ObjectRecognition, cancellationToken);
+                            stats.MlJobsQueued += 2;
+                        }
                     }
                 }
                 
@@ -528,6 +567,8 @@ public class ScanStatistics
     public int OrphanedFoldersRemoved { get; set; }
     public int HashesCalculated { get; set; }
     public int ExifExtracted { get; set; }
+    public int MediaTagsDetected { get; set; }
+    public int MlJobsQueued { get; set; }
     public int ThumbnailsGenerated { get; set; }
     public int ThumbnailsRegenerated { get; set; }
     public DateTime ScanCompletedAt { get; set; }

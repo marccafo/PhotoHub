@@ -11,7 +11,7 @@ using PhotoHub.API.Shared.Data;
 namespace PhotoHub.Api.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class PhotoDbContextModelSnapshot : ModelSnapshot
+    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
     {
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
@@ -159,6 +159,78 @@ namespace PhotoHub.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("AssetExifs");
+                });
+
+            modelBuilder.Entity("PhotoHub.API.Shared.Models.AssetMlJob", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AssetId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("JobType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ResultJson")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId");
+
+                    b.HasIndex("AssetId", "JobType", "Status");
+
+                    b.ToTable("AssetMlJobs");
+                });
+
+            modelBuilder.Entity("PhotoHub.API.Shared.Models.AssetTag", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AssetId")
+                        .HasColumnType("integer");
+
+                    b.Property<double?>("Confidence")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime>("DetectedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("TagType")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId");
+
+                    b.HasIndex("AssetId", "TagType")
+                        .IsUnique();
+
+                    b.ToTable("AssetTags");
                 });
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.AssetThumbnail", b =>
@@ -345,6 +417,28 @@ namespace PhotoHub.Api.Migrations
                     b.Navigation("Asset");
                 });
 
+            modelBuilder.Entity("PhotoHub.API.Shared.Models.AssetMlJob", b =>
+                {
+                    b.HasOne("PhotoHub.API.Shared.Models.Asset", "Asset")
+                        .WithMany("MlJobs")
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+                });
+
+            modelBuilder.Entity("PhotoHub.API.Shared.Models.AssetTag", b =>
+                {
+                    b.HasOne("PhotoHub.API.Shared.Models.Asset", "Asset")
+                        .WithMany("Tags")
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+                });
+
             modelBuilder.Entity("PhotoHub.API.Shared.Models.AssetThumbnail", b =>
                 {
                     b.HasOne("PhotoHub.API.Shared.Models.Asset", "Asset")
@@ -395,6 +489,10 @@ namespace PhotoHub.Api.Migrations
             modelBuilder.Entity("PhotoHub.API.Shared.Models.Asset", b =>
                 {
                     b.Navigation("Exif");
+
+                    b.Navigation("MlJobs");
+
+                    b.Navigation("Tags");
 
                     b.Navigation("Thumbnails");
                 });

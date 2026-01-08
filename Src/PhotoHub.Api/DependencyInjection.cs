@@ -13,6 +13,9 @@ public static class DependencyInjection
         builder.Services.AddScoped<FileHashService>();
         builder.Services.AddScoped<ExifExtractorService>();
         builder.Services.AddScoped<ThumbnailGeneratorService>();
+        builder.Services.AddScoped<MediaRecognitionService>();
+        builder.Services.AddScoped<IMlJobService, MlJobService>();
+        builder.Services.AddHostedService<MlJobProcessorService>();
     }
 
     public static void AddPostgres(this WebApplicationBuilder builder)

@@ -159,6 +159,54 @@ namespace PhotoHub.Api.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "AssetMlJobs",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    AssetId = table.Column<int>(type: "integer", nullable: false),
+                    JobType = table.Column<int>(type: "integer", nullable: false),
+                    Status = table.Column<int>(type: "integer", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
+                    StartedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
+                    CompletedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
+                    ErrorMessage = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
+                    ResultJson = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_AssetMlJobs", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_AssetMlJobs_Assets_AssetId",
+                        column: x => x.AssetId,
+                        principalTable: "Assets",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "AssetTags",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    AssetId = table.Column<int>(type: "integer", nullable: false),
+                    TagType = table.Column<int>(type: "integer", nullable: false),
+                    Confidence = table.Column<double>(type: "double precision", nullable: true),
+                    DetectedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_AssetTags", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_AssetTags_Assets_AssetId",
+                        column: x => x.AssetId,
+                        principalTable: "Assets",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "AssetThumbnails",
                 columns: table => new
                 {
@@ -191,6 +239,16 @@ namespace PhotoHub.Api.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_AssetMlJobs_AssetId",
+                table: "AssetMlJobs",
+                column: "AssetId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AssetMlJobs_AssetId_JobType_Status",
+                table: "AssetMlJobs",
+                columns: new[] { "AssetId", "JobType", "Status" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Assets_Checksum",
                 table: "Assets",
                 column: "Checksum");
@@ -215,6 +273,17 @@ namespace PhotoHub.Api.Migrations
                 name: "IX_Assets_OwnerId",
                 table: "Assets",
                 column: "OwnerId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AssetTags_AssetId",
+                table: "AssetTags",
+                column: "AssetId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AssetTags_AssetId_TagType",
+                table: "AssetTags",
+                columns: new[] { "AssetId", "TagType" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_AssetThumbnails_AssetId",
@@ -272,6 +341,12 @@ namespace PhotoHub.Api.Migrations
         {
             migrationBuilder.DropTable(
                 name: "AssetExifs");
+
+            migrationBuilder.DropTable(
+                name: "AssetMlJobs");
+
+            migrationBuilder.DropTable(
+                name: "AssetTags");
 
             migrationBuilder.DropTable(
                 name: "AssetThumbnails");

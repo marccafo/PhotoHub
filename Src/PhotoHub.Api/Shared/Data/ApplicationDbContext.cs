@@ -13,6 +13,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<Asset> Assets { get; set; }
     public DbSet<AssetExif> AssetExifs { get; set; }
     public DbSet<AssetThumbnail> AssetThumbnails { get; set; }
+    public DbSet<AssetTag> AssetTags { get; set; }
+    public DbSet<AssetMlJob> AssetMlJobs { get; set; }
     public DbSet<User> Users { get; set; }
     public DbSet<Folder> Folders { get; set; }
     public DbSet<FolderPermission> FolderPermissions { get; set; }
@@ -185,6 +187,67 @@ public class ApplicationDbContext : DbContext
                 .HasConversion(
                     v => v.Kind == DateTimeKind.Utc ? DateTime.SpecifyKind(v, DateTimeKind.Unspecified) : v,
                     v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+        });
+        
+        // Configure AssetTag entity
+        modelBuilder.Entity<AssetTag>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            
+            entity.HasOne(e => e.Asset)
+                .WithMany(a => a.Tags)
+                .HasForeignKey(e => e.AssetId)
+                .OnDelete(DeleteBehavior.Cascade);
+            
+            entity.HasIndex(e => e.AssetId);
+            entity.HasIndex(e => new { e.AssetId, e.TagType }).IsUnique(); // One tag per type per asset
+            
+            entity.Property(e => e.DetectedAt)
+                .HasColumnType("timestamp without time zone")
+                .HasConversion(
+                    v => v.Kind == DateTimeKind.Utc ? DateTime.SpecifyKind(v, DateTimeKind.Unspecified) : v,
+                    v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+        });
+        
+        // Configure AssetMlJob entity
+        modelBuilder.Entity<AssetMlJob>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
+            
+            entity.HasOne(e => e.Asset)
+                .WithMany(a => a.MlJobs)
+                .HasForeignKey(e => e.AssetId)
+                .OnDelete(DeleteBehavior.Cascade);
+            
+            entity.HasIndex(e => e.AssetId);
+            entity.HasIndex(e => new { e.AssetId, e.JobType, e.Status }); // For efficient querying
+            
+            entity.Property(e => e.CreatedAt)
+                .HasColumnType("timestamp without time zone")
+                .HasConversion(
+                    v => v.Kind == DateTimeKind.Utc ? DateTime.SpecifyKind(v, DateTimeKind.Unspecified) : v,
+                    v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+            
+            entity.Property(e => e.StartedAt)
+                .HasColumnType("timestamp without time zone")
+                .HasConversion(
+                    v => v.HasValue && v.Value.Kind == DateTimeKind.Utc 
+                        ? DateTime.SpecifyKind(v.Value, DateTimeKind.Unspecified) 
+                        : v,
+                    v => v.HasValue 
+                        ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) 
+                        : null);
+            
+            entity.Property(e => e.CompletedAt)
+                .HasColumnType("timestamp without time zone")
+                .HasConversion(
+                    v => v.HasValue && v.Value.Kind == DateTimeKind.Utc 
+                        ? DateTime.SpecifyKind(v.Value, DateTimeKind.Unspecified) 
+                        : v,
+                    v => v.HasValue 
+                        ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) 
+                        : null);
         });
     }
 }
