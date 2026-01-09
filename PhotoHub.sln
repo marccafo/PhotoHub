@@ -4,7 +4,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PhotoHub.Api", "Src\PhotoHu
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{F8DA3F44-DCB9-416C-AF24-56252C9AD282}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PhotoHub.BlazorWASM", "Src\PhotoHub.BlazorWASM\PhotoHub.BlazorWASM.csproj", "{94BE62C8-BCE5-4013-A324-23145BD26916}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PhotoHub.Blazor.Shared", "Src\PhotoHub.Blazor.Shared\PhotoHub.Blazor.Shared.csproj", "{6472C84A-6107-4808-9CA8-ACE415E2467D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PhotoHub.Blazor.WASM", "Src\PhotoHub.Blazor.WASM\PhotoHub.Blazor.WASM.csproj", "{C9F7869C-0682-4C7E-A39C-1B6CBD8D4AA7}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -16,9 +18,13 @@ Global
 		{F4945E13-3732-4151-A8B9-2FEF43F71783}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F4945E13-3732-4151-A8B9-2FEF43F71783}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F4945E13-3732-4151-A8B9-2FEF43F71783}.Release|Any CPU.Build.0 = Release|Any CPU
-		{94BE62C8-BCE5-4013-A324-23145BD26916}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{94BE62C8-BCE5-4013-A324-23145BD26916}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{94BE62C8-BCE5-4013-A324-23145BD26916}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{94BE62C8-BCE5-4013-A324-23145BD26916}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6472C84A-6107-4808-9CA8-ACE415E2467D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6472C84A-6107-4808-9CA8-ACE415E2467D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6472C84A-6107-4808-9CA8-ACE415E2467D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6472C84A-6107-4808-9CA8-ACE415E2467D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C9F7869C-0682-4C7E-A39C-1B6CBD8D4AA7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C9F7869C-0682-4C7E-A39C-1B6CBD8D4AA7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C9F7869C-0682-4C7E-A39C-1B6CBD8D4AA7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C9F7869C-0682-4C7E-A39C-1B6CBD8D4AA7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
