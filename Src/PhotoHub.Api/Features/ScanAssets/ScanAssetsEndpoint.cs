@@ -192,17 +192,17 @@ public class ScanAssetsEndpoint : IEndpoint
                 }
             }
             
-            // STEP 5: Insert/Update in database (atomic transaction)
+            // STEP 4: Database operations and thumbnail generation (atomic transaction)
             using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
             try
             {
-                // Add new assets
+                // STEP 4a: Insert new assets
                 if (assetsToCreate.Any())
                 {
                     dbContext.Assets.AddRange(assetsToCreate);
                     await dbContext.SaveChangesAsync(cancellationToken);
                     
-                    // STEP 4: Generate thumbnails for new assets (need asset.Id)
+                    // STEP 4b: Generate thumbnails for new assets (need asset.Id)
                     foreach (var asset in assetsToCreate.Where(a => a.Type == AssetType.IMAGE))
                     {
                         var thumbnails = await thumbnailService.GenerateThumbnailsAsync(
@@ -223,7 +223,7 @@ public class ScanAssetsEndpoint : IEndpoint
                         await dbContext.SaveChangesAsync(cancellationToken);
                     }
                     
-                    // STEP 3c: Queue ML jobs for new assets if applicable
+                    // STEP 4c: Queue ML jobs for new assets if applicable
                     foreach (var asset in assetsToCreate.Where(a => a.Type == AssetType.IMAGE))
                     {
                         // Load EXIF if available
@@ -240,12 +240,12 @@ public class ScanAssetsEndpoint : IEndpoint
                     }
                 }
                 
-                // Update existing assets
+                // STEP 4d: Update existing assets
                 if (assetsToUpdate.Any())
                 {
                     await dbContext.SaveChangesAsync(cancellationToken);
                     
-                    // STEP 4b: Regenerate missing thumbnails for existing assets
+                    // STEP 4e: Regenerate missing thumbnails for existing assets
                     foreach (var asset in assetsToUpdate.Where(a => a.Type == AssetType.IMAGE))
                     {
                         // Load thumbnails from database
@@ -298,7 +298,7 @@ public class ScanAssetsEndpoint : IEndpoint
                     }
                 }
                 
-                // STEP 4c: Verify and regenerate thumbnails for ALL scanned assets (including unchanged ones)
+                // STEP 4f: Verify and regenerate thumbnails for ALL scanned assets (including unchanged ones)
                 var unchangedImageAssets = allScannedAssets
                     .Where(a => a.Type == AssetType.IMAGE && !assetsToUpdate.Contains(a))
                     .ToList();
@@ -353,7 +353,7 @@ public class ScanAssetsEndpoint : IEndpoint
                     }
                 }
                 
-                // STEP 6: Cleanup - Remove orphaned assets (files that no longer exist)
+                // STEP 5: Cleanup - Remove orphaned assets (files that no longer exist)
                 var allAssetPaths = await dbContext.Assets
                     .Select(a => a.FullPath)
                     .ToListAsync(cancellationToken);
@@ -382,7 +382,7 @@ public class ScanAssetsEndpoint : IEndpoint
                     stats.OrphanedFilesRemoved = orphanedAssets.Count;
                 }
                 
-                // STEP 6b: Cleanup - Remove orphaned folders (directories that no longer exist or have no assets)
+                // STEP 5b: Cleanup - Remove orphaned folders (directories that no longer exist or have no assets)
                 // Normalize processed directories for comparison
                 var normalizedProcessedDirs = processedDirectories
                     .Select(d => d.Replace('\\', '/').TrimEnd('/'))
@@ -464,7 +464,7 @@ public class ScanAssetsEndpoint : IEndpoint
                 await dbContext.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
                 
-                // STEP 7: Finalization
+                // STEP 6: Finalization
                 stats.ScanCompletedAt = DateTime.UtcNow;
                 stats.ScanDuration = stats.ScanCompletedAt - scanStartTime;
                 
