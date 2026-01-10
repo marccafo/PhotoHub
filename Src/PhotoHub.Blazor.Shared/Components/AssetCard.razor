@@ -1,7 +1,32 @@
 @using MudBlazor
 @using PhotoHub.Blazor.Shared.Models
 
-<MudCard Elevation="2" Class="asset-card" OnClick="@OnClick">
+<MudCard Elevation="2" Class="asset-card cursor-pointer" @onclick="@OnClick">
+    <style>
+        .asset-card {
+            transition: transform 0.2s;
+        }
+        .asset-card:hover {
+            transform: scale(1.02);
+            z-index: 10;
+        }
+        .cursor-pointer {
+            cursor: pointer;
+        }
+        .asset-thumbnail {
+            height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            background-color: var(--mud-palette-background-grey);
+        }
+        .asset-thumbnail img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: cover;
+        }
+    </style>
     <MudCardContent>
         <div class="asset-thumbnail">
             @if (Asset.HasThumbnails)

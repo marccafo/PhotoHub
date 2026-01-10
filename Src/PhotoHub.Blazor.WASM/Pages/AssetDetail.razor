@@ -14,93 +14,120 @@
 }
 else if (_asset != null)
 {
+    <div class="d-flex align-center mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="GoBack" Class="mr-2" />
+        <MudText Typo="Typo.h5">@_asset.FileName</MudText>
+    </div>
+
     <MudGrid>
-        <MudItem xs="12" md="8">
-            <MudCard>
-                <MudCardContent>
-                    @if (_asset.HasThumbnails)
-                    {
-                        <img src="@_asset.ThumbnailUrl" alt="@_asset.FileName" style="width: 100%; height: auto; max-height: 80vh; object-fit: contain;" />
-                    }
-                    else
-                    {
-                        <MudText>Imagen no disponible</MudText>
-                    }
-                </MudCardContent>
-            </MudCard>
+        <MudItem xs="12" md="9">
+            <MudPaper Elevation="4" Class="d-flex flex-column align-center justify-center p-4" Style="background-color: #1a1a1a; min-height: 70vh;">
+                @if (_asset.HasThumbnails)
+                {
+                    <img src="@_asset.ThumbnailUrl" alt="@_asset.FileName" 
+                         style="max-width: 100%; max-height: 80vh; object-fit: contain; box-shadow: 0 4px 20px rgba(0,0,0,0.5);" />
+                }
+                else
+                {
+                    <MudIcon Icon="@GetAssetIcon(_asset.Type)" Size="Size.Large" Color="Color.Default" Style="width: 128px; height: 128px;" />
+                    <MudText Typo="Typo.h6" Class="mt-4" Color="Color.Inherit">Previsualización no disponible</MudText>
+                }
+            </MudPaper>
         </MudItem>
-        <MudItem xs="12" md="4">
-            <MudCard>
-                <MudCardHeader>
-                    <MudText Typo="Typo.h6">Información</MudText>
-                </MudCardHeader>
-                <MudCardContent>
-                    <MudText Typo="Typo.body1" Class="mb-2"><strong>Nombre:</strong> @_asset.FileName</MudText>
-                    <MudText Typo="Typo.body2" Class="mb-2"><strong>Tamaño:</strong> @_asset.FileSizeFormatted</MudText>
-                    <MudText Typo="Typo.body2" Class="mb-2"><strong>Fecha:</strong> @_asset.DisplayDate</MudText>
-                    <MudText Typo="Typo.body2" Class="mb-2"><strong>Tipo:</strong> @_asset.Type</MudText>
-                    @if (!string.IsNullOrEmpty(_asset.FolderPath))
-                    {
-                        <MudText Typo="Typo.body2" Class="mb-2"><strong>Carpeta:</strong> @_asset.FolderPath</MudText>
-                    }
-                </MudCardContent>
-            </MudCard>
-
-            @if (_asset.Exif != null)
-            {
-                <MudCard Class="mt-4">
+        <MudItem xs="12" md="3">
+            <MudStack Spacing="4">
+                <MudCard Elevation="2">
                     <MudCardHeader>
-                        <MudText Typo="Typo.h6">EXIF</MudText>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">Información General</MudText>
+                        </CardHeaderContent>
                     </MudCardHeader>
                     <MudCardContent>
-                        @if (_asset.Exif.DateTaken.HasValue)
-                        {
-                            <MudText Typo="Typo.body2" Class="mb-2"><strong>Fecha de toma:</strong> @_asset.Exif.DateTaken.Value.ToString("dd MMM yyyy HH:mm")</MudText>
-                        }
-                        @if (!string.IsNullOrEmpty(_asset.Exif.CameraMake))
-                        {
-                            <MudText Typo="Typo.body2" Class="mb-2"><strong>Cámara:</strong> @_asset.Exif.CameraMake @_asset.Exif.CameraModel</MudText>
-                        }
-                        @if (_asset.Exif.Width.HasValue && _asset.Exif.Height.HasValue)
-                        {
-                            <MudText Typo="Typo.body2" Class="mb-2"><strong>Dimensiones:</strong> @_asset.Exif.Width x @_asset.Exif.Height</MudText>
-                        }
-                        @if (_asset.Exif.Latitude.HasValue && _asset.Exif.Longitude.HasValue)
-                        {
-                            <MudText Typo="Typo.body2" Class="mb-2"><strong>Ubicación:</strong> @_asset.Exif.Latitude, @_asset.Exif.Longitude</MudText>
-                        }
+                        <MudList T="string" ReadOnly="true" Dense="true">
+                            <MudListItem Icon="@Icons.Material.Filled.Info">
+                                <MudText Typo="Typo.body2"><strong>Tamaño:</strong> @_asset.FileSizeFormatted</MudText>
+                            </MudListItem>
+                            <MudListItem Icon="@Icons.Material.Filled.CalendarToday">
+                                <MudText Typo="Typo.body2"><strong>Fecha:</strong> @_asset.DisplayDate</MudText>
+                            </MudListItem>
+                            <MudListItem Icon="@Icons.Material.Filled.Description">
+                                <MudText Typo="Typo.body2"><strong>Tipo:</strong> @_asset.Type</MudText>
+                            </MudListItem>
+                            @if (!string.IsNullOrEmpty(_asset.FolderPath))
+                            {
+                                <MudListItem Icon="@Icons.Material.Filled.Folder">
+                                    <MudText Typo="Typo.body2" Style="word-break: break-all;"><strong>Carpeta:</strong> @_asset.FolderPath</MudText>
+                                </MudListItem>
+                            }
+                        </MudList>
                     </MudCardContent>
                 </MudCard>
-            }
 
-            @if (_asset.Tags.Any())
-            {
-                <MudCard Class="mt-4">
-                    <MudCardHeader>
-                        <MudText Typo="Typo.h6">Etiquetas</MudText>
-                    </MudCardHeader>
-                    <MudCardContent>
-                        @foreach (var tag in _asset.Tags)
-                        {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="mr-2 mb-2">@tag</MudChip>
-                        }
-                    </MudCardContent>
-                </MudCard>
-            }
+                @if (_asset.Exif != null)
+                {
+                    <MudCard Elevation="2">
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <MudText Typo="Typo.h6">Datos EXIF</MudText>
+                            </CardHeaderContent>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            <MudList T="string" ReadOnly="true" Dense="true">
+                                @if (_asset.Exif.DateTaken.HasValue)
+                                {
+                                    <MudListItem Icon="@Icons.Material.Filled.AccessTime">
+                                        <MudText Typo="Typo.body2"><strong>Tomada:</strong> @_asset.Exif.DateTaken.Value.ToString("dd MMM yyyy HH:mm")</MudText>
+                                    </MudListItem>
+                                }
+                                @if (!string.IsNullOrEmpty(_asset.Exif.CameraMake))
+                                {
+                                    <MudListItem Icon="@Icons.Material.Filled.Camera">
+                                        <MudText Typo="Typo.body2"><strong>Cámara:</strong> @_asset.Exif.CameraMake @_asset.Exif.CameraModel</MudText>
+                                    </MudListItem>
+                                }
+                                @if (_asset.Exif.Width.HasValue && _asset.Exif.Height.HasValue)
+                                {
+                                    <MudListItem Icon="@Icons.Material.Filled.AspectRatio">
+                                        <MudText Typo="Typo.body2"><strong>Resolución:</strong> @_asset.Exif.Width x @_asset.Exif.Height</MudText>
+                                    </MudListItem>
+                                }
+                                @if (_asset.Exif.Latitude.HasValue && _asset.Exif.Longitude.HasValue)
+                                {
+                                    <MudListItem Icon="@Icons.Material.Filled.LocationOn">
+                                        <MudText Typo="Typo.body2"><strong>GPS:</strong> @_asset.Exif.Latitude.Value.ToString("F6"), @_asset.Exif.Longitude.Value.ToString("F6")</MudText>
+                                    </MudListItem>
+                                }
+                            </MudList>
+                        </MudCardContent>
+                    </MudCard>
+                }
 
-            <MudCard Class="mt-4">
-                <MudCardContent>
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="GoBack">
-                        Volver
-                    </MudButton>
-                </MudCardContent>
-            </MudCard>
+                @if (_asset.Tags.Any())
+                {
+                    <MudCard Elevation="2">
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <MudText Typo="Typo.h6">Etiquetas</MudText>
+                            </CardHeaderContent>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            <div class="d-flex flex-wrap gap-2">
+                                @foreach (var tag in _asset.Tags)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text">@tag</MudChip>
+                                }
+                            </div>
+                        </MudCardContent>
+                    </MudCard>
+                }
+            </MudStack>
         </MudItem>
     </MudGrid>
 }
 else
 {
-    <MudAlert Severity="Severity.Error">No se pudo cargar el archivo.</MudAlert>
+    <MudAlert Severity="Severity.Error" Class="mt-4">No se pudo cargar la información del archivo.</MudAlert>
+    <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" Color="Color.Primary" OnClick="GoBack" Class="mt-2">Volver al Timeline</MudButton>
 }
 
 @code {
@@ -144,5 +171,10 @@ else
     private void GoBack()
     {
         Navigation.NavigateTo("/");
+    }
+
+    private string GetAssetIcon(string type)
+    {
+        return type == "IMAGE" ? Icons.Material.Filled.Image : Icons.Material.Filled.VideoLibrary;
     }
 }

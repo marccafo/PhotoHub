@@ -22,23 +22,11 @@
                 }
                 else
                 {
-                    <MudList T="PhotoHub.Blazor.Shared.Models.FolderItem">
-                        @foreach (var folder in _folderTree)
-                        {
-                            <MudListItem OnClick="@(() => OnFolderClick(folder))" Icon="@Icons.Material.Filled.Folder">
-                                @folder.Name (@folder.AssetCount)
-                            </MudListItem>
-                            @if (folder.SubFolders.Any())
-                            {
-                                @foreach (var subFolder in folder.SubFolders)
-                                {
-                                    <MudListItem OnClick="@(() => OnFolderClick(subFolder))" Icon="@Icons.Material.Filled.Folder" Class="ml-4">
-                                        @subFolder.Name (@subFolder.AssetCount)
-                                    </MudListItem>
-                                }
-                            }
-                        }
-                    </MudList>
+                    <MudTreeView T="FolderItem" Items="@_treeData" SelectedValueChanged="OnFolderSelected" Hover="true" Dense="true">
+                        <ItemTemplate>
+                            <MudTreeViewItem @bind-Expanded="@context.Expanded" Items="@context.Children" Value="@context.Value" Icon="@context.Icon" Text="@context.Text" />
+                        </ItemTemplate>
+                    </MudTreeView>
                 }
             </MudCardContent>
         </MudCard>
@@ -78,6 +66,7 @@
 
 @code {
     private List<FolderItem> _folderTree = new();
+    private List<TreeItemData<FolderItem>> _treeData = new();
     private FolderItem? _selectedFolder;
     private List<TimelineItem> _assets = new();
     private bool _loadingFolders = true;
@@ -95,6 +84,7 @@
         {
             _loadingFolders = true;
             _folderTree = await FolderService.GetFolderTreeAsync();
+            _treeData = MapToTreeItemData(_folderTree);
         }
         catch (Exception ex)
         {
@@ -106,11 +96,28 @@
         }
     }
 
-    private async Task OnFolderClick(FolderItem folder)
+    private List<TreeItemData<FolderItem>> MapToTreeItemData(List<FolderItem> folders)
     {
+        return folders.Select(f => new TreeItemData<FolderItem>
+        {
+            Value = f,
+            Text = $"{f.Name} ({f.AssetCount})",
+            Icon = Icons.Material.Filled.Folder,
+            Children = f.SubFolders.Any() ? MapToTreeItemData(f.SubFolders) : null
+        }).ToList();
+    }
+
+    private async Task OnFolderSelected(FolderItem folder)
+    {
+        if (folder == null) return;
         _selectedFolder = folder;
         await LoadFolderAssets(folder.Id);
         UpdateBreadcrumbs(folder);
+    }
+
+    private async Task OnFolderClick(FolderItem folder)
+    {
+        await OnFolderSelected(folder);
     }
 
     private async Task LoadFolderAssets(int folderId)
@@ -134,9 +141,21 @@
     {
         _breadcrumbs = new List<BreadcrumbItem>
         {
-            new BreadcrumbItem("Inicio", "/explorer"),
-            new BreadcrumbItem(folder.Name, null, disabled: true)
+            new BreadcrumbItem("Inicio", "/explorer")
         };
+
+        if (!string.IsNullOrEmpty(folder.Path))
+        {
+            var parts = folder.Path.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var part in parts)
+            {
+                _breadcrumbs.Add(new BreadcrumbItem(part, null, disabled: true));
+            }
+        }
+        else
+        {
+            _breadcrumbs.Add(new BreadcrumbItem(folder.Name, null, disabled: true));
+        }
     }
 
     private void OpenAsset(TimelineItem asset)
