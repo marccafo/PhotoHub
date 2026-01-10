@@ -1,10 +1,13 @@
 @page "/asset/{AssetId:int}"
 @using PhotoHub.Blazor.Shared.Services
 @using PhotoHub.Blazor.Shared.Models
+@using PhotoHub.Blazor.WASM.Services
 @using MudBlazor
+@implements IDisposable
 @inject IAssetService AssetService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
+@inject LayoutService LayoutService
 
 <PageTitle>Detalle - PhotoHub</PageTitle>
 
@@ -29,24 +32,6 @@ else if (_asset != null)
                 display: flex;
                 flex-direction: column;
                 outline: none;
-            }
-            .asset-detail-toolbar {
-                height: 64px;
-                padding: 0 16px;
-                display: flex;
-                align-items: center;
-                background: linear-gradient(rgba(0,0,0,0.7), transparent);
-                position: absolute;
-                top: 0;
-                left: 0;
-                right: 0;
-                z-index: 100;
-                transition: opacity 0.3s ease;
-                color: white;
-            }
-            .asset-detail-toolbar.hidden {
-                opacity: 0;
-                pointer-events: none;
             }
             .asset-detail-content {
                 flex-grow: 1;
@@ -97,51 +82,6 @@ else if (_asset != null)
                 pointer-events: none;
             }
         </style>
-
-        <div class="asset-detail-toolbar @(_toolbarVisible ? "" : "hidden")" @onclick:stopPropagation="true">
-            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" OnClick="GoBack" />
-            <MudSpacer />
-            
-            <div class="d-flex align-center gap-1" @onclick:stopPropagation="true">
-                <MudTooltip Text="Compartir">
-                    <MudIconButton Icon="@Icons.Material.Outlined.Share" Color="Color.Inherit" />
-                </MudTooltip>
-                
-                <MudTooltip Text="Acercar">
-                    <MudIconButton Icon="@Icons.Material.Outlined.ZoomIn" Color="Color.Inherit" />
-                </MudTooltip>
-                
-                <MudTooltip Text="Copiar">
-                    <MudIconButton Icon="@Icons.Material.Outlined.ContentCopy" Color="Color.Inherit" />
-                </MudTooltip>
-
-                <MudTooltip Text="Información">
-                    <MudIconButton Icon="@(_infoOpen ? Icons.Material.Filled.Info : Icons.Material.Outlined.Info)" 
-                                   Color="Color.Inherit" OnClick="ToggleInfo" />
-                </MudTooltip>
-                
-                <MudTooltip Text="Favorito">
-                    <MudToggleIconButton ToggledIcon="@Icons.Material.Filled.Favorite" 
-                                         Icon="@Icons.Material.Outlined.FavoriteBorder" 
-                                         Color="Color.Inherit" ToggledColor="Color.Error" />
-                </MudTooltip>
-
-                <MudTooltip Text="Descargar">
-                    <MudIconButton Icon="@Icons.Material.Outlined.Download" Color="Color.Inherit" />
-                </MudTooltip>
-
-                <MudTooltip Text="Eliminar">
-                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Inherit" />
-                </MudTooltip>
-
-                <MudMenu Icon="@Icons.Material.Outlined.MoreVert" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
-                    <MudMenuItem Icon="@Icons.Material.Outlined.Edit">Editar fecha y hora</MudMenuItem>
-                    <MudMenuItem Icon="@Icons.Material.Outlined.LocationOn">Editar ubicación</MudMenuItem>
-                    <MudMenuItem Icon="@Icons.Material.Outlined.Add">Añadir a álbum</MudMenuItem>
-                    <MudMenuItem Icon="@Icons.Material.Outlined.Archive">Archivar</MudMenuItem>
-                </MudMenu>
-            </div>
-        </div>
 
         <div class="asset-detail-content" @onclick="ToggleToolbar">
             <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" 
@@ -250,12 +190,69 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        UpdateNavbar();
         await LoadAsset();
     }
 
     protected override async Task OnParametersSetAsync()
     {
+        UpdateNavbar();
         await LoadAsset();
+    }
+
+    public void Dispose()
+    {
+        LayoutService.ResetNavbar();
+    }
+
+    private void UpdateNavbar()
+    {
+        LayoutService.SetCustomNavbar(
+            @<text>
+                <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" OnClick="GoBack" Edge="Edge.Start" />
+                <MudSpacer />
+                
+                <div class="d-flex align-center gap-1" @onclick:stopPropagation="true">
+                    <MudTooltip Text="Compartir">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Share" Color="Color.Inherit" />
+                    </MudTooltip>
+                    
+                    <MudTooltip Text="Acercar">
+                        <MudIconButton Icon="@Icons.Material.Outlined.ZoomIn" Color="Color.Inherit" />
+                    </MudTooltip>
+                    
+                    <MudTooltip Text="Copiar">
+                        <MudIconButton Icon="@Icons.Material.Outlined.ContentCopy" Color="Color.Inherit" />
+                    </MudTooltip>
+
+                    <MudTooltip Text="Información">
+                        <MudIconButton Icon="@(_infoOpen ? Icons.Material.Filled.Info : Icons.Material.Outlined.Info)" 
+                                       Color="Color.Inherit" OnClick="ToggleInfo" />
+                    </MudTooltip>
+                    
+                    <MudTooltip Text="Favorito">
+                        <MudToggleIconButton ToggledIcon="@Icons.Material.Filled.Favorite" 
+                                             Icon="@Icons.Material.Outlined.FavoriteBorder" 
+                                             Color="Color.Inherit" ToggledColor="Color.Error" />
+                    </MudTooltip>
+
+                    <MudTooltip Text="Descargar">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Download" Color="Color.Inherit" />
+                    </MudTooltip>
+
+                    <MudTooltip Text="Eliminar">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Inherit" />
+                    </MudTooltip>
+
+                    <MudMenu Icon="@Icons.Material.Outlined.MoreVert" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                        <MudMenuItem Icon="@Icons.Material.Outlined.Edit">Editar fecha y hora</MudMenuItem>
+                        <MudMenuItem Icon="@Icons.Material.Outlined.LocationOn">Editar ubicación</MudMenuItem>
+                        <MudMenuItem Icon="@Icons.Material.Outlined.Add">Añadir a álbum</MudMenuItem>
+                        <MudMenuItem Icon="@Icons.Material.Outlined.Archive">Archivar</MudMenuItem>
+                    </MudMenu>
+                </div>
+            </text>
+        );
     }
 
     private async Task LoadAsset()
@@ -320,6 +317,7 @@ else
     private void ToggleInfo()
     {
         _infoOpen = !_infoOpen;
+        UpdateNavbar();
     }
 
     private void ToggleToolbar()

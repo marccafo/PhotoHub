@@ -1,6 +1,9 @@
 ﻿@inherits LayoutComponentBase
 @using MudBlazor
+@using PhotoHub.Blazor.WASM.Services
+@implements IDisposable
 @inject NavigationManager Navigation
+@inject LayoutService LayoutService
 
 <MudThemeProvider @bind-IsDarkMode="@_isDarkMode" Theme="_theme" />
 <MudPopoverProvider />
@@ -8,37 +11,44 @@
 <MudSnackbarProvider />
 
 <MudLayout>
-    <MudAppBar Elevation="0" Dense="false" Color="Color.Surface" Class="px-4 border-b">
-        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@ToggleDrawer" Class="mr-2" />
-        
-        <div class="d-flex align-center" style="cursor: pointer;" @onclick="@(() => Navigation.NavigateTo("/"))">
-            <MudIcon Icon="@Icons.Material.Filled.PhotoCamera" Color="Color.Primary" Size="Size.Large" Class="mr-2" />
-            <MudText Typo="Typo.h6" Class="font-weight-bold d-none d-sm-flex">PhotoHub</MudText>
-        </div>
+    <MudAppBar Elevation="0" Dense="false" Color="Color.Surface" Class="@GetAppBarClass()">
+        @if (!LayoutService.IsNavbarCustom)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@ToggleDrawer" Class="mr-2" />
+            
+            <div class="d-flex align-center" style="cursor: pointer;" @onclick="@(() => Navigation.NavigateTo("/"))">
+                <MudIcon Icon="@Icons.Material.Filled.PhotoCamera" Color="Color.Primary" Size="Size.Large" Class="mr-2" />
+                <MudText Typo="Typo.h6" Class="font-weight-bold d-none d-sm-flex">PhotoHub</MudText>
+            </div>
 
-        <MudSpacer />
+            <MudSpacer />
 
-        <div class="search-container d-none d-md-flex">
-            <MudTextField @bind-Value="_searchQuery" 
-                          Placeholder="Buscar fotos, personas, lugares..." 
-                          Adornment="Adornment.Start" 
-                          AdornmentIcon="@Icons.Material.Filled.Search" 
-                          Variant="Variant.Outlined" 
-                          Margin="Margin.Dense"
-                          Class="search-field" />
-        </div>
+            <div class="search-container d-none d-md-flex">
+                <MudTextField @bind-Value="_searchQuery" 
+                              Placeholder="Buscar fotos, personas, lugares..." 
+                              Adornment="Adornment.Start" 
+                              AdornmentIcon="@Icons.Material.Filled.Search" 
+                              Variant="Variant.Outlined" 
+                              Margin="Margin.Dense"
+                              Class="search-field" />
+            </div>
 
-        <MudSpacer />
+            <MudSpacer />
 
-        <div class="d-flex align-center">
-            <MudTooltip Text="Subir">
-                <MudIconButton Icon="@Icons.Material.Filled.CloudUpload" Color="Color.Inherit" OnClick="@(() => Navigation.NavigateTo("/scan"))" />
-            </MudTooltip>
-            <MudTooltip Text="Configuración">
-                <MudIconButton Icon="@Icons.Material.Filled.Settings" Color="Color.Inherit" OnClick="@(() => Navigation.NavigateTo("/settings"))" />
-            </MudTooltip>
-            <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Class="ml-2" Style="width: 32px; height: 32px;">U</MudAvatar>
-        </div>
+            <div class="d-flex align-center">
+                <MudTooltip Text="Subir">
+                    <MudIconButton Icon="@Icons.Material.Filled.CloudUpload" Color="Color.Inherit" OnClick="@(() => Navigation.NavigateTo("/scan"))" />
+                </MudTooltip>
+                <MudTooltip Text="Configuración">
+                    <MudIconButton Icon="@Icons.Material.Filled.Settings" Color="Color.Inherit" OnClick="@(() => Navigation.NavigateTo("/settings"))" />
+                </MudTooltip>
+                <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Class="ml-2" Style="width: 32px; height: 32px;">U</MudAvatar>
+            </div>
+        }
+        else
+        {
+            @LayoutService.NavbarContent
+        }
     </MudAppBar>
     <style>
         .border-b {
@@ -60,7 +70,8 @@
             border: 1px solid var(--mud-palette-primary);
         }
     </style>
-    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="0" Variant="@DrawerVariant.Responsive" Class="border-r">
+    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="0" 
+               Variant="@DrawerVariant.Responsive" Class="@GetDrawerClass()">
         <NavMenu />
     </MudDrawer>
     <style>
@@ -107,8 +118,28 @@
         }
     };
 
+    private string GetAppBarClass()
+    {
+        return LayoutService.IsNavbarCustom ? "px-4" : "px-4 border-b";
+    }
+
+    private string GetDrawerClass()
+    {
+        return LayoutService.IsNavbarCustom ? "d-none" : "border-r";
+    }
+
     private void ToggleDrawer()
     {
         _drawerOpen = !_drawerOpen;
+    }
+
+    protected override void OnInitialized()
+    {
+        LayoutService.OnMajorUpdate += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        LayoutService.OnMajorUpdate -= StateHasChanged;
     }
 }

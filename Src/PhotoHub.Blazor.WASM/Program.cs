@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using PhotoHub.Blazor.WASM;
 using MudBlazor.Services;
 using PhotoHub.Blazor.Shared.Services;
+using PhotoHub.Blazor.WASM.Services;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -19,6 +20,7 @@ builder.Services.AddScoped(sp => new HttpClient
 builder.Services.AddMudServices();
 
 // Agregar servicios personalizados
+builder.Services.AddScoped<LayoutService>();
 builder.Services.AddScoped<IAssetService, AssetService>();
 builder.Services.AddScoped<IScanService, ScanService>();
 builder.Services.AddScoped<IFolderService, FolderService>();
