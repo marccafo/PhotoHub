@@ -32,35 +32,70 @@
     </MudCardContent>
 </MudCard>
 
-@if (_scanResult != null)
+@if (_scanning || _lastUpdate != null)
 {
     <MudCard Class="mt-4">
         <MudCardHeader>
-            <MudText Typo="Typo.h6">Resultados del Escaneo</MudText>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h6">Estado del Escaneo</MudText>
+            </CardHeaderContent>
+            <CardHeaderActions>
+                @if (_scanning)
+                {
+                    <MudBadge Content="@("En curso")" Color="Color.Info" Overlap="true" Class="mt-3 mr-3" />
+                }
+                else if (_lastUpdate?.IsCompleted == true)
+                {
+                    <MudBadge Content="@("Completado")" Color="Color.Success" Overlap="true" Class="mt-3 mr-3" />
+                }
+            </CardHeaderActions>
         </MudCardHeader>
         <MudCardContent>
-            <MudText>@_scanResult.Message</MudText>
+            <MudText Typo="Typo.body1" Class="mb-2">@_currentStatus</MudText>
+            <MudProgressLinear Color="Color.Primary" Value="@_progress" Class="my-4" />
             
-            <MudGrid Class="mt-4">
-                <MudItem xs="12" sm="6" md="4">
-                    <MudPaper Elevation="1" Padding="4" Class="text-center">
-                        <MudText Typo="Typo.h4" Color="Color.Primary">@_scanResult.Statistics.TotalFilesFound</MudText>
-                        <MudText Typo="Typo.body2">Archivos Encontrados</MudText>
-                    </MudPaper>
-                </MudItem>
-                <MudItem xs="12" sm="6" md="4">
-                    <MudPaper Elevation="1" Padding="4" Class="text-center">
-                        <MudText Typo="Typo.h4" Color="Color.Success">@_scanResult.Statistics.NewFiles</MudText>
-                        <MudText Typo="Typo.body2">Nuevos Archivos</MudText>
-                    </MudPaper>
-                </MudItem>
-                <MudItem xs="12" sm="6" md="4">
-                    <MudPaper Elevation="1" Padding="4" Class="text-center">
-                        <MudText Typo="Typo.h4" Color="Color.Info">@_scanResult.Statistics.UpdatedFiles</MudText>
-                        <MudText Typo="Typo.body2">Archivos Actualizados</MudText>
-                    </MudPaper>
-                </MudItem>
-            </MudGrid>
+            @if (_statistics != null)
+            {
+                <MudGrid Class="mt-4">
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudPaper Elevation="1" Padding="4" Class="text-center pa-4">
+                            <MudText Typo="Typo.h4" Color="Color.Primary">@_statistics.TotalFilesFound</MudText>
+                            <MudText Typo="Typo.body2">Archivos Encontrados</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudPaper Elevation="1" Padding="4" Class="text-center pa-4">
+                            <MudText Typo="Typo.h4" Color="Color.Success">@_statistics.NewFiles</MudText>
+                            <MudText Typo="Typo.body2">Nuevos Archivos</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudPaper Elevation="1" Padding="4" Class="text-center pa-4">
+                            <MudText Typo="Typo.h4" Color="Color.Info">@_statistics.UpdatedFiles</MudText>
+                            <MudText Typo="Typo.body2">Archivos Actualizados</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudPaper Elevation="1" Padding="4" Class="text-center pa-4">
+                            <MudText Typo="Typo.h4" Color="Color.Warning">@_statistics.ThumbnailsGenerated</MudText>
+                            <MudText Typo="Typo.body2">Miniaturas</MudText>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+            }
+
+            <MudExpansionPanels Class="mt-4">
+                <MudExpansionPanel Text="Registro detallado">
+                    <div style="max-height: 200px; overflow-y: auto;">
+                        @foreach (var update in _updates.AsEnumerable().Reverse())
+                        {
+                            <MudText Typo="Typo.caption" Class="d-block border-b pa-1">
+                                <span class="text-muted">[@DateTime.Now.ToString("HH:mm:ss")]</span> @update.Message
+                            </MudText>
+                        }
+                    </div>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
         </MudCardContent>
     </MudCard>
 }
@@ -68,7 +103,11 @@
 @code {
     private string _directoryPath = string.Empty;
     private bool _scanning = false;
-    private ScanResult? _scanResult;
+    private double _progress = 0;
+    private string _currentStatus = "Esperando inicio...";
+    private ScanStatistics? _statistics;
+    private ScanProgressUpdate? _lastUpdate;
+    private List<ScanProgressUpdate> _updates = new();
 
     private async Task StartScan()
     {
@@ -81,15 +120,34 @@
         try
         {
             _scanning = true;
-            _scanResult = null;
+            _updates.Clear();
+            _progress = 0;
+            _statistics = null;
+            _lastUpdate = null;
             
             using var cts = new CancellationTokenSource();
-            _scanResult = await ScanService.ScanDirectoryAsync(_directoryPath, cts.Token);
             
-            Snackbar.Add("Escaneo completado exitosamente", Severity.Success);
+            await foreach (var update in ScanService.ScanDirectoryAsync(_directoryPath, cts.Token))
+            {
+                _lastUpdate = update;
+                _currentStatus = update.Message;
+                _progress = update.Percentage;
+                if (update.Statistics != null)
+                {
+                    _statistics = update.Statistics;
+                }
+                _updates.Add(update);
+                StateHasChanged();
+            }
+            
+            if (_lastUpdate?.IsCompleted == true)
+            {
+                Snackbar.Add("Escaneo completado exitosamente", Severity.Success);
+            }
         }
         catch (Exception ex)
         {
+            _currentStatus = $"Error: {ex.Message}";
             Snackbar.Add($"Error durante el escaneo: {ex.Message}", Severity.Error);
         }
         finally

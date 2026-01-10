@@ -1,9 +1,12 @@
+using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PhotoHub.API.Shared.Data;
 using PhotoHub.API.Shared.Interfaces;
 using PhotoHub.API.Shared.Models;
 using PhotoHub.API.Shared.Services;
+using PhotoHub.Blazor.Shared.Models;
 using Scalar.AspNetCore;
 
 namespace PhotoHub.API.Features.ScanAssets;
@@ -12,6 +15,11 @@ public class ScanAssetsEndpoint : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
+        app.MapGet("/api/assets/scan/stream", HandleStream)
+        .WithName("ScanAssetsStream")
+        .WithTags("Assets")
+        .WithDescription("Streams the scanning process progress");
+
         app.MapGet("/api/assets/scan", Handle)
         .CodeSample(
                 codeSample: "curl -X GET \"http://localhost:5000/api/assets/scan?directoryPath=C:\\Photos\" -H \"Accept: application/json\"",
@@ -25,6 +33,176 @@ public class ScanAssetsEndpoint : IEndpoint
             operation.Description = "This endpoint recursively scans a specified directory, extracts metadata, generates thumbnails, and updates the database with all found media files. Supports images (JPG, PNG, etc.) and videos (MP4, AVI, etc.)";
             return Task.CompletedTask;
         });
+    }
+
+    private async IAsyncEnumerable<ScanProgressUpdate> HandleStream(
+        [FromServices] DirectoryScanner directoryScanner,
+        [FromServices] FileHashService hashService,
+        [FromServices] ExifExtractorService exifService,
+        [FromServices] ThumbnailGeneratorService thumbnailService,
+        [FromServices] MediaRecognitionService mediaRecognitionService,
+        [FromServices] IMlJobService mlJobService,
+        [FromServices] ApplicationDbContext dbContext,
+        [FromQuery] string directoryPath,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var channel = Channel.CreateUnbounded<ScanProgressUpdate>();
+        var scanStartTime = DateTime.UtcNow;
+        var stats = new PhotoHub.Blazor.Shared.Models.ScanStatistics();
+
+        // Background task to perform the scan
+        _ = Task.Run(async delegate
+        {
+            try
+            {
+                await channel.Writer.WriteAsync(new ScanProgressUpdate { Message = "Iniciando descubrimiento de archivos...", Percentage = 0 }, cancellationToken);
+                
+                // STEP 1: Recursive file discovery
+                var scannedFilesList = (await directoryScanner.ScanDirectoryAsync(directoryPath, cancellationToken)).ToList();
+                stats.TotalFilesFound = scannedFilesList.Count;
+                
+                await channel.Writer.WriteAsync(new ScanProgressUpdate { Message = $"Descubiertos {stats.TotalFilesFound} archivos. Procesando...", Percentage = 10, Statistics = stats }, cancellationToken);
+
+                // Load existing assets for differential comparison
+                var existingAssetsByChecksum = await dbContext.Assets
+                    .ToDictionaryAsync(a => a.Checksum, a => a, cancellationToken);
+                
+                var existingAssetsByPath = await dbContext.Assets
+                    .ToDictionaryAsync(a => a.FullPath, a => a, cancellationToken);
+                
+                // STEP 2 & 3: Process files
+                var scanContext = new ScanContext
+                {
+                    AssetsToCreate = new List<Asset>(),
+                    AssetsToUpdate = new List<Asset>(),
+                    AssetsToDelete = new HashSet<string>(),
+                    AllScannedAssets = new HashSet<Asset>(),
+                    ProcessedDirectories = new HashSet<string>()
+                };
+
+                int processedCount = 0;
+                var apiStatsForProcessing = new PhotoHub.API.Features.ScanAssets.ScanStatistics();
+                
+                foreach (var file in scannedFilesList)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    scanContext.AssetsToDelete.Add(file.FullPath);
+                    await EnsureFolderStructureForFileAsync(dbContext, file.FullPath, scanContext.ProcessedDirectories, cancellationToken);
+                    
+                    var changeResult = await VerifyFileChangesAsync(file, existingAssetsByPath, existingAssetsByChecksum, hashService, dbContext, apiStatsForProcessing, cancellationToken);
+                    
+                    if (!changeResult.ShouldSkip)
+                    {
+                        var asset = changeResult.Asset!;
+                        var isNew = changeResult.IsNew;
+                        if (ShouldExtractExif(asset, isNew)) 
+                            await ExtractExifMetadataAsync(asset, file.FullPath, exifService, apiStatsForProcessing, cancellationToken);
+                        
+                        if (asset.Exif != null)
+                            await DetectMediaTagsAsync(asset, file.FullPath, mediaRecognitionService, apiStatsForProcessing, cancellationToken);
+
+                        if (!isNew)
+                        {
+                            scanContext.AssetsToUpdate.Add(asset);
+                            scanContext.AllScannedAssets.Add(asset);
+                        }
+                        else
+                        {
+                            asset.ScannedAt = scanStartTime;
+                            scanContext.AssetsToCreate.Add(asset);
+                        }
+                    }
+                    else if (changeResult.ExistingAsset != null)
+                    {
+                        scanContext.AllScannedAssets.Add(changeResult.ExistingAsset);
+                    }
+
+                    processedCount++;
+                    SyncStats(apiStatsForProcessing, stats);
+                    if (processedCount % 10 == 0 || processedCount == scannedFilesList.Count)
+                    {
+                        await channel.Writer.WriteAsync(new ScanProgressUpdate 
+                        { 
+                            Message = $"Procesando archivo {processedCount} de {stats.TotalFilesFound}...", 
+                            Percentage = 10 + (processedCount * 40.0 / scannedFilesList.Count),
+                            Statistics = stats
+                        }, cancellationToken);
+                    }
+                }
+
+                // STEP 4: Database operations and thumbnail generation
+                await channel.Writer.WriteAsync(new ScanProgressUpdate { Message = "Guardando cambios y generando miniaturas...", Percentage = 50, Statistics = stats }, cancellationToken);
+                
+                // Redefining stats mapping because of naming conflicts or just use the local one
+                var apiStats = new PhotoHub.API.Features.ScanAssets.ScanStatistics();
+                
+                await ProcessDatabaseOperationsWithProgressAsync(scanContext, dbContext, thumbnailService, mediaRecognitionService, mlJobService, apiStats, channel.Writer, stats, cancellationToken);
+
+                stats.ScanCompletedAt = DateTime.UtcNow;
+                stats.ScanDuration = stats.ScanCompletedAt - scanStartTime;
+                
+                await channel.Writer.WriteAsync(new ScanProgressUpdate 
+                { 
+                    Message = "Escaneo completado con éxito.", 
+                    Percentage = 100, 
+                    Statistics = stats,
+                    IsCompleted = true
+                }, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                await channel.Writer.WriteAsync(new ScanProgressUpdate { Message = $"Error: {ex.Message}", IsCompleted = true }, cancellationToken);
+            }
+            finally
+            {
+                channel.Writer.Complete();
+            }
+        }, cancellationToken);
+
+        // Stream the updates from the channel
+        await foreach (var update in channel.Reader.ReadAllAsync(cancellationToken))
+        {
+            yield return update;
+        }
+    }
+
+    private async Task ProcessDatabaseOperationsWithProgressAsync(
+        ScanContext context,
+        ApplicationDbContext dbContext,
+        ThumbnailGeneratorService thumbnailService,
+        MediaRecognitionService mediaRecognitionService,
+        IMlJobService mlJobService,
+        PhotoHub.API.Features.ScanAssets.ScanStatistics apiStats,
+        ChannelWriter<ScanProgressUpdate> writer,
+        PhotoHub.Blazor.Shared.Models.ScanStatistics blazorStats,
+        CancellationToken cancellationToken)
+    {
+        // This is a simplified version of ProcessDatabaseOperationsAsync that reports progress
+        await RemoveOrphanedAssetsAsync(context.AssetsToDelete, dbContext, apiStats, cancellationToken);
+        SyncStats(apiStats, blazorStats);
+        await writer.WriteAsync(new ScanProgressUpdate { Message = "Limpieza de archivos huérfanos completada.", Percentage = 60, Statistics = blazorStats }, cancellationToken);
+
+        await InsertNewAssetsAsync(context.AssetsToCreate, dbContext, thumbnailService, mediaRecognitionService, mlJobService, apiStats, cancellationToken);
+        SyncStats(apiStats, blazorStats);
+        await writer.WriteAsync(new ScanProgressUpdate { Message = "Nuevos archivos insertados.", Percentage = 80, Statistics = blazorStats }, cancellationToken);
+
+        await UpdateExistingAssetsAsync(context.AssetsToUpdate, dbContext, thumbnailService, apiStats, cancellationToken);
+        SyncStats(apiStats, blazorStats);
+        await writer.WriteAsync(new ScanProgressUpdate { Message = "Archivos actualizados.", Percentage = 90, Statistics = blazorStats }, cancellationToken);
+
+        await RemoveOrphanedFoldersAsync(context.ProcessedDirectories, dbContext, apiStats, cancellationToken);
+        SyncStats(apiStats, blazorStats);
+    }
+
+    private void SyncStats(PhotoHub.API.Features.ScanAssets.ScanStatistics apiStats, PhotoHub.Blazor.Shared.Models.ScanStatistics blazorStats)
+    {
+        blazorStats.NewFiles = apiStats.NewFiles;
+        blazorStats.UpdatedFiles = apiStats.UpdatedFiles;
+        blazorStats.OrphanedFilesRemoved = apiStats.OrphanedFilesRemoved;
+        blazorStats.OrphanedFoldersRemoved = apiStats.OrphanedFoldersRemoved;
+        blazorStats.ThumbnailsGenerated = apiStats.ThumbnailsGenerated;
+        blazorStats.ThumbnailsRegenerated = apiStats.ThumbnailsRegenerated;
+        blazorStats.TotalFilesFound = apiStats.TotalFilesFound;
     }
 
     private async Task<IResult> Handle(

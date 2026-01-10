@@ -1,4 +1,6 @@
 using System.Net.Http.Json;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
 using PhotoHub.Blazor.Shared.Models;
 
 namespace PhotoHub.Blazor.Shared.Services;
@@ -6,18 +8,21 @@ namespace PhotoHub.Blazor.Shared.Services;
 public class ScanService : IScanService
 {
     private readonly HttpClient _httpClient;
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
 
     public ScanService(HttpClient httpClient)
     {
         _httpClient = httpClient;
     }
 
-    public async Task<ScanResult> ScanDirectoryAsync(string directoryPath, CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<ScanProgressUpdate> ScanDirectoryAsync(
+        string directoryPath, 
+        CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.GetFromJsonAsync<ScanResult>(
-            $"/api/assets/scan?directoryPath={Uri.EscapeDataString(directoryPath)}",
-            cancellationToken);
-        
-        return response ?? new ScanResult();
+        var url = $"/api/assets/scan/stream?directoryPath={Uri.EscapeDataString(directoryPath)}";
+        return _httpClient.GetFromJsonAsAsyncEnumerable<ScanProgressUpdate>(url, _jsonOptions, cancellationToken)!;
     }
 }
