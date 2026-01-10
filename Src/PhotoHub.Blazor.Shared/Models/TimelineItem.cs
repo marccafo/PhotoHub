@@ -16,6 +16,7 @@ public class TimelineItem
     public bool HasThumbnails { get; set; }
     
     public string ThumbnailUrl => $"/api/assets/{Id}/thumbnail?size=Medium";
+    public string ContentUrl => $"/api/assets/{Id}/content";
     public string DisplayDate => CreatedDate.ToString("dd MMM yyyy");
     public string FileSizeFormatted => FormatFileSize(FileSize);
     

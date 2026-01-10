@@ -47,6 +47,10 @@ else if (_asset != null)
                 object-fit: contain;
                 user-select: none;
             }
+            video.asset-detail-image {
+                outline: none;
+                background-color: black;
+            }
             .asset-info-drawer {
                 width: 360px;
                 background-color: #1a1a1a;
@@ -91,9 +95,17 @@ else if (_asset != null)
                            OnClickStopPropagation="true"
                            Disabled="@(_prevId == null)" />
 
-            @if (_asset.HasThumbnails)
+            @if (_asset.Type == "VIDEO")
             {
-                <img src="@_asset.ThumbnailUrl" alt="@_asset.FileName" class="asset-detail-image" />
+                <video controls autoplay class="asset-detail-image">
+                    <source src="@_asset.ContentUrl" type="video/mp4">
+                    Tu navegador no soporta la reproducción de videos.
+                </video>
+            }
+            else if (_asset.HasThumbnails || _asset.Type == "IMAGE")
+            {
+                <img src="@(_asset.Type == "IMAGE" ? _asset.ContentUrl : _asset.ThumbnailUrl)" 
+                     alt="@_asset.FileName" class="asset-detail-image" />
             }
             else
             {

@@ -21,6 +21,7 @@ public class AssetDetail
     public List<string> Tags { get; set; } = new();
     
     public string ThumbnailUrl => $"/api/assets/{Id}/thumbnail?size=Large";
+    public string ContentUrl => $"/api/assets/{Id}/content";
     public string DisplayDate => CreatedDate.ToString("dd MMM yyyy HH:mm");
     public string FileSizeFormatted => FormatFileSize(FileSize);
     
