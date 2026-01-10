@@ -1,0 +1,38 @@
+@using MudBlazor
+@using PhotoHub.Blazor.Shared.Models
+
+<MudCard Elevation="2" Class="asset-card" OnClick="@OnClick">
+    <MudCardContent>
+        <div class="asset-thumbnail">
+            @if (Asset.HasThumbnails)
+            {
+                <img src="@Asset.ThumbnailUrl" alt="@Asset.FileName" loading="lazy" />
+            }
+            else
+            {
+                <MudIcon Icon="@GetAssetIcon(Asset.Type)" Size="Size.Large" />
+            }
+        </div>
+        <MudText Typo="Typo.body2" Class="mt-2" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            @Asset.FileName
+        </MudText>
+        <MudText Typo="Typo.caption" Class="text-secondary">
+            @Asset.DisplayDate
+        </MudText>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter] public TimelineItem Asset { get; set; } = null!;
+    [Parameter] public EventCallback<TimelineItem> OnAssetClick { get; set; }
+
+    private async Task OnClick()
+    {
+        await OnAssetClick.InvokeAsync(Asset);
+    }
+
+    private string GetAssetIcon(string type)
+    {
+        return type == "IMAGE" ? Icons.Material.Filled.Image : Icons.Material.Filled.VideoLibrary;
+    }
+}

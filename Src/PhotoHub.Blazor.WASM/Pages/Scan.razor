@@ -1,0 +1,100 @@
+@page "/scan"
+@using PhotoHub.Blazor.Shared.Services
+@using PhotoHub.Blazor.Shared.Models
+@using MudBlazor
+@inject IScanService ScanService
+@inject ISnackbar Snackbar
+
+<PageTitle>Escanear Directorio - PhotoHub</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Escanear Directorio</MudText>
+
+<MudCard>
+    <MudCardContent>
+        <MudTextField @bind-Value="_directoryPath" 
+                      Label="Ruta del Directorio" 
+                      HelperText="Ingresa la ruta completa del directorio a escanear"
+                      Variant="Variant.Outlined"
+                      FullWidth="true"
+                      Class="mb-4" />
+        
+        <MudButton Variant="Variant.Filled" 
+                   Color="Color.Primary" 
+                   OnClick="StartScan"
+                   Disabled="@_scanning"
+                   StartIcon="@Icons.Material.Filled.PlayArrow">
+            @if (_scanning)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ml-2" />
+            }
+            Iniciar Escaneo
+        </MudButton>
+    </MudCardContent>
+</MudCard>
+
+@if (_scanResult != null)
+{
+    <MudCard Class="mt-4">
+        <MudCardHeader>
+            <MudText Typo="Typo.h6">Resultados del Escaneo</MudText>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudText>@_scanResult.Message</MudText>
+            
+            <MudGrid Class="mt-4">
+                <MudItem xs="12" sm="6" md="4">
+                    <MudPaper Elevation="1" Padding="4" Class="text-center">
+                        <MudText Typo="Typo.h4" Color="Color.Primary">@_scanResult.Statistics.TotalFilesFound</MudText>
+                        <MudText Typo="Typo.body2">Archivos Encontrados</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="4">
+                    <MudPaper Elevation="1" Padding="4" Class="text-center">
+                        <MudText Typo="Typo.h4" Color="Color.Success">@_scanResult.Statistics.NewFiles</MudText>
+                        <MudText Typo="Typo.body2">Nuevos Archivos</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="4">
+                    <MudPaper Elevation="1" Padding="4" Class="text-center">
+                        <MudText Typo="Typo.h4" Color="Color.Info">@_scanResult.Statistics.UpdatedFiles</MudText>
+                        <MudText Typo="Typo.body2">Archivos Actualizados</MudText>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+        </MudCardContent>
+    </MudCard>
+}
+
+@code {
+    private string _directoryPath = string.Empty;
+    private bool _scanning = false;
+    private ScanResult? _scanResult;
+
+    private async Task StartScan()
+    {
+        if (string.IsNullOrWhiteSpace(_directoryPath))
+        {
+            Snackbar.Add("Por favor ingresa una ruta de directorio", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            _scanning = true;
+            _scanResult = null;
+            
+            using var cts = new CancellationTokenSource();
+            _scanResult = await ScanService.ScanDirectoryAsync(_directoryPath, cts.Token);
+            
+            Snackbar.Add("Escaneo completado exitosamente", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error durante el escaneo: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _scanning = false;
+        }
+    }
+}

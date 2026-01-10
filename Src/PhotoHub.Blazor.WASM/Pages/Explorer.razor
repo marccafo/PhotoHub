@@ -1,0 +1,146 @@
+@page "/explorer"
+@using PhotoHub.Blazor.Shared.Services
+@using PhotoHub.Blazor.Shared.Models
+@using MudBlazor
+@inject IFolderService FolderService
+@inject IAssetService AssetService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>Explorador - PhotoHub</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Explorador</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="3">
+        <MudCard>
+            <MudCardContent>
+                <MudText Typo="Typo.h6" Class="mb-3">Carpetas</MudText>
+                @if (_loadingFolders)
+                {
+                    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+                }
+                else
+                {
+                    <MudList T="PhotoHub.Blazor.Shared.Models.FolderItem">
+                        @foreach (var folder in _folderTree)
+                        {
+                            <MudListItem OnClick="@(() => OnFolderClick(folder))" Icon="@Icons.Material.Filled.Folder">
+                                @folder.Name (@folder.AssetCount)
+                            </MudListItem>
+                            @if (folder.SubFolders.Any())
+                            {
+                                @foreach (var subFolder in folder.SubFolders)
+                                {
+                                    <MudListItem OnClick="@(() => OnFolderClick(subFolder))" Icon="@Icons.Material.Filled.Folder" Class="ml-4">
+                                        @subFolder.Name (@subFolder.AssetCount)
+                                    </MudListItem>
+                                }
+                            }
+                        }
+                    </MudList>
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" md="9">
+        @if (_selectedFolder != null)
+        {
+            <MudBreadcrumbs Items="@_breadcrumbs" />
+        }
+        
+        @if (_loadingAssets)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+        }
+        
+        @if (_assets.Any())
+        {
+            <MudGrid Class="mt-4">
+                @foreach (var asset in _assets)
+                {
+                    <MudItem xs="12" sm="6" md="4" lg="3" xl="2">
+                        <AssetCard Asset="@asset" OnAssetClick="OpenAsset" />
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+        else if (!_loadingAssets && _selectedFolder != null)
+        {
+            <MudAlert Severity="Severity.Info" Class="mt-4">Esta carpeta no contiene archivos.</MudAlert>
+        }
+        else if (!_loadingAssets)
+        {
+            <MudAlert Severity="Severity.Info" Class="mt-4">Selecciona una carpeta para ver sus archivos.</MudAlert>
+        }
+    </MudItem>
+</MudGrid>
+
+@code {
+    private List<FolderItem> _folderTree = new();
+    private FolderItem? _selectedFolder;
+    private List<TimelineItem> _assets = new();
+    private bool _loadingFolders = true;
+    private bool _loadingAssets = false;
+    private List<BreadcrumbItem> _breadcrumbs = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFolders();
+    }
+
+    private async Task LoadFolders()
+    {
+        try
+        {
+            _loadingFolders = true;
+            _folderTree = await FolderService.GetFolderTreeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar carpetas: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingFolders = false;
+        }
+    }
+
+    private async Task OnFolderClick(FolderItem folder)
+    {
+        _selectedFolder = folder;
+        await LoadFolderAssets(folder.Id);
+        UpdateBreadcrumbs(folder);
+    }
+
+    private async Task LoadFolderAssets(int folderId)
+    {
+        try
+        {
+            _loadingAssets = true;
+            _assets = await FolderService.GetFolderAssetsAsync(folderId);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar archivos: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingAssets = false;
+        }
+    }
+
+    private void UpdateBreadcrumbs(FolderItem folder)
+    {
+        _breadcrumbs = new List<BreadcrumbItem>
+        {
+            new BreadcrumbItem("Inicio", "/explorer"),
+            new BreadcrumbItem(folder.Name, null, disabled: true)
+        };
+    }
+
+    private void OpenAsset(TimelineItem asset)
+    {
+        Navigation.NavigateTo($"/asset/{asset.Id}");
+    }
+}

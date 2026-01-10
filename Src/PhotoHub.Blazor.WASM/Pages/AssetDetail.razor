@@ -1,0 +1,148 @@
+@page "/asset/{AssetId:int}"
+@using PhotoHub.Blazor.Shared.Services
+@using PhotoHub.Blazor.Shared.Models
+@using MudBlazor
+@inject IAssetService AssetService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>Detalle - PhotoHub</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+}
+else if (_asset != null)
+{
+    <MudGrid>
+        <MudItem xs="12" md="8">
+            <MudCard>
+                <MudCardContent>
+                    @if (_asset.HasThumbnails)
+                    {
+                        <img src="@_asset.ThumbnailUrl" alt="@_asset.FileName" style="width: 100%; height: auto; max-height: 80vh; object-fit: contain;" />
+                    }
+                    else
+                    {
+                        <MudText>Imagen no disponible</MudText>
+                    }
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudCard>
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">Información</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText Typo="Typo.body1" Class="mb-2"><strong>Nombre:</strong> @_asset.FileName</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-2"><strong>Tamaño:</strong> @_asset.FileSizeFormatted</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-2"><strong>Fecha:</strong> @_asset.DisplayDate</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-2"><strong>Tipo:</strong> @_asset.Type</MudText>
+                    @if (!string.IsNullOrEmpty(_asset.FolderPath))
+                    {
+                        <MudText Typo="Typo.body2" Class="mb-2"><strong>Carpeta:</strong> @_asset.FolderPath</MudText>
+                    }
+                </MudCardContent>
+            </MudCard>
+
+            @if (_asset.Exif != null)
+            {
+                <MudCard Class="mt-4">
+                    <MudCardHeader>
+                        <MudText Typo="Typo.h6">EXIF</MudText>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (_asset.Exif.DateTaken.HasValue)
+                        {
+                            <MudText Typo="Typo.body2" Class="mb-2"><strong>Fecha de toma:</strong> @_asset.Exif.DateTaken.Value.ToString("dd MMM yyyy HH:mm")</MudText>
+                        }
+                        @if (!string.IsNullOrEmpty(_asset.Exif.CameraMake))
+                        {
+                            <MudText Typo="Typo.body2" Class="mb-2"><strong>Cámara:</strong> @_asset.Exif.CameraMake @_asset.Exif.CameraModel</MudText>
+                        }
+                        @if (_asset.Exif.Width.HasValue && _asset.Exif.Height.HasValue)
+                        {
+                            <MudText Typo="Typo.body2" Class="mb-2"><strong>Dimensiones:</strong> @_asset.Exif.Width x @_asset.Exif.Height</MudText>
+                        }
+                        @if (_asset.Exif.Latitude.HasValue && _asset.Exif.Longitude.HasValue)
+                        {
+                            <MudText Typo="Typo.body2" Class="mb-2"><strong>Ubicación:</strong> @_asset.Exif.Latitude, @_asset.Exif.Longitude</MudText>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            }
+
+            @if (_asset.Tags.Any())
+            {
+                <MudCard Class="mt-4">
+                    <MudCardHeader>
+                        <MudText Typo="Typo.h6">Etiquetas</MudText>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @foreach (var tag in _asset.Tags)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="mr-2 mb-2">@tag</MudChip>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            }
+
+            <MudCard Class="mt-4">
+                <MudCardContent>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="GoBack">
+                        Volver
+                    </MudButton>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+}
+else
+{
+    <MudAlert Severity="Severity.Error">No se pudo cargar el archivo.</MudAlert>
+}
+
+@code {
+    [Parameter] public int AssetId { get; set; }
+    
+    private PhotoHub.Blazor.Shared.Models.AssetDetail? _asset;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsset();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsset();
+    }
+
+    private async Task LoadAsset()
+    {
+        try
+        {
+            _loading = true;
+            _asset = await AssetService.GetAssetDetailAsync(AssetId);
+            
+            if (_asset == null)
+            {
+                Snackbar.Add("Archivo no encontrado", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar archivo: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/");
+    }
+}

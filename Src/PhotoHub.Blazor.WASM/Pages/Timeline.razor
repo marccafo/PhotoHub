@@ -1,0 +1,64 @@
+@page "/"
+@using PhotoHub.Blazor.Shared.Services
+@using PhotoHub.Blazor.Shared.Models
+@using MudBlazor
+@inject IAssetService AssetService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>Timeline - PhotoHub</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Timeline</MudText>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+}
+
+@if (_assets.Any())
+{
+    <MudGrid>
+        @foreach (var asset in _assets)
+        {
+            <MudItem xs="12" sm="6" md="4" lg="3" xl="2">
+                <AssetCard Asset="@asset" OnAssetClick="OpenAsset" />
+            </MudItem>
+        }
+    </MudGrid>
+}
+else if (!_loading)
+{
+    <MudAlert Severity="Severity.Info">No hay fotografías disponibles. Escanea un directorio para comenzar.</MudAlert>
+}
+
+@code {
+    private List<TimelineItem> _assets = new();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTimeline();
+    }
+
+    private async Task LoadTimeline()
+    {
+        try
+        {
+            _loading = true;
+            _assets = await AssetService.GetTimelineAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar timeline: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OpenAsset(TimelineItem asset)
+    {
+        Navigation.NavigateTo($"/asset/{asset.Id}");
+    }
+}
