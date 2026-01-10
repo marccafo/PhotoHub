@@ -14,115 +14,141 @@
 }
 else if (_asset != null)
 {
-    <div class="d-flex align-center mb-4">
-        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="GoBack" Class="mr-2" />
-        <MudText Typo="Typo.h5">@_asset.FileName</MudText>
-    </div>
+    <div class="asset-detail-container">
+        <style>
+            .asset-detail-container {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background-color: #000;
+                z-index: 1200;
+                display: flex;
+                flex-direction: column;
+            }
+            .asset-detail-toolbar {
+                height: 64px;
+                padding: 0 16px;
+                display: flex;
+                align-items: center;
+                background: linear-gradient(rgba(0,0,0,0.7), transparent);
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                z-index: 10;
+            }
+            .asset-detail-content {
+                flex-grow: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                overflow: hidden;
+            }
+            .asset-detail-image {
+                max-width: 100%;
+                max-height: 100%;
+                object-fit: contain;
+            }
+            .asset-info-drawer {
+                width: 360px;
+                background-color: #1a1a1a;
+                height: 100%;
+                overflow-y: auto;
+                transition: transform 0.3s ease;
+                position: absolute;
+                right: 0;
+                top: 0;
+                z-index: 20;
+                border-left: 1px solid #333;
+                color: #e1e1e1;
+            }
+            .asset-info-drawer.closed {
+                transform: translateX(100%);
+            }
+        </style>
 
-    <MudGrid>
-        <MudItem xs="12" md="9">
-            <MudPaper Elevation="4" Class="d-flex flex-column align-center justify-center p-4" Style="background-color: #1a1a1a; min-height: 70vh;">
-                @if (_asset.HasThumbnails)
-                {
-                    <img src="@_asset.ThumbnailUrl" alt="@_asset.FileName" 
-                         style="max-width: 100%; max-height: 80vh; object-fit: contain; box-shadow: 0 4px 20px rgba(0,0,0,0.5);" />
-                }
-                else
-                {
-                    <MudIcon Icon="@GetAssetIcon(_asset.Type)" Size="Size.Large" Color="Color.Default" Style="width: 128px; height: 128px;" />
-                    <MudText Typo="Typo.h6" Class="mt-4" Color="Color.Inherit">Previsualización no disponible</MudText>
-                }
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" md="3">
-            <MudStack Spacing="4">
-                <MudCard Elevation="2">
-                    <MudCardHeader>
-                        <CardHeaderContent>
-                            <MudText Typo="Typo.h6">Información General</MudText>
-                        </CardHeaderContent>
-                    </MudCardHeader>
-                    <MudCardContent>
-                        <MudList T="string" ReadOnly="true" Dense="true">
-                            <MudListItem Icon="@Icons.Material.Filled.Info">
-                                <MudText Typo="Typo.body2"><strong>Tamaño:</strong> @_asset.FileSizeFormatted</MudText>
-                            </MudListItem>
-                            <MudListItem Icon="@Icons.Material.Filled.CalendarToday">
-                                <MudText Typo="Typo.body2"><strong>Fecha:</strong> @_asset.DisplayDate</MudText>
-                            </MudListItem>
-                            <MudListItem Icon="@Icons.Material.Filled.Description">
-                                <MudText Typo="Typo.body2"><strong>Tipo:</strong> @_asset.Type</MudText>
-                            </MudListItem>
-                            @if (!string.IsNullOrEmpty(_asset.FolderPath))
-                            {
-                                <MudListItem Icon="@Icons.Material.Filled.Folder">
-                                    <MudText Typo="Typo.body2" Style="word-break: break-all;"><strong>Carpeta:</strong> @_asset.FolderPath</MudText>
-                                </MudListItem>
-                            }
-                        </MudList>
-                    </MudCardContent>
-                </MudCard>
+        <div class="asset-detail-toolbar">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" OnClick="GoBack" />
+            <MudSpacer />
+            <MudIconButton Icon="@Icons.Material.Filled.Info" Color="Color.Inherit" OnClick="ToggleInfo" />
+            <MudIconButton Icon="@Icons.Material.Filled.Download" Color="Color.Inherit" />
+            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Inherit" />
+        </div>
+
+        <div class="asset-detail-content" @onclick="ToggleToolbar">
+            @if (_asset.HasThumbnails)
+            {
+                <img src="@_asset.ThumbnailUrl" alt="@_asset.FileName" class="asset-detail-image" />
+            }
+            else
+            {
+                <MudIcon Icon="@GetAssetIcon(_asset.Type)" Size="Size.Large" Color="Color.Default" Style="width: 128px; height: 128px;" />
+            }
+        </div>
+
+        <div class="asset-info-drawer @(_infoOpen ? "" : "closed")">
+            <div class="pa-4">
+                <div class="d-flex align-center mb-4">
+                    <MudText Typo="Typo.h6">Información</MudText>
+                    <MudSpacer />
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Inherit" OnClick="ToggleInfo" />
+                </div>
+
+                <MudText Typo="Typo.subtitle1" Class="font-weight-bold mb-1">Detalles del archivo</MudText>
+                <MudList T="string" Dense="true" ReadOnly="true">
+                    <MudListItem Icon="@Icons.Material.Filled.InsertDriveFile" IconColor="Color.Info">
+                        <MudText Typo="Typo.body2">@_asset.FileName</MudText>
+                    </MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.CalendarToday" IconColor="Color.Info">
+                        <MudText Typo="Typo.body2">@_asset.DisplayDate</MudText>
+                    </MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.SdStorage" IconColor="Color.Info">
+                        <MudText Typo="Typo.body2">@_asset.FileSizeFormatted</MudText>
+                    </MudListItem>
+                    @if (!string.IsNullOrEmpty(_asset.FolderPath))
+                    {
+                        <MudListItem Icon="@Icons.Material.Filled.Folder" IconColor="Color.Info">
+                            <MudText Typo="Typo.body2">@_asset.FolderPath</MudText>
+                        </MudListItem>
+                    }
+                </MudList>
 
                 @if (_asset.Exif != null)
                 {
-                    <MudCard Elevation="2">
-                        <MudCardHeader>
-                            <CardHeaderContent>
-                                <MudText Typo="Typo.h6">Datos EXIF</MudText>
-                            </CardHeaderContent>
-                        </MudCardHeader>
-                        <MudCardContent>
-                            <MudList T="string" ReadOnly="true" Dense="true">
-                                @if (_asset.Exif.DateTaken.HasValue)
-                                {
-                                    <MudListItem Icon="@Icons.Material.Filled.AccessTime">
-                                        <MudText Typo="Typo.body2"><strong>Tomada:</strong> @_asset.Exif.DateTaken.Value.ToString("dd MMM yyyy HH:mm")</MudText>
-                                    </MudListItem>
-                                }
-                                @if (!string.IsNullOrEmpty(_asset.Exif.CameraMake))
-                                {
-                                    <MudListItem Icon="@Icons.Material.Filled.Camera">
-                                        <MudText Typo="Typo.body2"><strong>Cámara:</strong> @_asset.Exif.CameraMake @_asset.Exif.CameraModel</MudText>
-                                    </MudListItem>
-                                }
-                                @if (_asset.Exif.Width.HasValue && _asset.Exif.Height.HasValue)
-                                {
-                                    <MudListItem Icon="@Icons.Material.Filled.AspectRatio">
-                                        <MudText Typo="Typo.body2"><strong>Resolución:</strong> @_asset.Exif.Width x @_asset.Exif.Height</MudText>
-                                    </MudListItem>
-                                }
-                                @if (_asset.Exif.Latitude.HasValue && _asset.Exif.Longitude.HasValue)
-                                {
-                                    <MudListItem Icon="@Icons.Material.Filled.LocationOn">
-                                        <MudText Typo="Typo.body2"><strong>GPS:</strong> @_asset.Exif.Latitude.Value.ToString("F6"), @_asset.Exif.Longitude.Value.ToString("F6")</MudText>
-                                    </MudListItem>
-                                }
-                            </MudList>
-                        </MudCardContent>
-                    </MudCard>
+                    <MudDivider Class="my-4" Style="background-color: #333;" />
+                    <MudText Typo="Typo.subtitle1" Class="font-weight-bold mb-1">EXIF</MudText>
+                    <MudList T="string" Dense="true" ReadOnly="true">
+                        @if (_asset.Exif.CameraMake != null)
+                        {
+                            <MudListItem Icon="@Icons.Material.Filled.Camera" IconColor="Color.Info">
+                                <MudText Typo="Typo.body2">@_asset.Exif.CameraMake @_asset.Exif.CameraModel</MudText>
+                            </MudListItem>
+                        }
+                        @if (_asset.Exif.Width.HasValue)
+                        {
+                            <MudListItem Icon="@Icons.Material.Filled.AspectRatio" IconColor="Color.Info">
+                                <MudText Typo="Typo.body2">@_asset.Exif.Width x @_asset.Exif.Height</MudText>
+                            </MudListItem>
+                        }
+                    </MudList>
                 }
 
                 @if (_asset.Tags.Any())
                 {
-                    <MudCard Elevation="2">
-                        <MudCardHeader>
-                            <CardHeaderContent>
-                                <MudText Typo="Typo.h6">Etiquetas</MudText>
-                            </CardHeaderContent>
-                        </MudCardHeader>
-                        <MudCardContent>
-                            <div class="d-flex flex-wrap gap-2">
-                                @foreach (var tag in _asset.Tags)
-                                {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text">@tag</MudChip>
-                                }
-                            </div>
-                        </MudCardContent>
-                    </MudCard>
+                    <MudDivider Class="my-4" Style="background-color: #333;" />
+                    <MudText Typo="Typo.subtitle1" Class="font-weight-bold mb-2">Etiquetas</MudText>
+                    <div class="d-flex flex-wrap gap-2">
+                        @foreach (var tag in _asset.Tags)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Primary">@tag</MudChip>
+                        }
+                    </div>
                 }
-            </MudStack>
-        </MudItem>
-    </MudGrid>
+            </div>
+        </div>
+    </div>
 }
 else
 {
@@ -135,6 +161,8 @@ else
     
     private PhotoHub.Blazor.Shared.Models.AssetDetail? _asset;
     private bool _loading = true;
+    private bool _infoOpen = false;
+    private bool _toolbarVisible = true;
 
     protected override async Task OnInitializedAsync()
     {
@@ -152,11 +180,6 @@ else
         {
             _loading = true;
             _asset = await AssetService.GetAssetDetailAsync(AssetId);
-            
-            if (_asset == null)
-            {
-                Snackbar.Add("Archivo no encontrado", Severity.Warning);
-            }
         }
         catch (Exception ex)
         {
@@ -171,6 +194,16 @@ else
     private void GoBack()
     {
         Navigation.NavigateTo("/");
+    }
+
+    private void ToggleInfo()
+    {
+        _infoOpen = !_infoOpen;
+    }
+
+    private void ToggleToolbar()
+    {
+        _toolbarVisible = !_toolbarVisible;
     }
 
     private string GetAssetIcon(string type)

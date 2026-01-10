@@ -8,23 +8,27 @@
 
 <PageTitle>Timeline - PhotoHub</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">Timeline</MudText>
-
 @if (_loading)
 {
     <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
 }
 
-@if (_assets.Any())
+@if (_groupedAssets.Any())
 {
-    <MudGrid>
-        @foreach (var asset in _assets)
-        {
-            <MudItem xs="12" sm="6" md="4" lg="3" xl="2">
-                <AssetCard Asset="@asset" OnAssetClick="OpenAsset" />
-            </MudItem>
-        }
-    </MudGrid>
+    @foreach (var group in _groupedAssets)
+    {
+        <div class="mb-6">
+            <MudText Typo="Typo.h6" Class="mb-3 font-weight-bold ml-1">@group.Key</MudText>
+            <MudGrid Spacing="1">
+                @foreach (var asset in group.Value)
+                {
+                    <MudItem xs="4" sm="3" md="2" lg="2" xl="1">
+                        <AssetCard Asset="@asset" OnAssetClick="OpenAsset" />
+                    </MudItem>
+                }
+            </MudGrid>
+        </div>
+    }
 }
 else if (!_loading)
 {
@@ -33,6 +37,7 @@ else if (!_loading)
 
 @code {
     private List<TimelineItem> _assets = new();
+    private Dictionary<string, List<TimelineItem>> _groupedAssets = new();
     private bool _loading = true;
 
     protected override async Task OnInitializedAsync()
@@ -46,6 +51,7 @@ else if (!_loading)
         {
             _loading = true;
             _assets = await AssetService.GetTimelineAsync();
+            GroupAssets();
         }
         catch (Exception ex)
         {
@@ -55,6 +61,13 @@ else if (!_loading)
         {
             _loading = false;
         }
+    }
+
+    private void GroupAssets()
+    {
+        _groupedAssets = _assets
+            .GroupBy(a => a.CreatedDate.ToString("MMMM yyyy", new System.Globalization.CultureInfo("es-ES")))
+            .ToDictionary(g => char.ToUpper(g.Key[0]) + g.Key.Substring(1), g => g.ToList());
     }
 
     private void OpenAsset(TimelineItem asset)

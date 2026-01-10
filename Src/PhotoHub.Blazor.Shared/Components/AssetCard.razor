@@ -1,51 +1,72 @@
 @using MudBlazor
 @using PhotoHub.Blazor.Shared.Models
 
-<MudCard Elevation="2" Class="asset-card cursor-pointer" @onclick="@OnClick">
+<div class="asset-card-container" @onclick="@OnClick">
     <style>
-        .asset-card {
-            transition: transform 0.2s;
-        }
-        .asset-card:hover {
-            transform: scale(1.02);
-            z-index: 10;
-        }
-        .cursor-pointer {
+        .asset-card-container {
+            position: relative;
             cursor: pointer;
-        }
-        .asset-thumbnail {
-            height: 200px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            width: 100%;
+            aspect-ratio: 1 / 1;
             overflow: hidden;
+            transition: opacity 0.2s;
             background-color: var(--mud-palette-background-grey);
+            border-radius: 4px;
         }
-        .asset-thumbnail img {
-            max-width: 100%;
-            max-height: 100%;
+        .asset-card-container:hover {
+            opacity: 0.85;
+        }
+        .asset-card-image {
+            width: 100%;
+            height: 100%;
             object-fit: cover;
         }
+        .asset-card-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 8px;
+            background: linear-gradient(transparent, rgba(0,0,0,0.7));
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .asset-card-container:hover .asset-card-overlay {
+            opacity: 1;
+        }
+        .asset-type-icon {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            color: white;
+            filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));
+        }
     </style>
-    <MudCardContent>
-        <div class="asset-thumbnail">
-            @if (Asset.HasThumbnails)
-            {
-                <img src="@Asset.ThumbnailUrl" alt="@Asset.FileName" loading="lazy" />
-            }
-            else
-            {
-                <MudIcon Icon="@GetAssetIcon(Asset.Type)" Size="Size.Large" />
-            }
+    
+    @if (Asset.HasThumbnails)
+    {
+        <img src="@Asset.ThumbnailUrl" alt="@Asset.FileName" class="asset-card-image" loading="lazy" />
+    }
+    else
+    {
+        <div class="d-flex align-center justify-center w-100 h-100">
+            <MudIcon Icon="@GetAssetIcon(Asset.Type)" Size="Size.Large" Color="Color.Default" />
         </div>
-        <MudText Typo="Typo.body2" Class="mt-2" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+    }
+
+    @if (Asset.Type != "IMAGE")
+    {
+        <div class="asset-type-icon">
+            <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Small" />
+        </div>
+    }
+
+    <div class="asset-card-overlay">
+        <MudText Typo="Typo.caption" Class="white-text" Style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
             @Asset.FileName
         </MudText>
-        <MudText Typo="Typo.caption" Class="text-secondary">
-            @Asset.DisplayDate
-        </MudText>
-    </MudCardContent>
-</MudCard>
+    </div>
+</div>
 
 @code {
     [Parameter] public TimelineItem Asset { get; set; } = null!;
