@@ -8,13 +8,15 @@
 
 <PageTitle>Detalle - PhotoHub</PageTitle>
 
-@if (_loading)
+@if (_loading && _asset == null)
 {
-    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+    <div class="asset-detail-container">
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    </div>
 }
 else if (_asset != null)
 {
-    <div class="asset-detail-container">
+    <div class="asset-detail-container" @onkeydown="HandleKeyDown" tabindex="0">
         <style>
             .asset-detail-container {
                 position: fixed;
@@ -26,6 +28,7 @@ else if (_asset != null)
                 z-index: 1200;
                 display: flex;
                 flex-direction: column;
+                outline: none;
             }
             .asset-detail-toolbar {
                 height: 64px;
@@ -37,7 +40,13 @@ else if (_asset != null)
                 top: 0;
                 left: 0;
                 right: 0;
-                z-index: 10;
+                z-index: 100;
+                transition: opacity 0.3s ease;
+                color: white;
+            }
+            .asset-detail-toolbar.hidden {
+                opacity: 0;
+                pointer-events: none;
             }
             .asset-detail-content {
                 flex-grow: 1;
@@ -45,11 +54,13 @@ else if (_asset != null)
                 align-items: center;
                 justify-content: center;
                 overflow: hidden;
+                position: relative;
             }
             .asset-detail-image {
                 max-width: 100%;
                 max-height: 100%;
                 object-fit: contain;
+                user-select: none;
             }
             .asset-info-drawer {
                 width: 360px;
@@ -60,24 +71,86 @@ else if (_asset != null)
                 position: absolute;
                 right: 0;
                 top: 0;
-                z-index: 20;
+                z-index: 40;
                 border-left: 1px solid #333;
                 color: #e1e1e1;
             }
             .asset-info-drawer.closed {
                 transform: translateX(100%);
             }
+            .nav-button {
+                position: absolute;
+                top: 50%;
+                transform: translateY(-50%);
+                z-index: 20;
+                background-color: rgba(0,0,0,0.3);
+                color: white;
+                transition: opacity 0.3s ease, background-color 0.2s;
+            }
+            .nav-button:hover {
+                background-color: rgba(0,0,0,0.6);
+            }
+            .nav-button.prev { left: 16px; }
+            .nav-button.next { right: 16px; }
+            .nav-button.hidden {
+                opacity: 0;
+                pointer-events: none;
+            }
         </style>
 
-        <div class="asset-detail-toolbar">
+        <div class="asset-detail-toolbar @(_toolbarVisible ? "" : "hidden")" @onclick:stopPropagation="true">
             <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" OnClick="GoBack" />
             <MudSpacer />
-            <MudIconButton Icon="@Icons.Material.Filled.Info" Color="Color.Inherit" OnClick="ToggleInfo" />
-            <MudIconButton Icon="@Icons.Material.Filled.Download" Color="Color.Inherit" />
-            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Inherit" />
+            
+            <div class="d-flex align-center gap-1" @onclick:stopPropagation="true">
+                <MudTooltip Text="Compartir">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Share" Color="Color.Inherit" />
+                </MudTooltip>
+                
+                <MudTooltip Text="Acercar">
+                    <MudIconButton Icon="@Icons.Material.Outlined.ZoomIn" Color="Color.Inherit" />
+                </MudTooltip>
+                
+                <MudTooltip Text="Copiar">
+                    <MudIconButton Icon="@Icons.Material.Outlined.ContentCopy" Color="Color.Inherit" />
+                </MudTooltip>
+
+                <MudTooltip Text="Información">
+                    <MudIconButton Icon="@(_infoOpen ? Icons.Material.Filled.Info : Icons.Material.Outlined.Info)" 
+                                   Color="Color.Inherit" OnClick="ToggleInfo" />
+                </MudTooltip>
+                
+                <MudTooltip Text="Favorito">
+                    <MudToggleIconButton ToggledIcon="@Icons.Material.Filled.Favorite" 
+                                         Icon="@Icons.Material.Outlined.FavoriteBorder" 
+                                         Color="Color.Inherit" ToggledColor="Color.Error" />
+                </MudTooltip>
+
+                <MudTooltip Text="Descargar">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Download" Color="Color.Inherit" />
+                </MudTooltip>
+
+                <MudTooltip Text="Eliminar">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Inherit" />
+                </MudTooltip>
+
+                <MudMenu Icon="@Icons.Material.Outlined.MoreVert" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                    <MudMenuItem Icon="@Icons.Material.Outlined.Edit">Editar fecha y hora</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Outlined.LocationOn">Editar ubicación</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Outlined.Add">Añadir a álbum</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Outlined.Archive">Archivar</MudMenuItem>
+                </MudMenu>
+            </div>
         </div>
 
         <div class="asset-detail-content" @onclick="ToggleToolbar">
+            <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" 
+                           Class="@GetNavButtonClass(true)" 
+                           Size="Size.Large"
+                           OnClick="NavigatePrev"
+                           OnClickStopPropagation="true"
+                           Disabled="@(_prevId == null)" />
+
             @if (_asset.HasThumbnails)
             {
                 <img src="@_asset.ThumbnailUrl" alt="@_asset.FileName" class="asset-detail-image" />
@@ -86,6 +159,13 @@ else if (_asset != null)
             {
                 <MudIcon Icon="@GetAssetIcon(_asset.Type)" Size="Size.Large" Color="Color.Default" Style="width: 128px; height: 128px;" />
             }
+
+            <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" 
+                           Class="@GetNavButtonClass(false)" 
+                           Size="Size.Large"
+                           OnClick="NavigateNext"
+                           OnClickStopPropagation="true"
+                           Disabled="@(_nextId == null)" />
         </div>
 
         <div class="asset-info-drawer @(_infoOpen ? "" : "closed")">
@@ -163,6 +243,10 @@ else
     private bool _loading = true;
     private bool _infoOpen = false;
     private bool _toolbarVisible = true;
+    
+    private int? _prevId;
+    private int? _nextId;
+    private List<int> _allIds = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -180,6 +264,14 @@ else
         {
             _loading = true;
             _asset = await AssetService.GetAssetDetailAsync(AssetId);
+            
+            if (_allIds.Count == 0)
+            {
+                var timeline = await AssetService.GetTimelineAsync();
+                _allIds = timeline.Select(a => a.Id).ToList();
+            }
+            
+            UpdateNavigation();
         }
         catch (Exception ex)
         {
@@ -189,6 +281,35 @@ else
         {
             _loading = false;
         }
+    }
+
+    private void UpdateNavigation()
+    {
+        var currentIndex = _allIds.IndexOf(AssetId);
+        if (currentIndex != -1)
+        {
+            _prevId = currentIndex > 0 ? _allIds[currentIndex - 1] : null;
+            _nextId = currentIndex < _allIds.Count - 1 ? _allIds[currentIndex + 1] : null;
+        }
+    }
+
+    private void NavigatePrev()
+    {
+        if (_prevId.HasValue)
+            Navigation.NavigateTo($"/asset/{_prevId.Value}");
+    }
+
+    private void NavigateNext()
+    {
+        if (_nextId.HasValue)
+            Navigation.NavigateTo($"/asset/{_nextId.Value}");
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "ArrowLeft") NavigatePrev();
+        else if (e.Key == "ArrowRight") NavigateNext();
+        else if (e.Key == "Escape") GoBack();
     }
 
     private void GoBack()
@@ -209,5 +330,12 @@ else
     private string GetAssetIcon(string type)
     {
         return type == "IMAGE" ? Icons.Material.Filled.Image : Icons.Material.Filled.VideoLibrary;
+    }
+
+    private string GetNavButtonClass(bool isPrev)
+    {
+        var baseClass = isPrev ? "nav-button prev" : "nav-button next";
+        var hasId = isPrev ? _prevId != null : _nextId != null;
+        return _toolbarVisible && hasId ? baseClass : $"{baseClass} hidden";
     }
 }
