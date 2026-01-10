@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PhotoHub.API.Shared.Data;
 using PhotoHub.API.Shared.Interfaces;
 using PhotoHub.API.Shared.Models;
+using Scalar.AspNetCore;
 
 namespace PhotoHub.API.Features.Timeline;
 
@@ -11,6 +12,9 @@ public class TimelineEndpoint : IEndpoint
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/assets/timeline", Handle)
+        .CodeSample(
+                codeSample: "curl -X GET \"http://localhost:5000/api/assets/timeline\" -H \"Accept: application/json\"",
+                label: "cURL Example")
         .WithName("GetTimeline")
         .WithTags("Assets")
         .WithDescription("Gets the timeline of all scanned media files (images and videos)")

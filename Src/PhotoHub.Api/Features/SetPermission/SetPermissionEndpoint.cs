@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PhotoHub.API.Shared.Data;
 using PhotoHub.API.Shared.Interfaces;
 using PhotoHub.API.Shared.Models;
+using Scalar.AspNetCore;
 
 namespace PhotoHub.API.Features.SetPermission;
 
@@ -11,6 +12,9 @@ public class SetPermissionEndpoint : IEndpoint
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
         app.MapPost("/api/folders/{folderId}/permissions", Handle)
+            .CodeSample(
+                codeSample: "curl -X POST \"http://localhost:5000/api/folders/1/permissions\" -H \"Content-Type: application/json\" -d '{\"userId\": 1, \"canRead\": true, \"canWrite\": false, \"canDelete\": false, \"canManagePermissions\": false}'",
+                label: "cURL Example")
             .WithName("SetPermission")
             .WithTags("Folders")
             .WithDescription("Sets or updates folder permissions for a user")

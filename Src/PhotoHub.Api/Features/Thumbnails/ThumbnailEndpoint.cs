@@ -4,6 +4,7 @@ using PhotoHub.API.Shared.Data;
 using PhotoHub.API.Shared.Interfaces;
 using PhotoHub.API.Shared.Models;
 using PhotoHub.API.Shared.Services;
+using Scalar.AspNetCore;
 
 namespace PhotoHub.API.Features.Thumbnails;
 
@@ -12,6 +13,9 @@ public class ThumbnailEndpoint : IEndpoint
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/assets/{assetId}/thumbnail", Handle)
+            .CodeSample(
+                codeSample: "curl -X GET \"http://localhost:5000/api/assets/1/thumbnail?size=Medium\" -o thumbnail.jpg",
+                label: "cURL Example")
             .WithName("GetThumbnail")
             .WithTags("Assets")
             .WithDescription("Gets a thumbnail for an asset")

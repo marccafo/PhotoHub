@@ -4,6 +4,7 @@ using PhotoHub.API.Shared.Data;
 using PhotoHub.API.Shared.Interfaces;
 using PhotoHub.API.Shared.Models;
 using PhotoHub.API.Features.Timeline;
+using Scalar.AspNetCore;
 
 namespace PhotoHub.API.Features.Folders;
 
@@ -12,24 +13,60 @@ public class FoldersEndpoint : IEndpoint
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/folders", GetAllFolders)
+            .CodeSample(
+                codeSample: "curl -X GET \"http://localhost:5000/api/folders\" -H \"Accept: application/json\"",
+                label: "cURL Example")
             .WithName("GetAllFolders")
             .WithTags("Folders")
-            .WithDescription("Gets all folders");
+            .WithDescription("Gets all folders")
+            .AddOpenApiOperationTransformer((operation, context, ct) =>
+            {
+                operation.Summary = "Get all folders";
+                operation.Description = "Returns a list of all folders registered in the database, including the count of assets in each folder.";
+                return Task.CompletedTask;
+            });
 
         app.MapGet("/api/folders/{folderId}", GetFolderById)
+            .CodeSample(
+                codeSample: "curl -X GET \"http://localhost:5000/api/folders/1\" -H \"Accept: application/json\"",
+                label: "cURL Example")
             .WithName("GetFolderById")
             .WithTags("Folders")
-            .WithDescription("Gets a folder by ID");
+            .WithDescription("Gets a folder by ID")
+            .AddOpenApiOperationTransformer((operation, context, ct) =>
+            {
+                operation.Summary = "Get folder by ID";
+                operation.Description = "Returns details of a specific folder, including its subfolders.";
+                return Task.CompletedTask;
+            });
 
         app.MapGet("/api/folders/{folderId}/assets", GetFolderAssets)
+            .CodeSample(
+                codeSample: "curl -X GET \"http://localhost:5000/api/folders/1/assets\" -H \"Accept: application/json\"",
+                label: "cURL Example")
             .WithName("GetFolderAssets")
             .WithTags("Folders")
-            .WithDescription("Gets all assets in a folder");
+            .WithDescription("Gets all assets in a folder")
+            .AddOpenApiOperationTransformer((operation, context, ct) =>
+            {
+                operation.Summary = "Get folder assets";
+                operation.Description = "Returns a list of all media assets contained in a specific folder.";
+                return Task.CompletedTask;
+            });
 
         app.MapGet("/api/folders/tree", GetFolderTree)
+            .CodeSample(
+                codeSample: "curl -X GET \"http://localhost:5000/api/folders/tree\" -H \"Accept: application/json\"",
+                label: "cURL Example")
             .WithName("GetFolderTree")
             .WithTags("Folders")
-            .WithDescription("Gets the complete folder tree structure");
+            .WithDescription("Gets the complete folder tree structure")
+            .AddOpenApiOperationTransformer((operation, context, ct) =>
+            {
+                operation.Summary = "Get folder tree";
+                operation.Description = "Returns the hierarchical structure of all folders, useful for tree-view navigation.";
+                return Task.CompletedTask;
+            });
     }
 
     private async Task<IResult> GetAllFolders(

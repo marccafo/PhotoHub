@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PhotoHub.API.Shared.Data;
 using PhotoHub.API.Shared.Interfaces;
 using PhotoHub.API.Shared.Models;
+using Scalar.AspNetCore;
 
 namespace PhotoHub.API.Features.AssetDetail;
 
@@ -11,6 +12,9 @@ public class AssetDetailEndpoint : IEndpoint
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/assets/{assetId}", Handle)
+            .CodeSample(
+                codeSample: "curl -X GET \"http://localhost:5000/api/assets/1\" -H \"Accept: application/json\"",
+                label: "cURL Example")
             .WithName("GetAssetDetail")
             .WithTags("Assets")
             .WithDescription("Gets detailed information about an asset")
