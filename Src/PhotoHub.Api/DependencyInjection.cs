@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PhotoHub.API.Shared.Data;
 using PhotoHub.API.Shared.Interfaces;
 using PhotoHub.API.Shared.Services;
+using Xabe.FFmpeg;
 
 namespace PhotoHub.Api;
 
@@ -16,6 +17,32 @@ public static class DependencyInjection
         builder.Services.AddScoped<MediaRecognitionService>();
         builder.Services.AddScoped<IMlJobService, MlJobService>();
         builder.Services.AddHostedService<MlJobProcessorService>();
+
+        // Configure FFmpeg path if provided in configuration
+        var ffmpegPath = builder.Configuration["FFMPEG_PATH"];
+        if (!string.IsNullOrEmpty(ffmpegPath))
+        {
+            FFmpeg.SetExecutablesPath(ffmpegPath);
+        }
+        else
+        {
+            // Try common locations if not set
+            var commonPaths = new[] { 
+                @"C:\ffmpeg\bin", 
+                @"C:\Program Files\ffmpeg\bin",
+                Path.Combine(Directory.GetCurrentDirectory(), "ffmpeg", "bin")
+            };
+            
+            foreach (var path in commonPaths)
+            {
+                if (Directory.Exists(path))
+                {
+                    FFmpeg.SetExecutablesPath(path);
+                    Console.WriteLine($"[INFO] FFmpeg path set to: {path}");
+                    break;
+                }
+            }
+        }
     }
 
     public static void AddPostgres(this WebApplicationBuilder builder)

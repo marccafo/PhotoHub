@@ -55,6 +55,7 @@
                     <div class="timeline-nav-item @(IsActive(groupKey) ? "active" : "")" 
                          style="@(GetGroupStyle(groupKey))"
                          @onclick="@(() => ScrollToGroup(groupKey))">
+                        <div class="timeline-dot"></div>
                         <span class="timeline-nav-label">@GetShortLabel(groupKey)</span>
                     </div>
                 }
@@ -65,22 +66,29 @@
 
 <style>
     /* Ocultar barra de scroll nativa para esta página */
-    :global(body)::-webkit-scrollbar {
-        display: none;
+    :global(html, body, .mud-layout, .mud-main-content) {
+        scrollbar-width: none !important; /* Firefox */
+        -ms-overflow-style: none !important; /* IE and Edge */
+        overflow-y: overlay !important; /* Chrome/Safari - prevent layout shift */
     }
-    :global(body) {
-        -ms-overflow-style: none;  /* IE and Edge */
-        scrollbar-width: none;  /* Firefox */
+
+    :global(html::-webkit-scrollbar, body::-webkit-scrollbar, .mud-main-content::-webkit-scrollbar, .mud-layout::-webkit-scrollbar) {
+        display: none !important; /* Chrome, Safari and Opera */
+        width: 0 !important;
+        height: 0 !important;
     }
 
     .timeline-container {
         display: flex;
         position: relative;
+        width: 100%;
+        min-height: calc(100vh - 64px);
     }
 
     .timeline-content {
         flex: 1;
-        padding-right: 24px;
+        padding-right: 32px;
+        padding-bottom: 200px; /* Spazio extra per garantire lo scroll completo */
     }
 
     .timeline-nav-wrapper {
@@ -88,11 +96,14 @@
         right: 0;
         top: 64px; /* Debajo del AppBar */
         bottom: 0;
-        width: 16px; /* Ancho similar a un scrollbar */
-        z-index: 1200; /* Justo debajo del AppBar de MudBlazor (1300) */
+        width: 80px; /* Más ancho para las etiquetas visibles */
+        z-index: 1200; 
         display: flex;
-        justify-content: center;
+        justify-content: flex-end; /* Alinear a la derecha */
         background-color: transparent;
+        padding-top: 40px; 
+        padding-bottom: 40px; 
+        pointer-events: none; 
     }
 
     .vertical-timeline-nav {
@@ -101,6 +112,7 @@
         width: 100%;
         cursor: pointer;
         user-select: none;
+        pointer-events: auto; /* Reactiva interacciones para la barra */
     }
 
     .timeline-line {
@@ -135,39 +147,58 @@
 
     .timeline-nav-item {
         position: absolute;
-        right: 25px;
+        right: 0;
         display: flex;
         align-items: center;
+        flex-direction: row-reverse;
         transform: translateY(-50%);
         transition: all 0.2s ease;
-        opacity: 0;
-        pointer-events: none;
+        opacity: 0.8;
+        pointer-events: auto;
+    }
+
+    .timeline-dot {
+        width: 8px;
+        height: 8px;
+        background-color: var(--mud-palette-divider);
+        border-radius: 50%;
+        margin-left: 10px;
+        z-index: 2;
+        transition: all 0.2s ease;
+    }
+
+    .timeline-nav-item.active .timeline-dot {
+        background-color: var(--mud-palette-primary);
+        transform: scale(1.5);
     }
 
     .timeline-nav-item.active {
         opacity: 1;
     }
 
-    .vertical-timeline-nav:hover .timeline-nav-item, 
-    .vertical-timeline-nav.dragging .timeline-nav-item {
-        opacity: 0.6;
-        pointer-events: auto;
-    }
-
-    .timeline-nav-item:hover, .timeline-nav-item.active {
-        opacity: 1 !important;
-    }
-
     .timeline-nav-label {
-        font-size: 0.75rem;
+        font-size: 0.7rem;
         font-weight: 600;
-        color: var(--mud-palette-text-primary);
+        color: var(--mud-palette-text-secondary);
         white-space: nowrap;
         background-color: var(--mud-palette-surface);
-        padding: 4px 10px;
-        border-radius: 20px;
-        box-shadow: var(--mud-elevation-3);
+        padding: 2px 8px;
+        border-radius: 12px;
+        box-shadow: var(--mud-elevation-1);
         border: 1px solid var(--mud-palette-divider);
+        transition: all 0.2s ease;
+        margin-right: 5px;
+    }
+
+    .timeline-nav-item.active .timeline-nav-label {
+        color: var(--mud-palette-text-primary);
+        box-shadow: var(--mud-elevation-3);
+        font-size: 0.8rem;
+    }
+
+    .vertical-timeline-nav:hover .timeline-nav-item, 
+    .vertical-timeline-nav.dragging .timeline-nav-item {
+        opacity: 1;
     }
 
     /* Estilo durante el arrastre o hover */
@@ -184,7 +215,7 @@
     private bool _loading = true;
     private string _activeGroup = "";
     private double _scrollPercentage = 0;
-    private string _handleStyle => $"top: calc({(_scrollPercentage).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}% - {(_scrollPercentage * 40 / 100).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}px);";
+    private string _handleStyle => $"top: calc({_scrollPercentage.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}% - {(_scrollPercentage * 40 / 100).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}px);";
     private DotNetObjectReference<Timeline>? _objRef;
 
     protected override async Task OnInitializedAsync()

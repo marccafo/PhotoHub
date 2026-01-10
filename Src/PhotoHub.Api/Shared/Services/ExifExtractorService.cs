@@ -15,14 +15,24 @@ public class ExifExtractorService
     {
         try
         {
-            // Check if file is an image
+            // Check if file is an image or video
             var extension = Path.GetExtension(filePath).ToLowerInvariant();
-            if (!IsImageFile(extension))
+            if (!IsImageFile(extension) && !IsVideoFile(extension))
                 return null;
             
             return await Task.Run(() =>
             {
-                var directories = ImageMetadataReader.ReadMetadata(filePath);
+                IEnumerable<MetadataExtractor.Directory> directories;
+                try
+                {
+                    directories = ImageMetadataReader.ReadMetadata(filePath);
+                }
+                catch (Exception ex)
+                {
+                    // MetadataExtractor might fail for some video formats
+                    Console.WriteLine($"[DEBUG] Metadata extraction failed for {filePath}: {ex.Message}");
+                    return new AssetExif();
+                }
                 
                 var exif = new AssetExif();
                 
@@ -31,19 +41,22 @@ public class ExifExtractorService
                     ExtractDirectoryMetadata(directory, exif);
                 }
                 
-                // Get image dimensions using ImageSharp
-                try
+                // Get image dimensions using ImageSharp (only for images)
+                if (IsImageFile(extension))
                 {
-                    var imageInfo = SixLabors.ImageSharp.Image.Identify(filePath);
-                    if (imageInfo != null)
+                    try
                     {
-                        exif.Width = imageInfo.Width;
-                        exif.Height = imageInfo.Height;
+                        var imageInfo = SixLabors.ImageSharp.Image.Identify(filePath);
+                        if (imageInfo != null)
+                        {
+                            exif.Width = imageInfo.Width;
+                            exif.Height = imageInfo.Height;
+                        }
                     }
-                }
-                catch
-                {
-                    // Ignore dimension extraction errors
+                    catch
+                    {
+                        // Ignore dimension extraction errors
+                    }
                 }
                 
                 return exif;
@@ -56,6 +69,12 @@ public class ExifExtractorService
         }
     }
     
+    private bool IsVideoFile(string extension)
+    {
+        var videoExtensions = new[] { ".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm", ".m4v", ".3gp" };
+        return videoExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
+    }
+
     private void ExtractDirectoryMetadata(MetadataExtractor.Directory directory, AssetExif exif)
     {
         if (directory is ExifSubIfdDirectory exifDir)
@@ -146,6 +165,6 @@ public class ExifExtractorService
     private bool IsImageFile(string extension)
     {
         var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".gif", ".webp", ".heic", ".heif" };
-        return imageExtensions.Contains(extension);
+        return imageExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
     }
 }

@@ -2,6 +2,8 @@ using PhotoHub.API.Shared.Models;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Formats.Jpeg;
+using Xabe.FFmpeg;
+using ImageMagick;
 
 namespace PhotoHub.API.Shared.Services;
 
@@ -35,38 +37,177 @@ public class ThumbnailGeneratorService
         try
         {
             var extension = Path.GetExtension(sourceFilePath).ToLowerInvariant();
-            if (!IsImageFile(extension))
-                return thumbnails;
             
-            using var sourceImage = await Image.LoadAsync(sourceFilePath, cancellationToken);
-            
-            // Get EXIF orientation if available
-            var orientation = GetImageOrientation(sourceImage);
-            
-            // Generate thumbnails for each size
-            var sizes = new[] { ThumbnailSize.Small, ThumbnailSize.Medium, ThumbnailSize.Large };
-            
-            foreach (var size in sizes)
+            if (IsImageFile(extension))
             {
-                var thumbnail = await GenerateThumbnailAsync(
-                    sourceImage, 
-                    assetId, 
-                    size, 
-                    orientation,
-                    cancellationToken);
-                
-                if (thumbnail != null)
+                if (extension == ".heic" || extension == ".heif")
                 {
-                    thumbnails.Add(thumbnail);
+                    await GenerateHeicThumbnailsAsync(sourceFilePath, assetId, thumbnails, cancellationToken);
+                }
+                else
+                {
+                    using var sourceImage = await Image.LoadAsync(sourceFilePath, cancellationToken);
+                    
+                    // Get EXIF orientation if available
+                    var orientation = GetImageOrientation(sourceImage);
+                    
+                    // Generate thumbnails for each size
+                    var sizes = new[] { ThumbnailSize.Small, ThumbnailSize.Medium, ThumbnailSize.Large };
+                    
+                    foreach (var size in sizes)
+                    {
+                        var thumbnail = await GenerateThumbnailAsync(
+                            sourceImage, 
+                            assetId, 
+                            size, 
+                            orientation,
+                            cancellationToken);
+                        
+                        if (thumbnail != null)
+                        {
+                            thumbnails.Add(thumbnail);
+                        }
+                    }
+                }
+            }
+            else if (IsVideoFile(extension))
+            {
+                // Generate a temporary frame from video
+                var tempFramePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.jpg");
+                try
+                {
+                    // Ensure FFmpeg path is set if we have it in env or default
+                    await EnsureFFmpegConfigured();
+
+                    Console.WriteLine($"[INFO] Extracting frame from video: {sourceFilePath}");
+                    
+                    // FFmpeg.Conversions.FromSnippet.Snapshot might be what I'm looking for or custom conversion
+                    IConversion conversion = await FFmpeg.Conversions.FromSnippet.Snapshot(sourceFilePath, tempFramePath, TimeSpan.FromSeconds(1));
+                    await conversion.Start(cancellationToken);
+
+                    if (File.Exists(tempFramePath))
+                    {
+                        Console.WriteLine($"[INFO] Frame extracted successfully, generating thumbnails for {assetId}");
+                        using var sourceImage = await Image.LoadAsync(tempFramePath, cancellationToken);
+                        
+                        var sizes = new[] { ThumbnailSize.Small, ThumbnailSize.Medium, ThumbnailSize.Large };
+                        foreach (var size in sizes)
+                        {
+                            var thumbnail = await GenerateThumbnailAsync(
+                                sourceImage, 
+                                assetId, 
+                                size, 
+                                1, // FFmpeg snapshot usually doesn't need orientation fix as it processes the stream
+                                cancellationToken);
+                            
+                            if (thumbnail != null)
+                            {
+                                thumbnails.Add(thumbnail);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[ERROR] Frame file was NOT created for {sourceFilePath}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[ERROR] Video snapshot failed for {sourceFilePath}: {ex.Message}");
+                    if (ex.InnerException != null)
+                    {
+                        Console.WriteLine($"[DEBUG] Inner exception: {ex.InnerException.Message}");
+                    }
+                }
+                finally
+                {
+                    if (File.Exists(tempFramePath))
+                    {
+                        File.Delete(tempFramePath);
+                    }
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
             // Return partial results if some thumbnails failed
+            Console.WriteLine($"[ERROR] Thumbnail generation failed for {sourceFilePath}: {ex.Message}");
         }
         
         return thumbnails;
+    }
+
+    private async Task EnsureFFmpegConfigured()
+    {
+        try 
+        {
+            var ffmpegPath = FFmpeg.ExecutablesPath;
+            if (string.IsNullOrEmpty(ffmpegPath))
+            {
+                Console.WriteLine("[WARNING] FFmpeg ExecutablesPath is not set. FFmpeg might not be found.");
+            }
+            else
+            {
+                // Check if ffmpeg executable exists in the path
+                var ffmpegExe = OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg";
+                var fullPath = Path.Combine(ffmpegPath, ffmpegExe);
+                if (!File.Exists(fullPath))
+                {
+                    Console.WriteLine($"[ERROR] FFmpeg executable NOT found at: {fullPath}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ERROR] Error checking FFmpeg configuration: {ex.Message}");
+        }
+    }
+
+    private async Task GenerateHeicThumbnailsAsync(string sourceFilePath, int assetId, List<AssetThumbnail> thumbnails, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var image = new MagickImage(sourceFilePath);
+            // Convert to JPEG byte array to use with ImageSharp or process directly with Magick.NET
+            // Direct processing with Magick.NET is easier here
+            
+            var sizes = new[] { ThumbnailSize.Small, ThumbnailSize.Medium, ThumbnailSize.Large };
+            foreach (var size in sizes)
+            {
+                var targetSize = (int)size;
+                var thumbnailPath = GetThumbnailPath(assetId, size);
+                var thumbnailDir = Path.GetDirectoryName(thumbnailPath);
+                
+                if (!string.IsNullOrEmpty(thumbnailDir) && !Directory.Exists(thumbnailDir))
+                {
+                    Directory.CreateDirectory(thumbnailDir);
+                }
+
+                using var thumb = image.Clone();
+                thumb.AutoOrient();
+                thumb.Thumbnail((uint)targetSize, (uint)targetSize);
+                thumb.Format = MagickFormat.Jpeg;
+                thumb.Quality = 85;
+                
+                await thumb.WriteAsync(thumbnailPath, cancellationToken);
+                
+                var fileInfo = new FileInfo(thumbnailPath);
+                thumbnails.Add(new AssetThumbnail
+                {
+                    AssetId = assetId,
+                    Size = size,
+                    FilePath = thumbnailPath,
+                    Width = (int)thumb.Width,
+                    Height = (int)thumb.Height,
+                    FileSize = fileInfo.Length,
+                    Format = "JPEG"
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ERROR] HEIC thumbnail generation failed for {sourceFilePath}: {ex.Message}");
+        }
     }
     
     private async Task<AssetThumbnail?> GenerateThumbnailAsync(
@@ -261,6 +402,12 @@ public class ThumbnailGeneratorService
     private bool IsImageFile(string extension)
     {
         var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".gif", ".webp", ".heic", ".heif" };
-        return imageExtensions.Contains(extension);
+        return imageExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
+    }
+    
+    private bool IsVideoFile(string extension)
+    {
+        var videoExtensions = new[] { ".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm", ".m4v", ".3gp" };
+        return videoExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
     }
 }

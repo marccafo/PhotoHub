@@ -48,10 +48,10 @@ public class ScanAssetsEndpoint : IEndpoint
     {
         var channel = Channel.CreateUnbounded<ScanProgressUpdate>();
         var scanStartTime = DateTime.UtcNow;
-        var stats = new PhotoHub.Blazor.Shared.Models.ScanStatistics();
+        var stats = new ScanStatistics();
 
         // Background task to perform the scan
-        _ = Task.Run(async delegate
+        _ = Task.Run(async () =>
         {
             try
             {
@@ -61,7 +61,7 @@ public class ScanAssetsEndpoint : IEndpoint
                 var scannedFilesList = (await directoryScanner.ScanDirectoryAsync(directoryPath, cancellationToken)).ToList();
                 stats.TotalFilesFound = scannedFilesList.Count;
                 
-                await channel.Writer.WriteAsync(new ScanProgressUpdate { Message = $"Descubiertos {stats.TotalFilesFound} archivos. Procesando...", Percentage = 10, Statistics = stats }, cancellationToken);
+                await channel.Writer.WriteAsync(new ScanProgressUpdate { Message = $"Descubiertos {stats.TotalFilesFound} archivos. Procesando...", Percentage = 10, Statistics = MapToBlazorStats(stats) }, cancellationToken);
 
                 // Load existing assets for differential comparison
                 var existingAssetsByChecksum = await dbContext.Assets
@@ -81,7 +81,6 @@ public class ScanAssetsEndpoint : IEndpoint
                 };
 
                 int processedCount = 0;
-                var apiStatsForProcessing = new PhotoHub.API.Features.ScanAssets.ScanStatistics();
                 
                 foreach (var file in scannedFilesList)
                 {
@@ -89,18 +88,18 @@ public class ScanAssetsEndpoint : IEndpoint
                     scanContext.AssetsToDelete.Add(file.FullPath);
                     await EnsureFolderStructureForFileAsync(dbContext, file.FullPath, scanContext.ProcessedDirectories, cancellationToken);
                     
-                    var changeResult = await VerifyFileChangesAsync(file, existingAssetsByPath, existingAssetsByChecksum, hashService, dbContext, apiStatsForProcessing, cancellationToken);
+                    var changeResult = await VerifyFileChangesAsync(file, existingAssetsByPath, existingAssetsByChecksum, hashService, dbContext, stats, cancellationToken);
                     
                     if (!changeResult.ShouldSkip)
                     {
                         var asset = changeResult.Asset!;
                         var isNew = changeResult.IsNew;
                         if (ShouldExtractExif(asset, isNew)) 
-                            await ExtractExifMetadataAsync(asset, file.FullPath, exifService, apiStatsForProcessing, cancellationToken);
+                            await ExtractExifMetadataAsync(asset, file.FullPath, exifService, stats, cancellationToken);
                         
                         if (asset.Exif != null)
-                            await DetectMediaTagsAsync(asset, file.FullPath, mediaRecognitionService, apiStatsForProcessing, cancellationToken);
-
+                            await DetectMediaTagsAsync(asset, file.FullPath, mediaRecognitionService, stats, cancellationToken);
+                        
                         if (!isNew)
                         {
                             scanContext.AssetsToUpdate.Add(asset);
@@ -118,25 +117,21 @@ public class ScanAssetsEndpoint : IEndpoint
                     }
 
                     processedCount++;
-                    SyncStats(apiStatsForProcessing, stats);
                     if (processedCount % 10 == 0 || processedCount == scannedFilesList.Count)
                     {
                         await channel.Writer.WriteAsync(new ScanProgressUpdate 
                         { 
                             Message = $"Procesando archivo {processedCount} de {stats.TotalFilesFound}...", 
                             Percentage = 10 + (processedCount * 40.0 / scannedFilesList.Count),
-                            Statistics = stats
+                            Statistics = MapToBlazorStats(stats)
                         }, cancellationToken);
                     }
                 }
 
                 // STEP 4: Database operations and thumbnail generation
-                await channel.Writer.WriteAsync(new ScanProgressUpdate { Message = "Guardando cambios y generando miniaturas...", Percentage = 50, Statistics = stats }, cancellationToken);
+                await channel.Writer.WriteAsync(new ScanProgressUpdate { Message = "Guardando cambios y generando miniaturas...", Percentage = 50, Statistics = MapToBlazorStats(stats) }, cancellationToken);
                 
-                // Redefining stats mapping because of naming conflicts or just use the local one
-                var apiStats = new PhotoHub.API.Features.ScanAssets.ScanStatistics();
-                
-                await ProcessDatabaseOperationsWithProgressAsync(scanContext, dbContext, thumbnailService, mediaRecognitionService, mlJobService, apiStats, channel.Writer, stats, cancellationToken);
+                await ProcessDatabaseOperationsWithProgressAsync(scanContext, dbContext, thumbnailService, mediaRecognitionService, mlJobService, channel.Writer, stats, cancellationToken);
 
                 stats.ScanCompletedAt = DateTime.UtcNow;
                 stats.ScanDuration = stats.ScanCompletedAt - scanStartTime;
@@ -145,7 +140,7 @@ public class ScanAssetsEndpoint : IEndpoint
                 { 
                     Message = "Escaneo completado con éxito.", 
                     Percentage = 100, 
-                    Statistics = stats,
+                    Statistics = MapToBlazorStats(stats),
                     IsCompleted = true
                 }, cancellationToken);
             }
@@ -166,44 +161,175 @@ public class ScanAssetsEndpoint : IEndpoint
         }
     }
 
+    private PhotoHub.Blazor.Shared.Models.ScanStatistics MapToBlazorStats(ScanStatistics stats)
+    {
+        return new PhotoHub.Blazor.Shared.Models.ScanStatistics
+        {
+            TotalFilesFound = stats.TotalFilesFound,
+            NewFiles = stats.NewFiles,
+            UpdatedFiles = stats.UpdatedFiles,
+            MovedFiles = stats.MovedFiles,
+            SkippedUnchanged = stats.SkippedUnchanged,
+            OrphanedFilesRemoved = stats.OrphanedFilesRemoved,
+            OrphanedFoldersRemoved = stats.OrphanedFoldersRemoved,
+            HashesCalculated = stats.HashesCalculated,
+            ExifExtracted = stats.ExifExtracted,
+            MediaTagsDetected = stats.MediaTagsDetected,
+            MlJobsQueued = stats.MlJobsQueued,
+            ThumbnailsGenerated = stats.ThumbnailsGenerated,
+            ThumbnailsRegenerated = stats.ThumbnailsRegenerated,
+            ScanCompletedAt = stats.ScanCompletedAt,
+            ScanDuration = stats.ScanDuration
+        };
+    }
+
     private async Task ProcessDatabaseOperationsWithProgressAsync(
         ScanContext context,
         ApplicationDbContext dbContext,
         ThumbnailGeneratorService thumbnailService,
         MediaRecognitionService mediaRecognitionService,
         IMlJobService mlJobService,
-        PhotoHub.API.Features.ScanAssets.ScanStatistics apiStats,
         ChannelWriter<ScanProgressUpdate> writer,
-        PhotoHub.Blazor.Shared.Models.ScanStatistics blazorStats,
+        ScanStatistics apiStats,
         CancellationToken cancellationToken)
     {
-        // This is a simplified version of ProcessDatabaseOperationsAsync that reports progress
+        // STEP 4a: Cleanup - Remove orphaned assets
         await RemoveOrphanedAssetsAsync(context.AssetsToDelete, dbContext, apiStats, cancellationToken);
-        SyncStats(apiStats, blazorStats);
-        await writer.WriteAsync(new ScanProgressUpdate { Message = "Limpieza de archivos huérfanos completada.", Percentage = 60, Statistics = blazorStats }, cancellationToken);
+        await writer.WriteAsync(new ScanProgressUpdate { Message = "Limpieza de archivos huérfanos completada.", Percentage = 60, Statistics = MapToBlazorStats(apiStats) }, cancellationToken);
 
-        await InsertNewAssetsAsync(context.AssetsToCreate, dbContext, thumbnailService, mediaRecognitionService, mlJobService, apiStats, cancellationToken);
-        SyncStats(apiStats, blazorStats);
-        await writer.WriteAsync(new ScanProgressUpdate { Message = "Nuevos archivos insertados.", Percentage = 80, Statistics = blazorStats }, cancellationToken);
+        // STEP 4b & 4c: Insert new assets and generate thumbnails
+        if (context.AssetsToCreate.Any())
+        {
+            // Set folder IDs for new assets
+            foreach (var asset in context.AssetsToCreate)
+            {
+                if (asset.FolderId == null && !string.IsNullOrEmpty(asset.FullPath))
+                {
+                    var fileDirectory = Path.GetDirectoryName(asset.FullPath);
+                    var folder = await GetOrCreateFolderForPathAsync(dbContext, fileDirectory, cancellationToken);
+                    asset.FolderId = folder?.Id;
+                }
+            }
+            
+            dbContext.Assets.AddRange(context.AssetsToCreate);
+            await dbContext.SaveChangesAsync(cancellationToken);
 
-        await UpdateExistingAssetsAsync(context.AssetsToUpdate, dbContext, thumbnailService, apiStats, cancellationToken);
-        SyncStats(apiStats, blazorStats);
-        await writer.WriteAsync(new ScanProgressUpdate { Message = "Archivos actualizados.", Percentage = 90, Statistics = blazorStats }, cancellationToken);
+            int count = 0;
+            foreach (var asset in context.AssetsToCreate)
+            {
+                var thumbnails = await thumbnailService.GenerateThumbnailsAsync(asset.FullPath, asset.Id, cancellationToken);
+                if (thumbnails.Any())
+                {
+                    dbContext.AssetThumbnails.AddRange(thumbnails);
+                    apiStats.ThumbnailsGenerated += thumbnails.Count;
+                }
+                
+                if (mediaRecognitionService.ShouldTriggerMlJob(asset, asset.Exif))
+                {
+                    await mlJobService.EnqueueMlJobAsync(asset.Id, MlJobType.FaceDetection, cancellationToken);
+                    await mlJobService.EnqueueMlJobAsync(asset.Id, MlJobType.ObjectRecognition, cancellationToken);
+                    apiStats.MlJobsQueued += 2;
+                }
+
+                count++;
+                if (count % 5 == 0 || count == context.AssetsToCreate.Count)
+                {
+                    await writer.WriteAsync(new ScanProgressUpdate 
+                    { 
+                        Message = $"Generando miniaturas para nuevos archivos ({count}/{context.AssetsToCreate.Count})...", 
+                        Percentage = 60 + (count * 15.0 / context.AssetsToCreate.Count),
+                        Statistics = MapToBlazorStats(apiStats) 
+                    }, cancellationToken);
+                }
+            }
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        
+        await writer.WriteAsync(new ScanProgressUpdate { Message = "Nuevos archivos procesados.", Percentage = 75, Statistics = MapToBlazorStats(apiStats) }, cancellationToken);
+
+        // STEP 4d & 4e: Update existing assets and regenerate thumbnails
+        if (context.AssetsToUpdate.Any())
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            int count = 0;
+            foreach (var asset in context.AssetsToUpdate)
+            {
+                var missingSizes = thumbnailService.GetMissingThumbnailSizes(asset.Id);
+                if (missingSizes.Any())
+                {
+                    await dbContext.Entry(asset).Collection(a => a.Thumbnails).LoadAsync(cancellationToken);
+                    var thumbnailsToRemove = asset.Thumbnails.Where(t => missingSizes.Contains(t.Size)).ToList();
+                    if (thumbnailsToRemove.Any()) dbContext.AssetThumbnails.RemoveRange(thumbnailsToRemove);
+                    
+                    var allThumbnails = await thumbnailService.GenerateThumbnailsAsync(asset.FullPath, asset.Id, cancellationToken);
+                    var newThumbnails = allThumbnails.Where(t => missingSizes.Contains(t.Size)).ToList();
+                    if (newThumbnails.Any())
+                    {
+                        dbContext.AssetThumbnails.AddRange(newThumbnails);
+                        apiStats.ThumbnailsRegenerated += newThumbnails.Count;
+                    }
+                }
+                
+                count++;
+                if (count % 5 == 0 || count == context.AssetsToUpdate.Count)
+                {
+                    await writer.WriteAsync(new ScanProgressUpdate 
+                    { 
+                        Message = $"Actualizando miniaturas ({count}/{context.AssetsToUpdate.Count})...", 
+                        Percentage = 75 + (count * 10.0 / context.AssetsToUpdate.Count),
+                        Statistics = MapToBlazorStats(apiStats) 
+                    }, cancellationToken);
+                }
+            }
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await writer.WriteAsync(new ScanProgressUpdate { Message = "Archivos actualizados.", Percentage = 85, Statistics = MapToBlazorStats(apiStats) }, cancellationToken);
+
+        // STEP 4f: Verify thumbnails for ALL scanned assets (those that didn't need update but might miss thumbnails)
+        var unchangedAssets = context.AllScannedAssets
+            .Where(a => !context.AssetsToUpdate.Contains(a) && !context.AssetsToCreate.Contains(a))
+            .ToList();
+
+        if (unchangedAssets.Any())
+        {
+            int count = 0;
+            foreach (var asset in unchangedAssets)
+            {
+                var missingSizes = thumbnailService.GetMissingThumbnailSizes(asset.Id);
+                if (missingSizes.Any())
+                {
+                    await dbContext.Entry(asset).Collection(a => a.Thumbnails).LoadAsync(cancellationToken);
+                    var thumbnailsToRemove = asset.Thumbnails.Where(t => missingSizes.Contains(t.Size)).ToList();
+                    if (thumbnailsToRemove.Any()) dbContext.AssetThumbnails.RemoveRange(thumbnailsToRemove);
+                    
+                    var allThumbnails = await thumbnailService.GenerateThumbnailsAsync(asset.FullPath, asset.Id, cancellationToken);
+                    var newThumbnails = allThumbnails.Where(t => missingSizes.Contains(t.Size)).ToList();
+                    if (newThumbnails.Any())
+                    {
+                        dbContext.AssetThumbnails.AddRange(newThumbnails);
+                        apiStats.ThumbnailsRegenerated += newThumbnails.Count;
+                    }
+                }
+
+                count++;
+                if (count % 10 == 0 || count == unchangedAssets.Count)
+                {
+                    await writer.WriteAsync(new ScanProgressUpdate 
+                    { 
+                        Message = $"Verificando miniaturas existentes ({count}/{unchangedAssets.Count})...", 
+                        Percentage = 85 + (count * 10.0 / unchangedAssets.Count),
+                        Statistics = MapToBlazorStats(apiStats) 
+                    }, cancellationToken);
+                }
+            }
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
 
         await RemoveOrphanedFoldersAsync(context.ProcessedDirectories, dbContext, apiStats, cancellationToken);
-        SyncStats(apiStats, blazorStats);
+        await writer.WriteAsync(new ScanProgressUpdate { Message = "Limpieza de carpetas completada.", Percentage = 98, Statistics = MapToBlazorStats(apiStats) }, cancellationToken);
     }
 
-    private void SyncStats(PhotoHub.API.Features.ScanAssets.ScanStatistics apiStats, PhotoHub.Blazor.Shared.Models.ScanStatistics blazorStats)
-    {
-        blazorStats.NewFiles = apiStats.NewFiles;
-        blazorStats.UpdatedFiles = apiStats.UpdatedFiles;
-        blazorStats.OrphanedFilesRemoved = apiStats.OrphanedFilesRemoved;
-        blazorStats.OrphanedFoldersRemoved = apiStats.OrphanedFoldersRemoved;
-        blazorStats.ThumbnailsGenerated = apiStats.ThumbnailsGenerated;
-        blazorStats.ThumbnailsRegenerated = apiStats.ThumbnailsRegenerated;
-        blazorStats.TotalFilesFound = apiStats.TotalFilesFound;
-    }
 
     private async Task<IResult> Handle(
         [FromServices] DirectoryScanner directoryScanner,
@@ -260,7 +386,7 @@ public class ScanAssetsEndpoint : IEndpoint
             
             var response = new ScanAssetsResponse
             {
-                Statistics = stats,
+                Statistics = MapToBlazorStats(stats),
                 AssetsProcessed = scanContext.AssetsToCreate.Count + scanContext.AssetsToUpdate.Count,
                 Message = $"Scan completed successfully. Processed {stats.NewFiles} new, {stats.UpdatedFiles} updated, {stats.OrphanedFilesRemoved} files and {stats.OrphanedFoldersRemoved} folders removed. Generated {stats.ThumbnailsGenerated} new thumbnails, regenerated {stats.ThumbnailsRegenerated} missing thumbnails."
             };
@@ -476,7 +602,7 @@ public class ScanAssetsEndpoint : IEndpoint
     // Método separado para decidir si debe extraerse EXIF
     private static bool ShouldExtractExif(Asset asset, bool isNew)
     {
-        return asset.Type == AssetType.IMAGE && isNew;
+        return (asset.Type == AssetType.IMAGE || asset.Type == AssetType.VIDEO) && isNew;
     }
 
     // Método que SOLO extrae EXIF (sin lógica de decisión)
@@ -637,11 +763,10 @@ public class ScanAssetsEndpoint : IEndpoint
         ScanStatistics stats,
         CancellationToken cancellationToken)
     {
-        var imageAssets = assets.Where(a => a.Type == AssetType.IMAGE).ToList();
-        if (!imageAssets.Any())
+        if (!assets.Any())
             return;
         
-        foreach (var asset in imageAssets)
+        foreach (var asset in assets)
         {
             var thumbnails = await thumbnailService.GenerateThumbnailsAsync(
                 asset.FullPath,
@@ -713,11 +838,10 @@ public class ScanAssetsEndpoint : IEndpoint
         ScanStatistics stats,
         CancellationToken cancellationToken)
     {
-        var imageAssets = assets.Where(a => a.Type == AssetType.IMAGE).ToList();
-        if (!imageAssets.Any())
+        if (!assets.Any())
             return;
         
-        foreach (var asset in imageAssets)
+        foreach (var asset in assets)
         {
             await dbContext.Entry(asset)
                 .Collection(a => a.Thumbnails)
@@ -766,14 +890,14 @@ public class ScanAssetsEndpoint : IEndpoint
         ScanStatistics stats,
         CancellationToken cancellationToken)
     {
-        var unchangedImageAssets = allScannedAssets
-            .Where(a => a.Type == AssetType.IMAGE && !assetsToUpdate.Contains(a))
+        var unchangedAssets = allScannedAssets
+            .Where(a => !assetsToUpdate.Contains(a))
             .ToList();
         
-        if (!unchangedImageAssets.Any())
+        if (!unchangedAssets.Any())
             return;
         
-        foreach (var asset in unchangedImageAssets)
+        foreach (var asset in unchangedAssets)
         {
             await dbContext.Entry(asset)
                 .Collection(a => a.Thumbnails)

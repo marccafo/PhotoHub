@@ -1,7 +1,8 @@
 @using MudBlazor
 @using PhotoHub.Blazor.Shared.Models
+@using Microsoft.JSInterop
 
-<div class="asset-card-container" @onclick="@OnClick">
+<div class="asset-card-container" @onclick="@OnClick" @onmouseover="HandleMouseOver" @onmouseleave="HandleMouseLeave">
     <style>
         .asset-card-container {
             position: relative;
@@ -10,16 +11,36 @@
             aspect-ratio: 1 / 1;
             overflow: hidden;
             transition: opacity 0.2s;
-            background-color: var(--mud-palette-background-grey);
+            background-color: #333;
             border-radius: 4px;
         }
         .asset-card-container:hover {
-            opacity: 0.85;
+            opacity: 1;
         }
         .asset-card-image {
             width: 100%;
             height: 100%;
             object-fit: cover;
+        }
+        .video-preview-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+        .preview-video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 1;
+        }
+        .asset-card-container:hover .preview-video {
+            opacity: 1;
+        }
+        .thumbnail {
+            position: relative;
+            z-index: 0;
         }
         .asset-card-overlay {
             position: absolute;
@@ -30,6 +51,7 @@
             background: linear-gradient(transparent, rgba(0,0,0,0.7));
             opacity: 0;
             transition: opacity 0.2s;
+            z-index: 2;
         }
         .asset-card-container:hover .asset-card-overlay {
             opacity: 1;
@@ -40,12 +62,23 @@
             right: 8px;
             color: white;
             filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));
+            z-index: 2;
         }
     </style>
     
     @if (Asset.HasThumbnails)
     {
-        <img src="@Asset.ThumbnailUrl" alt="@Asset.FileName" class="asset-card-image" loading="lazy" />
+        @if (Asset.Type == "VIDEO")
+        {
+            <div class="video-preview-container">
+                <img src="@Asset.ThumbnailUrl" alt="@Asset.FileName" class="asset-card-image thumbnail" loading="lazy" />
+                <video @ref="_videoRef" src="@Asset.ContentUrl" muted loop class="asset-card-image preview-video" preload="none"></video>
+            </div>
+        }
+        else
+        {
+            <img src="@Asset.ThumbnailUrl" alt="@Asset.FileName" class="asset-card-image" loading="lazy" />
+        }
     }
     else
     {
@@ -71,10 +104,29 @@
 @code {
     [Parameter] public TimelineItem Asset { get; set; } = null!;
     [Parameter] public EventCallback<TimelineItem> OnAssetClick { get; set; }
+    [Inject] private IJSRuntime JS { get; set; } = null!;
+
+    private ElementReference _videoRef;
 
     private async Task OnClick()
     {
         await OnAssetClick.InvokeAsync(Asset);
+    }
+
+    private async Task HandleMouseOver()
+    {
+        if (Asset.Type == "VIDEO" && _videoRef.Context != null)
+        {
+            await JS.InvokeVoidAsync("videoHelpers.play", _videoRef);
+        }
+    }
+
+    private async Task HandleMouseLeave()
+    {
+        if (Asset.Type == "VIDEO" && _videoRef.Context != null)
+        {
+            await JS.InvokeVoidAsync("videoHelpers.pause", _videoRef);
+        }
     }
 
     private string GetAssetIcon(string type)
