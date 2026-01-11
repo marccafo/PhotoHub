@@ -79,15 +79,39 @@ public class ThumbnailGeneratorService
                     // Ensure FFmpeg path is set if we have it in env or default
                     await EnsureFFmpegConfigured();
 
-                    Console.WriteLine($"[INFO] Extracting frame from video: {sourceFilePath}");
+                    Console.WriteLine($"[INFO] Extracting frame from video: {sourceFilePath} (Extension: {extension})");
                     
+                    // Xabe.FFmpeg requires the output file extension to be .jpg for Snapshot
+                    // Check if source file exists
+                    if (!File.Exists(sourceFilePath))
+                    {
+                        Console.WriteLine($"[ERROR] Source video file not found: {sourceFilePath}");
+                        return thumbnails;
+                    }
+
                     // FFmpeg.Conversions.FromSnippet.Snapshot might be what I'm looking for or custom conversion
-                    IConversion conversion = await FFmpeg.Conversions.FromSnippet.Snapshot(sourceFilePath, tempFramePath, TimeSpan.FromSeconds(1));
-                    await conversion.Start(cancellationToken);
+                    // If snapshot at 1s fails, try at 0s which is more likely to exist
+                    IConversion conversion;
+                    try 
+                    {
+                        conversion = await FFmpeg.Conversions.FromSnippet.Snapshot(sourceFilePath, tempFramePath, TimeSpan.FromSeconds(1));
+                        Console.WriteLine($"[DEBUG] Starting FFmpeg snapshot at 1s for {assetId}");
+                        await conversion.Start(cancellationToken);
+                    }
+                    catch
+                    {
+                        Console.WriteLine($"[WARNING] FFmpeg snapshot at 1s failed for {assetId}, trying at 0s");
+                        conversion = await FFmpeg.Conversions.FromSnippet.Snapshot(sourceFilePath, tempFramePath, TimeSpan.FromSeconds(0));
+                        await conversion.Start(cancellationToken);
+                    }
+                    
+                    Console.WriteLine($"[DEBUG] FFmpeg conversion finished for {assetId}");
 
                     if (File.Exists(tempFramePath))
                     {
-                        Console.WriteLine($"[INFO] Frame extracted successfully, generating thumbnails for {assetId}");
+                        var frameInfo = new FileInfo(tempFramePath);
+                        Console.WriteLine($"[INFO] Frame extracted successfully, size: {frameInfo.Length} bytes, generating thumbnails for {assetId}");
+                        
                         using var sourceImage = await Image.LoadAsync(tempFramePath, cancellationToken);
                         
                         var sizes = new[] { ThumbnailSize.Small, ThumbnailSize.Medium, ThumbnailSize.Large };
@@ -108,15 +132,18 @@ public class ThumbnailGeneratorService
                     }
                     else
                     {
-                        Console.WriteLine($"[ERROR] Frame file was NOT created for {sourceFilePath}");
+                        Console.WriteLine($"[ERROR] Frame file was NOT created for {sourceFilePath} after FFmpeg execution. Checking FFmpeg.ExecutablesPath: {FFmpeg.ExecutablesPath}");
                     }
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"[ERROR] Video snapshot failed for {sourceFilePath}: {ex.Message}");
+                    Console.WriteLine($"[DEBUG] Exception Type: {ex.GetType().FullName}");
+                    Console.WriteLine($"[DEBUG] StackTrace: {ex.StackTrace}");
                     if (ex.InnerException != null)
                     {
                         Console.WriteLine($"[DEBUG] Inner exception: {ex.InnerException.Message}");
+                        Console.WriteLine($"[DEBUG] Inner StackTrace: {ex.InnerException.StackTrace}");
                     }
                 }
                 finally
@@ -144,17 +171,34 @@ public class ThumbnailGeneratorService
             var ffmpegPath = FFmpeg.ExecutablesPath;
             if (string.IsNullOrEmpty(ffmpegPath))
             {
-                Console.WriteLine("[WARNING] FFmpeg ExecutablesPath is not set. FFmpeg might not be found.");
+                Console.WriteLine("[WARNING] FFmpeg ExecutablesPath is not set. Trying to find it in PATH.");
+                // If not set, FFmpeg might rely on PATH, but we should log it
+                return;
+            }
+            
+            // Check if ffmpeg executable exists in the path
+            var ffmpegExe = OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg";
+            var ffprobeExe = OperatingSystem.IsWindows() ? "ffprobe.exe" : "ffprobe";
+            
+            var ffmpegFullPath = Path.Combine(ffmpegPath, ffmpegExe);
+            var ffprobeFullPath = Path.Combine(ffmpegPath, ffprobeExe);
+            
+            if (!File.Exists(ffmpegFullPath))
+            {
+                Console.WriteLine($"[ERROR] FFmpeg executable NOT found at: {ffmpegFullPath}");
             }
             else
             {
-                // Check if ffmpeg executable exists in the path
-                var ffmpegExe = OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg";
-                var fullPath = Path.Combine(ffmpegPath, ffmpegExe);
-                if (!File.Exists(fullPath))
-                {
-                    Console.WriteLine($"[ERROR] FFmpeg executable NOT found at: {fullPath}");
-                }
+                Console.WriteLine($"[DEBUG] FFmpeg found at: {ffmpegFullPath}");
+            }
+
+            if (!File.Exists(ffprobeFullPath))
+            {
+                Console.WriteLine($"[ERROR] FFprobe executable NOT found at: {ffprobeFullPath}");
+            }
+            else
+            {
+                Console.WriteLine($"[DEBUG] FFprobe found at: {ffprobeFullPath}");
             }
         }
         catch (Exception ex)
@@ -407,7 +451,7 @@ public class ThumbnailGeneratorService
     
     private bool IsVideoFile(string extension)
     {
-        var videoExtensions = new[] { ".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm", ".m4v", ".3gp" };
+        var videoExtensions = new[] { ".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm", ".m4v", ".3gp", ".mpeg", ".mpg" };
         return videoExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
     }
 }

@@ -3,6 +3,7 @@ using MetadataExtractor;
 using MetadataExtractor.Formats.Exif;
 using MetadataExtractor.Formats.Iptc;
 using MetadataExtractor.Formats.Xmp;
+using Xabe.FFmpeg;
 
 namespace PhotoHub.API.Shared.Services;
 
@@ -41,7 +42,7 @@ public class ExifExtractorService
                     ExtractDirectoryMetadata(directory, exif);
                 }
                 
-                // Get image dimensions using ImageSharp (only for images)
+                // Get image/video dimensions
                 if (IsImageFile(extension))
                 {
                     try
@@ -58,6 +59,24 @@ public class ExifExtractorService
                         // Ignore dimension extraction errors
                     }
                 }
+                else if (IsVideoFile(extension))
+                {
+                    try
+                    {
+                        // Use FFprobe to get video dimensions
+                        var mediaInfo = FFmpeg.GetMediaInfo(filePath).GetAwaiter().GetResult();
+                        var videoStream = mediaInfo.VideoStreams.FirstOrDefault();
+                        if (videoStream != null)
+                        {
+                            exif.Width = videoStream.Width;
+                            exif.Height = videoStream.Height;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[DEBUG] Video dimension extraction with FFprobe failed for {filePath}: {ex.Message}");
+                    }
+                }
                 
                 return exif;
             }, cancellationToken);
@@ -71,7 +90,7 @@ public class ExifExtractorService
     
     private bool IsVideoFile(string extension)
     {
-        var videoExtensions = new[] { ".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm", ".m4v", ".3gp" };
+        var videoExtensions = new[] { ".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm", ".m4v", ".3gp", ".mpeg", ".mpg" };
         return videoExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
     }
 

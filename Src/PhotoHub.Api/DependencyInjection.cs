@@ -39,6 +39,16 @@ public static class DependencyInjection
                 {
                     FFmpeg.SetExecutablesPath(path);
                     Console.WriteLine($"[INFO] FFmpeg path set to: {path}");
+                    
+                    // Check if both ffmpeg and ffprobe exist
+                    var ffmpegExe = OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg";
+                    var ffprobeExe = OperatingSystem.IsWindows() ? "ffprobe.exe" : "ffprobe";
+                    
+                    if (!File.Exists(Path.Combine(path, ffmpegExe)))
+                        Console.WriteLine($"[WARNING] {ffmpegExe} not found in {path}");
+                    if (!File.Exists(Path.Combine(path, ffprobeExe)))
+                        Console.WriteLine($"[WARNING] {ffprobeExe} not found in {path}");
+                        
                     break;
                 }
             }
