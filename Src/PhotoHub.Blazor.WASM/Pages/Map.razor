@@ -28,10 +28,20 @@
         z-index: 0;
     }
     
-    .map-cluster-label {
+    .map-cluster-icon {
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
+    }
+    
+    .map-cluster-icon img {
+        border-radius: 50%;
+    }
+    
+    /* Diseño flat para los marcadores del mapa */
+    .map-cluster-icon > div {
+        box-shadow: none !important;
+        filter: none !important;
     }
     
     /* Estilos simplificados para los controles de Leaflet */
@@ -220,6 +230,8 @@
             _loading = true;
             StateHasChanged();
 
+            Console.WriteLine($"Loading clusters - loadAll: {loadAll}, zoom: {_currentZoom}");
+            
             if (loadAll)
             {
                 // Cargar todos los clusters sin filtrar por bounds
@@ -227,6 +239,7 @@
             }
             else
             {
+                Console.WriteLine($"Loading with bounds: minLat={_currentMinLat}, minLng={_currentMinLng}, maxLat={_currentMaxLat}, maxLng={_currentMaxLng}");
                 _clusters = await MapService.GetMapClustersAsync(
                     _currentZoom,
                     _currentMinLat,
@@ -236,18 +249,23 @@
                 );
             }
 
+            Console.WriteLine($"Loaded {_clusters.Count} clusters");
+
             if (_clusters.Any())
             {
+                Console.WriteLine($"First cluster: Lat={_clusters[0].Latitude}, Lng={_clusters[0].Longitude}, Count={_clusters[0].Count}, ThumbnailUrl={_clusters[0].ThumbnailUrl}");
                 await UpdateMapMarkers();
                 Snackbar.Add($"Se encontraron {_clusters.Count} ubicaciones con {_clusters.Sum(c => c.Count)} fotografías", Severity.Success);
             }
             else
             {
+                Console.WriteLine("No clusters found");
                 Snackbar.Add("No se encontraron fotografías con coordenadas GPS en esta área", Severity.Info);
             }
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"Error loading clusters: {ex}");
             Snackbar.Add($"Error al cargar clusters: {ex.Message}", Severity.Error);
         }
         finally
@@ -261,52 +279,73 @@
     {
         try
         {
+            Console.WriteLine($"Updating map markers - {_clusters.Count} clusters");
+            
             // Eliminar marcadores anteriores
             if (_markers.Any())
             {
+                Console.WriteLine($"Removing {_markers.Count} old markers");
                 await JS.InvokeVoidAsync("mapHelpers.removeAllMarkers", _markers);
                 _markers.Clear();
             }
 
             if (!_clusters.Any())
+            {
+                Console.WriteLine("No clusters to display");
                 return;
+            }
 
             // Agregar nuevos marcadores
+            int successCount = 0;
             for (int i = 0; i < _clusters.Count; i++)
             {
                 var cluster = _clusters[i];
                 try
                 {
+                    Console.WriteLine($"Adding marker {i}: Lat={cluster.Latitude}, Lng={cluster.Longitude}, Count={cluster.Count}, Thumbnail={cluster.ThumbnailUrl}");
+                    
                     var marker = await JS.InvokeAsync<object>("mapHelpers.addClusterMarker",
                         cluster.Latitude,
                         cluster.Longitude,
                         cluster.Count,
+                        cluster.ThumbnailUrl ?? string.Empty,
                         _objRef,
                         i
                     );
                     if (marker != null)
                     {
                         _markers.Add(marker);
+                        successCount++;
+                        Console.WriteLine($"Marker {i} added successfully");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Marker {i} returned null");
                     }
                 }
                 catch (Exception ex)
                 {
                     // Continuar con los siguientes marcadores si uno falla
                     Console.WriteLine($"Error al agregar marcador {i}: {ex.Message}");
+                    Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 }
             }
 
+            Console.WriteLine($"Successfully added {successCount} markers out of {_clusters.Count}");
+
             // Si hay clusters, ajustar el mapa para mostrarlos todos
-            if (_clusters.Any())
+            if (_clusters.Any() && successCount > 0)
             {
                 var minLat = _clusters.Min(c => c.Latitude);
                 var minLng = _clusters.Min(c => c.Longitude);
                 var maxLat = _clusters.Max(c => c.Latitude);
                 var maxLng = _clusters.Max(c => c.Longitude);
                 
+                Console.WriteLine($"Fitting bounds: minLat={minLat}, minLng={minLng}, maxLat={maxLat}, maxLng={maxLng}");
+                
                 // Agregar un poco de padding
-                var latPadding = (maxLat - minLat) * 0.1;
-                var lngPadding = (maxLng - minLng) * 0.1;
+                var latPadding = Math.Max((maxLat - minLat) * 0.1, 0.01);
+                var lngPadding = Math.Max((maxLng - minLng) * 0.1, 0.01);
                 
                 await JS.InvokeVoidAsync("mapHelpers.fitBounds", 
                     minLat - latPadding, 
@@ -317,6 +356,7 @@
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"Error updating markers: {ex}");
             Snackbar.Add($"Error al actualizar marcadores: {ex.Message}", Severity.Error);
         }
     }

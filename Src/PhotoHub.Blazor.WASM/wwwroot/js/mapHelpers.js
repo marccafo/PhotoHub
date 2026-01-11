@@ -35,20 +35,38 @@ window.mapHelpers = {
             }).addTo(map);
             
             // Agregar control de ubicación actual (si está disponible)
+            // Nota: L.control.locate requiere el plugin leaflet-locatecontrol
+            // Por ahora, creamos un control simple manualmente
             if (navigator.geolocation) {
-                const locateControl = L.control.locate({
-                    position: 'topleft',
-                    drawCircle: true,
-                    follow: false,
-                    setView: true,
-                    keepCurrentZoomLevel: false,
-                    markerOptions: {
-                        title: 'Tu ubicación'
-                    },
-                    strings: {
-                        title: 'Mostrar mi ubicación'
-                    }
-                }).addTo(map);
+                const locateControl = L.control({
+                    position: 'topleft'
+                });
+                
+                locateControl.onAdd = function() {
+                    const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+                    const button = L.DomUtil.create('a', 'leaflet-control-locate', container);
+                    button.href = '#';
+                    button.title = 'Mostrar mi ubicación';
+                    button.innerHTML = '📍';
+                    button.style.cssText = 'line-height: 30px; text-align: center; font-size: 16px; width: 30px; height: 30px; display: block;';
+                    
+                    L.DomEvent.disableClickPropagation(button);
+                    L.DomEvent.on(button, 'click', function(e) {
+                        L.DomEvent.stopPropagation(e);
+                        L.DomEvent.preventDefault(e);
+                        
+                        navigator.geolocation.getCurrentPosition(function(position) {
+                            map.setView([position.coords.latitude, position.coords.longitude], 13);
+                        }, function(error) {
+                            console.error('Error getting location:', error);
+                            alert('No se pudo obtener tu ubicación');
+                        });
+                    });
+                    
+                    return container;
+                };
+                
+                locateControl.addTo(map);
             }
             
             // Agregar control de pantalla completa
@@ -116,7 +134,9 @@ window.mapHelpers = {
         return window.mapHelpers._mapInstance;
     },
     
-    addClusterMarker: function (lat, lng, count, dotNetRef, clusterIndex) {
+    addClusterMarker: function (lat, lng, count, thumbnailUrl, dotNetRef, clusterIndex) {
+        console.log(`addClusterMarker called: lat=${lat}, lng=${lng}, count=${count}, thumbnailUrl=${thumbnailUrl}, clusterIndex=${clusterIndex}`);
+        
         const map = window.mapHelpers._mapInstance;
         if (!map) {
             console.error('Map instance not found');
@@ -128,43 +148,102 @@ window.mapHelpers = {
             return null;
         }
         
-        const radius = Math.max(15, Math.min(50, 10 + count * 2));
+        // Círculos más pequeños: mínimo 40px, máximo 80px
+        const radius = Math.max(40, Math.min(80, 35 + count * 2));
+        const size = radius * 2;
         
-        const circle = L.circleMarker([lat, lng], {
-            radius: radius,
-            fillColor: '#1976d2',
-            color: '#fff',
-            weight: 2,
-            opacity: 1,
-            fillOpacity: 0.7
-        }).addTo(map);
+        console.log(`Creating marker with radius=${radius}, size=${size}`);
         
-        const label = L.divIcon({
-            className: 'map-cluster-label',
-            html: `<div style="
-                color: white;
-                font-weight: bold;
-                font-size: ${radius > 30 ? '14px' : '12px'};
-                text-align: center;
-                line-height: ${radius * 2}px;
-                width: ${radius * 2}px;
-                height: ${radius * 2}px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                pointer-events: none;
-            ">${count}</div>`,
-            iconSize: [radius * 2, radius * 2],
-            iconAnchor: [radius, radius]
+        // Crear el contenido del marcador con la miniatura - diseño flat
+        let htmlContent = '';
+        if (thumbnailUrl && thumbnailUrl.trim() !== '') {
+            htmlContent = `
+                <div style="
+                    width: ${size}px;
+                    height: ${size}px;
+                    border-radius: 50%;
+                    overflow: visible;
+                    border: 2px solid #1976d2;
+                    position: relative;
+                    background: #1976d2;
+                ">
+                    <img src="${thumbnailUrl}" 
+                         alt="Cluster ${count}" 
+                         style="
+                             width: 100%;
+                             height: 100%;
+                             object-fit: cover;
+                             border-radius: 50%;
+                         "
+                         onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'width: ${size}px; height: ${size}px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 14px; background: #1976d2; border-radius: 50%; border: 2px solid #1976d2; position: relative;\\'><div style=\\'position: absolute; top: -8px; right: -8px; background: #ff5722; color: white; font-weight: bold; font-size: 12px; padding: 3px 7px; border-radius: 12px; min-width: 22px; text-align: center; border: 2px solid white; line-height: 1.2; z-index: 1000;\\'>${count}</div></div>';"
+                    />
+                    <div style="
+                        position: absolute;
+                        top: -8px;
+                        right: -8px;
+                        background: #ff5722;
+                        color: white;
+                        font-weight: bold;
+                        font-size: 12px;
+                        padding: 3px 7px;
+                        border-radius: 12px;
+                        min-width: 22px;
+                        text-align: center;
+                        border: 2px solid white;
+                        line-height: 1.2;
+                        z-index: 1000;
+                        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+                    ">${count}</div>
+                </div>
+            `;
+        } else {
+            // Si no hay miniatura, mostrar solo el número en un círculo flat con badge
+            htmlContent = `
+                <div style="
+                    width: ${size}px;
+                    height: ${size}px;
+                    border-radius: 50%;
+                    background: #1976d2;
+                    border: 2px solid #1976d2;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                    font-weight: bold;
+                    font-size: 14px;
+                    position: relative;
+                ">
+                    <div style="
+                        position: absolute;
+                        top: -8px;
+                        right: -8px;
+                        background: #ff5722;
+                        color: white;
+                        font-weight: bold;
+                        font-size: 12px;
+                        padding: 3px 7px;
+                        border-radius: 12px;
+                        min-width: 22px;
+                        text-align: center;
+                        border: 2px solid white;
+                        line-height: 1.2;
+                        z-index: 1000;
+                        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+                    ">${count}</div>
+                </div>
+            `;
+        }
+        
+        const icon = L.divIcon({
+            className: 'map-cluster-icon',
+            html: htmlContent,
+            iconSize: [size, size],
+            iconAnchor: [size / 2, size / 2]
         });
         
-        const marker = L.marker([lat, lng], { icon: label }).addTo(map);
+        const marker = L.marker([lat, lng], { icon: icon }).addTo(map);
         
-        circle.on('click', function() {
-            if (dotNetRef) {
-                dotNetRef.invokeMethodAsync('OnClusterClick', clusterIndex).catch(err => console.error('Error calling OnClusterClick:', err));
-            }
-        });
+        console.log(`Marker added to map at [${lat}, ${lng}]`);
         
         marker.on('click', function() {
             if (dotNetRef) {
@@ -172,7 +251,7 @@ window.mapHelpers = {
             }
         });
         
-        return { circle, marker };
+        return { marker };
     },
     
     fitBounds: function (minLat, minLng, maxLat, maxLng) {
@@ -220,8 +299,8 @@ window.mapHelpers = {
     
     removeAllMarkers: function (markers) {
         markers.forEach(m => {
-            if (m.circle) m.circle.remove();
             if (m.marker) m.marker.remove();
+            if (m.circle) m.circle.remove();
         });
     }
 };

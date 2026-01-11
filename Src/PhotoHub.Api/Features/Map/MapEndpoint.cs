@@ -54,28 +54,44 @@ public class MapAssetsEndpoint : IEndpoint
                     a.Exif.Longitude <= maxLng.Value);
             }
 
-            var assets = await query
-                .Select(a => new AssetLocation
-                {
-                    Id = a.Id,
-                    CreatedDate = a.CreatedDate,
-                    Latitude = a.Exif!.Latitude!.Value,
-                    Longitude = a.Exif.Longitude!.Value
-                })
+            var assetsWithThumbnails = await query
+                .Include(a => a.Thumbnails)
                 .ToListAsync(cancellationToken);
+
+            var assets = assetsWithThumbnails.Select(a => new AssetLocation
+            {
+                Id = a.Id,
+                CreatedDate = a.CreatedDate,
+                Latitude = a.Exif!.Latitude!.Value,
+                Longitude = a.Exif.Longitude!.Value,
+                HasThumbnails = a.Thumbnails.Any()
+            }).ToList();
 
             // Agrupar assets en clusters basados en zoom level
             var clusterDistance = GetClusterDistance(zoom ?? 10);
             var clusters = CreateClusters(assets, clusterDistance);
 
-            var response = clusters.Select(c => new MapClusterResponse
+            // Obtener información de thumbnails para los primeros assets
+            var firstAssetIds = clusters.Select(c => c.AssetIds.FirstOrDefault()).Where(id => id > 0).ToList();
+            var assetsWithThumbInfo = await dbContext.Assets
+                .Where(a => firstAssetIds.Contains(a.Id))
+                .Select(a => new { a.Id, HasThumbnails = a.Thumbnails.Any() })
+                .ToDictionaryAsync(a => a.Id, a => a.HasThumbnails, cancellationToken);
+
+            var response = clusters.Select(c =>
             {
-                Latitude = c.Latitude,
-                Longitude = c.Longitude,
-                Count = c.Count,
-                AssetIds = c.AssetIds,
-                EarliestDate = c.EarliestDate,
-                LatestDate = c.LatestDate
+                var firstAssetId = c.AssetIds.FirstOrDefault();
+                return new MapClusterResponse
+                {
+                    Latitude = c.Latitude,
+                    Longitude = c.Longitude,
+                    Count = c.Count,
+                    AssetIds = c.AssetIds,
+                    EarliestDate = c.EarliestDate,
+                    LatestDate = c.LatestDate,
+                    FirstAssetId = firstAssetId,
+                    HasThumbnail = firstAssetId > 0 && assetsWithThumbInfo.ContainsKey(firstAssetId) && assetsWithThumbInfo[firstAssetId]
+                };
             }).ToList();
 
             return Results.Ok(response);
@@ -124,7 +140,8 @@ public class MapAssetsEndpoint : IEndpoint
                 Count = 1,
                 AssetIds = new List<int> { asset.Id },
                 EarliestDate = asset.CreatedDate,
-                LatestDate = asset.CreatedDate
+                LatestDate = asset.CreatedDate,
+                HasThumbnail = asset.HasThumbnails
             };
 
             // Buscar assets cercanos para agrupar
@@ -187,6 +204,7 @@ public class MapAssetsEndpoint : IEndpoint
         public DateTime CreatedDate { get; set; }
         public double Latitude { get; set; }
         public double Longitude { get; set; }
+        public bool HasThumbnails { get; set; }
     }
 
     private class MapCluster
@@ -197,5 +215,6 @@ public class MapAssetsEndpoint : IEndpoint
         public List<int> AssetIds { get; set; } = new();
         public DateTime EarliestDate { get; set; }
         public DateTime LatestDate { get; set; }
+        public bool HasThumbnail { get; set; }
     }
 }

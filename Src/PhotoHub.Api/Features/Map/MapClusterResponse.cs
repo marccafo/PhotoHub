@@ -8,4 +8,6 @@ public class MapClusterResponse
     public List<int> AssetIds { get; set; } = new();
     public DateTime EarliestDate { get; set; }
     public DateTime LatestDate { get; set; }
+    public int? FirstAssetId { get; set; }
+    public bool HasThumbnail { get; set; }
 }
