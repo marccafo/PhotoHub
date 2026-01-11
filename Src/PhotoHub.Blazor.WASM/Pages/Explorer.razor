@@ -1,4 +1,5 @@
 @page "/explorer"
+@page "/explorer/folder/{FolderId:int}"
 @using PhotoHub.Blazor.Shared.Services
 @using PhotoHub.Blazor.Shared.Models
 @using MudBlazor
@@ -84,7 +85,7 @@
     <MudItem xs="12" md="9">
         @if (_selectedFolder != null)
         {
-            <MudBreadcrumbs Items="@_breadcrumbs" />
+            <MudBreadcrumbs Items="@_breadcrumbs" MaxItems="10" />
         }
         
         @if (_loadingAssets || _loadingSubFolders)
@@ -151,7 +152,10 @@
 </MudGrid>
 
 @code {
+    [Parameter] public int? FolderId { get; set; }
+    
     private List<FolderItem> _folderTree = new();
+    private List<FolderItem> _allFolders = new(); // Todas las carpetas para búsqueda rápida
     private List<TreeItemData<FolderItem>> _treeData = new();
     private FolderItem? _selectedFolder;
     private List<TimelineItem> _assets = new();
@@ -160,6 +164,7 @@
     private bool _loadingSubFolders = false;
     private List<BreadcrumbItem> _breadcrumbs = new();
     private List<FolderWithThumbnail> _subFoldersWithThumbnails = new();
+    private List<FolderItem?> _breadcrumbFolders = new(); // Lista paralela con las carpetas del breadcrumb (null = raíz)
     
     private class FolderWithThumbnail
     {
@@ -167,14 +172,93 @@
         public TimelineItem? FirstAsset { get; set; }
     }
 
+    private bool _isNavigating = false;
+
     protected override async Task OnInitializedAsync()
     {
         await LoadFolders();
-        // Si hay carpetas raíz, cargar sus miniaturas
-        if (_folderTree.Any())
+    }
+    
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_isNavigating) return;
+        try 
         {
-            await LoadRootFoldersWithThumbnails();
+            _isNavigating = true;
+            await HandleFolderNavigation();
         }
+        finally
+        {
+            _isNavigating = false;
+        }
+    }
+    
+    private async Task HandleFolderNavigation()
+    {
+        if (FolderId.HasValue)
+        {
+            // Navegar a la carpeta especificada en la URL
+            var folder = await FolderService.GetFolderByIdAsync(FolderId.Value);
+            if (folder != null)
+            {
+                // Buscar la carpeta en el árbol para obtener las subcarpetas completas
+                var folderWithSubFolders = FindFolderInTreeById(FolderId.Value, _folderTree);
+                if (folderWithSubFolders != null)
+                {
+                    folder = folderWithSubFolders;
+                }
+                
+                _selectedFolder = folder;
+                _subFoldersWithThumbnails.Clear();
+                _assets.Clear();
+                
+                await Task.WhenAll(
+                    LoadFolderAssets(folder.Id),
+                    LoadSubFoldersWithThumbnails(folder),
+                    UpdateBreadcrumbs(folder)
+                );
+            }
+            else
+            {
+                Snackbar.Add("Carpeta no encontrada", Severity.Warning);
+                Navigation.NavigateTo("/explorer");
+            }
+        }
+        else
+        {
+            // Si no hay carpeta en la URL, mostrar carpetas raíz
+            _selectedFolder = null;
+            _assets.Clear();
+            _subFoldersWithThumbnails.Clear();
+            _breadcrumbs.Clear();
+            _breadcrumbFolders.Clear();
+            if (_folderTree.Any())
+            {
+                await LoadRootFoldersWithThumbnails();
+            }
+        }
+    }
+    
+    private FolderItem? FindFolderInTreeById(int folderId, List<FolderItem> tree)
+    {
+        foreach (var folder in tree)
+        {
+            if (folder.Id == folderId)
+            {
+                return folder;
+            }
+            
+            if (folder.SubFolders != null && folder.SubFolders.Any())
+            {
+                var found = FindFolderInTreeById(folderId, folder.SubFolders);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+        }
+        
+        return null;
     }
     
     private async Task LoadRootFoldersWithThumbnails()
@@ -182,7 +266,7 @@
         try
         {
             _loadingSubFolders = true;
-            _subFoldersWithThumbnails = new List<FolderWithThumbnail>();
+            var newList = new List<FolderWithThumbnail>();
             
             // Para cada carpeta raíz, obtener el primer asset para mostrar su miniatura
             foreach (var folder in _folderTree)
@@ -203,8 +287,9 @@
                     }
                 }
                 
-                _subFoldersWithThumbnails.Add(folderData);
+                newList.Add(folderData);
             }
+            _subFoldersWithThumbnails = newList;
         }
         catch (Exception ex)
         {
@@ -222,6 +307,7 @@
         {
             _loadingFolders = true;
             _folderTree = await FolderService.GetFolderTreeAsync();
+            _allFolders = await FolderService.GetFoldersAsync(); // Cargar todas las carpetas para búsqueda rápida
             _treeData = MapToTreeItemData(_folderTree);
         }
         catch (Exception ex)
@@ -249,13 +335,12 @@
     {
         if (folder == null) return;
         _selectedFolder = folder;
-        // Limpiar carpetas raíz cuando se selecciona una carpeta
-        _subFoldersWithThumbnails.Clear();
-        await Task.WhenAll(
-            LoadFolderAssets(folder.Id),
-            LoadSubFoldersWithThumbnails(folder)
-        );
-        UpdateBreadcrumbs(folder);
+        // Limpiar para dar feedback visual de carga
+        _subFoldersWithThumbnails = new List<FolderWithThumbnail>();
+        _assets = new List<TimelineItem>();
+        
+        // Actualizar la URL sin recargar la página
+        Navigation.NavigateTo($"/explorer/folder/{folder.Id}", replace: false);
     }
 
     private async Task OnFolderClick(FolderItem folder)
@@ -268,7 +353,8 @@
         try
         {
             _loadingAssets = true;
-            _assets = await FolderService.GetFolderAssetsAsync(folderId);
+            var assets = await FolderService.GetFolderAssetsAsync(folderId);
+            _assets = assets ?? new List<TimelineItem>();
         }
         catch (Exception ex)
         {
@@ -280,25 +366,207 @@
         }
     }
 
-    private void UpdateBreadcrumbs(FolderItem folder)
+    private async Task UpdateBreadcrumbs(FolderItem folder)
     {
-        _breadcrumbs = new List<BreadcrumbItem>
+        _breadcrumbs = new List<BreadcrumbItem>();
+        _breadcrumbFolders = new List<FolderItem?>();
+        
+        // Agregar "Inicio" que navega a la raíz - usar href especial para navegación
+        _breadcrumbs.Add(new BreadcrumbItem("Inicio", $"/explorer"));
+        _breadcrumbFolders.Add(null); // null indica que es la raíz
+        
+        // Construir la ruta completa desde la raíz hasta la carpeta actual
+        var pathFolders = await BuildPathFolders(folder);
+        
+        foreach (var pathFolder in pathFolders)
         {
-            new BreadcrumbItem("Inicio", "/explorer")
-        };
-
-        if (!string.IsNullOrEmpty(folder.Path))
+            var breadcrumbText = pathFolder.Name;
+            // Usar href con el ID de la carpeta para navegación directa
+            _breadcrumbs.Add(new BreadcrumbItem(breadcrumbText, $"/explorer/folder/{pathFolder.Id}"));
+            _breadcrumbFolders.Add(pathFolder);
+        }
+    }
+    
+    private async Task<List<FolderItem>> BuildPathFolders(FolderItem folder)
+    {
+        var pathFolders = new List<FolderItem>();
+        
+        // Primero intentar buscar la carpeta en el árbol para obtener la ruta completa
+        var folderPath = FindFolderInTree(folder.Id, _folderTree);
+        if (folderPath != null && folderPath.Any())
         {
-            var parts = folder.Path.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
-            foreach (var part in parts)
-            {
-                _breadcrumbs.Add(new BreadcrumbItem(part, null, disabled: true));
-            }
+            pathFolders = folderPath;
         }
         else
         {
-            _breadcrumbs.Add(new BreadcrumbItem(folder.Name, null, disabled: true));
+            // Si no se encuentra en el árbol, construir la ruta usando el path
+            if (!string.IsNullOrEmpty(folder.Path))
+            {
+                var pathParts = folder.Path.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+                var currentPath = "";
+                
+                foreach (var part in pathParts)
+                {
+                    currentPath = string.IsNullOrEmpty(currentPath) ? part : $"{currentPath}/{part}";
+                    var normalizedCurrentPath = currentPath.Replace('\\', '/').TrimEnd('/');
+                    
+                    // Buscar la carpeta por su path completo en el árbol
+                    var foundFolder = FindFolderByPathInTree(normalizedCurrentPath, _folderTree);
+                    if (foundFolder != null)
+                    {
+                        pathFolders.Add(foundFolder);
+                    }
+                    else
+                    {
+                        // Si no se encuentra en el árbol, buscar en todas las carpetas cargadas
+                        var folderByPath = _allFolders.FirstOrDefault(f => 
+                        {
+                            var folderNormalizedPath = f.Path.Replace('\\', '/').TrimEnd('/');
+                            return folderNormalizedPath.Equals(normalizedCurrentPath, StringComparison.OrdinalIgnoreCase);
+                        });
+                        
+                        if (folderByPath != null)
+                        {
+                            pathFolders.Add(folderByPath);
+                        }
+                    }
+                }
+            }
+            
+            // Si aún no tenemos la ruta completa, construir usando ParentFolderId
+            if (!pathFolders.Any() || pathFolders.LastOrDefault()?.Id != folder.Id)
+            {
+                // Construir la ruta desde la carpeta actual hacia arriba usando ParentFolderId
+                var pathFromParent = await BuildPathFromParent(folder);
+                if (pathFromParent.Any())
+                {
+                    pathFolders = pathFromParent;
+                }
+                else
+                {
+                    // Si todo falla, agregar solo la carpeta actual
+                    pathFolders.Add(folder);
+                }
+            }
         }
+        
+        return pathFolders;
+    }
+    
+    private async Task<List<FolderItem>> BuildPathFromParent(FolderItem folder)
+    {
+        var path = new List<FolderItem>();
+        var currentFolder = folder;
+        var visited = new HashSet<int>(); // Para evitar ciclos
+        
+        // Construir la ruta desde la carpeta actual hacia arriba
+        while (currentFolder != null && !visited.Contains(currentFolder.Id))
+        {
+            visited.Add(currentFolder.Id);
+            path.Insert(0, currentFolder); // Insertar al inicio para mantener el orden
+            
+            if (currentFolder.ParentFolderId.HasValue)
+            {
+                var parentId = currentFolder.ParentFolderId.Value;
+                // Buscar la carpeta padre en las carpetas cargadas
+                var parentFolder = _allFolders.FirstOrDefault(f => f.Id == parentId);
+                if (parentFolder == null)
+                {
+                    // Si no está en las carpetas cargadas, intentar obtenerla del API
+                    try
+                    {
+                        parentFolder = await FolderService.GetFolderByIdAsync(parentId);
+                    }
+                    catch
+                    {
+                        break;
+                    }
+                }
+                currentFolder = parentFolder;
+            }
+            else
+            {
+                break;
+            }
+        }
+        
+        return path;
+    }
+    
+    private FolderItem? FindFolderByPathInTree(string path, List<FolderItem> tree)
+    {
+        var normalizedPath = path.Replace('\\', '/').TrimEnd('/');
+        
+        foreach (var folder in tree)
+        {
+            var folderPath = folder.Path.Replace('\\', '/').TrimEnd('/');
+            if (folderPath.Equals(normalizedPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return folder;
+            }
+            
+            if (folder.SubFolders != null && folder.SubFolders.Any())
+            {
+                var found = FindFolderByPathInTree(path, folder.SubFolders);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    private List<FolderItem>? FindFolderInTree(int folderId, List<FolderItem> tree, List<FolderItem>? currentPath = null)
+    {
+        if (currentPath == null)
+        {
+            currentPath = new List<FolderItem>();
+        }
+        
+        foreach (var folder in tree)
+        {
+            var newPath = new List<FolderItem>(currentPath) { folder };
+            
+            if (folder.Id == folderId)
+            {
+                return newPath;
+            }
+            
+            if (folder.SubFolders != null && folder.SubFolders.Any())
+            {
+                var found = FindFolderInTree(folderId, folder.SubFolders, newPath);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    private FolderItem? FindFolderByNameInTree(string name, List<FolderItem> tree)
+    {
+        foreach (var folder in tree)
+        {
+            if (folder.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return folder;
+            }
+            
+            if (folder.SubFolders != null && folder.SubFolders.Any())
+            {
+                var found = FindFolderByNameInTree(name, folder.SubFolders);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+        }
+        
+        return null;
     }
 
     private async Task LoadSubFoldersWithThumbnails(FolderItem folder)
@@ -306,11 +574,23 @@
         try
         {
             _loadingSubFolders = true;
-            _subFoldersWithThumbnails = new List<FolderWithThumbnail>();
+            var newList = new List<FolderWithThumbnail>();
             
+            // Si la carpeta no tiene subcarpetas en el objeto, intentar obtenerlas del árbol
             if (folder.SubFolders == null || !folder.SubFolders.Any())
             {
-                return;
+                // Buscar la carpeta en el árbol para obtener las subcarpetas
+                var folderInTree = FindFolderInTreeById(folder.Id, _folderTree);
+                if (folderInTree != null && folderInTree.SubFolders != null && folderInTree.SubFolders.Any())
+                {
+                    folder.SubFolders = folderInTree.SubFolders;
+                }
+                else
+                {
+                    // Si no hay subcarpetas, limpiar y retornar
+                    _subFoldersWithThumbnails = newList;
+                    return;
+                }
             }
             
             // Para cada subcarpeta, obtener el primer asset para mostrar su miniatura
@@ -332,8 +612,12 @@
                     }
                 }
                 
-                _subFoldersWithThumbnails.Add(folderData);
+                newList.Add(folderData);
             }
+            
+            _subFoldersWithThumbnails = newList;
+            // Forzar actualización de la UI
+            StateHasChanged();
         }
         catch (Exception ex)
         {
