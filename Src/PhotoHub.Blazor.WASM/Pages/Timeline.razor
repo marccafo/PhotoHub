@@ -239,6 +239,27 @@
     {
         await LoadTimeline();
     }
+    
+    private string? GetDateFromQuery()
+    {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        if (string.IsNullOrEmpty(uri.Query))
+            return null;
+            
+        var query = uri.Query.TrimStart('?');
+        var pairs = query.Split('&');
+        
+        foreach (var pair in pairs)
+        {
+            var parts = pair.Split('=', 2);
+            if (parts.Length == 2 && parts[0] == "date")
+            {
+                return Uri.UnescapeDataString(parts[1]);
+            }
+        }
+        
+        return null;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -250,6 +271,32 @@
             if (_groupedAssets.Any())
             {
                 await SetupScrollListener();
+                
+                // Si hay un parámetro de fecha en la query string, hacer scroll a esa fecha
+                var dateParam = GetDateFromQuery();
+                if (!string.IsNullOrEmpty(dateParam))
+                {
+                    await ScrollToDate(dateParam);
+                }
+            }
+        }
+    }
+    
+    private async Task ScrollToDate(string dateString)
+    {
+        if (DateTime.TryParse(dateString, out var targetDate))
+        {
+            // Buscar el grupo que contiene esta fecha
+            var targetGroup = _groupedAssets.Keys.FirstOrDefault(g => 
+            {
+                var groupDate = DateTime.ParseExact(g, "MMMM yyyy", new System.Globalization.CultureInfo("es-ES"));
+                return groupDate.Year == targetDate.Year && groupDate.Month == targetDate.Month;
+            });
+            
+            if (!string.IsNullOrEmpty(targetGroup))
+            {
+                await Task.Delay(500); // Esperar a que el DOM esté completamente renderizado
+                await ScrollToGroup(targetGroup);
             }
         }
     }

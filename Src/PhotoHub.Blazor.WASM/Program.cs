@@ -24,5 +24,6 @@ builder.Services.AddScoped<LayoutService>();
 builder.Services.AddScoped<IAssetService, AssetService>();
 builder.Services.AddScoped<IScanService, ScanService>();
 builder.Services.AddScoped<IFolderService, FolderService>();
+builder.Services.AddScoped<IMapService, MapService>();
 
 await builder.Build().RunAsync();

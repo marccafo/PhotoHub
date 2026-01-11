@@ -1,0 +1,380 @@
+@page "/map"
+@using PhotoHub.Blazor.Shared.Services
+@using PhotoHub.Blazor.Shared.Models
+@using MudBlazor
+@inject IMapService MapService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>Mapa - PhotoHub</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-0" Style="height: calc(100vh - 64px);">
+    @if (_loading)
+    {
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000;">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+        </div>
+    }
+    
+    <div id="map-container" style="width: 100%; height: 100%; position: relative;">
+        <div id="map" style="width: 100%; height: 100%;"></div>
+    </div>
+</MudContainer>
+
+<style>
+    #map {
+        z-index: 0;
+    }
+    
+    .map-cluster-label {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+    
+    /* Estilos simplificados para los controles de Leaflet */
+    .leaflet-control {
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 4px;
+        box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+    }
+    
+    .leaflet-control-zoom a {
+        background-color: #fff;
+        color: #333;
+        border-bottom: 1px solid #ccc;
+        width: 30px;
+        height: 30px;
+        line-height: 30px;
+        text-align: center;
+        text-decoration: none;
+        display: block;
+        font-size: 18px;
+        font-weight: bold;
+    }
+    
+    .leaflet-control-zoom a:hover {
+        background-color: #f4f4f4;
+    }
+    
+    .leaflet-control-zoom-in {
+        border-top-left-radius: 4px;
+        border-top-right-radius: 4px;
+    }
+    
+    .leaflet-control-zoom-out {
+        border-bottom-left-radius: 4px;
+        border-bottom-right-radius: 4px;
+        border-bottom: none;
+    }
+    
+    .leaflet-control-scale {
+        background: rgba(255, 255, 255, 0.95);
+        border: 2px solid rgba(0,0,0,0.2);
+        border-top: none;
+        line-height: 1.1;
+        padding: 2px 5px 1px;
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        box-sizing: border-box;
+    }
+    
+    .leaflet-control-locate a {
+        background-color: #fff;
+        color: #333;
+        width: 30px;
+        height: 30px;
+        line-height: 30px;
+        text-align: center;
+        text-decoration: none;
+        display: block;
+        font-size: 16px;
+    }
+    
+    .leaflet-control-locate a:hover {
+        background-color: #f4f4f4;
+    }
+    
+    .leaflet-control-fullscreen {
+        background-color: #fff;
+        color: #333;
+        width: 30px;
+        height: 30px;
+        line-height: 30px;
+        text-align: center;
+        text-decoration: none;
+        display: block;
+        font-size: 18px;
+    }
+    
+    .leaflet-control-fullscreen:hover {
+        background-color: #f4f4f4;
+    }
+    
+    /* Simplificar el diseño del mapa */
+    .leaflet-container {
+        font-family: inherit;
+        background: #f5f5f5;
+    }
+    
+    .leaflet-popup-content-wrapper {
+        border-radius: 4px;
+    }
+    
+    /* Estilo más simple y limpio */
+    .leaflet-bar {
+        box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+        border-radius: 4px;
+    }
+    
+    .leaflet-bar a {
+        background-color: #fff;
+        border-bottom: 1px solid #ccc;
+    }
+    
+    .leaflet-bar a:first-child {
+        border-top-left-radius: 4px;
+        border-top-right-radius: 4px;
+    }
+    
+    .leaflet-bar a:last-child {
+        border-bottom-left-radius: 4px;
+        border-bottom-right-radius: 4px;
+        border-bottom: none;
+    }
+    
+    .leaflet-bar a:hover {
+        background-color: #f4f4f4;
+    }
+    
+    /* Estilo para el control de ubicación */
+    .leaflet-control-locate {
+        border-radius: 4px;
+    }
+</style>
+
+@code {
+    private List<MapCluster> _clusters = new();
+    private bool _loading = true;
+    private DotNetObjectReference<Map>? _objRef;
+    private List<object> _markers = new();
+    private double _currentMinLat = -90;
+    private double _currentMinLng = -180;
+    private double _currentMaxLat = 90;
+    private double _currentMaxLng = 180;
+    private int _currentZoom = 2;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _objRef = DotNetObjectReference.Create(this);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                // Esperar un poco para asegurar que el DOM esté completamente renderizado
+                await Task.Delay(100);
+                
+                // Inicializar el mapa (centro en España por defecto, pero se ajustará automáticamente)
+                await JS.InvokeVoidAsync("mapHelpers.initMap", "map", 40.4168, -3.7038, 6);
+
+                // Esperar a que el mapa se inicialice completamente
+                await Task.Delay(200);
+
+                // Configurar listener para cambios en el mapa
+                await JS.InvokeVoidAsync("mapHelpers.onMapMoveEnd", _objRef);
+
+                // Obtener bounds iniciales
+                var bounds = await JS.InvokeAsync<MapBounds>("mapHelpers.getMapBounds");
+                if (bounds != null)
+                {
+                    _currentMinLat = bounds.MinLat;
+                    _currentMinLng = bounds.MinLng;
+                    _currentMaxLat = bounds.MaxLat;
+                    _currentMaxLng = bounds.MaxLng;
+                }
+                _currentZoom = await JS.InvokeAsync<int>("mapHelpers.getZoom");
+
+                // Cargar clusters iniciales - sin filtrar por bounds inicialmente para ver todos los assets
+                await LoadClusters(true);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error al inicializar el mapa: {ex.Message}", Severity.Error);
+                _loading = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task LoadClusters(bool loadAll = false)
+    {
+        try
+        {
+            _loading = true;
+            StateHasChanged();
+
+            if (loadAll)
+            {
+                // Cargar todos los clusters sin filtrar por bounds
+                _clusters = await MapService.GetMapClustersAsync(_currentZoom);
+            }
+            else
+            {
+                _clusters = await MapService.GetMapClustersAsync(
+                    _currentZoom,
+                    _currentMinLat,
+                    _currentMinLng,
+                    _currentMaxLat,
+                    _currentMaxLng
+                );
+            }
+
+            if (_clusters.Any())
+            {
+                await UpdateMapMarkers();
+                Snackbar.Add($"Se encontraron {_clusters.Count} ubicaciones con {_clusters.Sum(c => c.Count)} fotografías", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("No se encontraron fotografías con coordenadas GPS en esta área", Severity.Info);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar clusters: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task UpdateMapMarkers()
+    {
+        try
+        {
+            // Eliminar marcadores anteriores
+            if (_markers.Any())
+            {
+                await JS.InvokeVoidAsync("mapHelpers.removeAllMarkers", _markers);
+                _markers.Clear();
+            }
+
+            if (!_clusters.Any())
+                return;
+
+            // Agregar nuevos marcadores
+            for (int i = 0; i < _clusters.Count; i++)
+            {
+                var cluster = _clusters[i];
+                try
+                {
+                    var marker = await JS.InvokeAsync<object>("mapHelpers.addClusterMarker",
+                        cluster.Latitude,
+                        cluster.Longitude,
+                        cluster.Count,
+                        _objRef,
+                        i
+                    );
+                    if (marker != null)
+                    {
+                        _markers.Add(marker);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Continuar con los siguientes marcadores si uno falla
+                    Console.WriteLine($"Error al agregar marcador {i}: {ex.Message}");
+                }
+            }
+
+            // Si hay clusters, ajustar el mapa para mostrarlos todos
+            if (_clusters.Any())
+            {
+                var minLat = _clusters.Min(c => c.Latitude);
+                var minLng = _clusters.Min(c => c.Longitude);
+                var maxLat = _clusters.Max(c => c.Latitude);
+                var maxLng = _clusters.Max(c => c.Longitude);
+                
+                // Agregar un poco de padding
+                var latPadding = (maxLat - minLat) * 0.1;
+                var lngPadding = (maxLng - minLng) * 0.1;
+                
+                await JS.InvokeVoidAsync("mapHelpers.fitBounds", 
+                    minLat - latPadding, 
+                    minLng - lngPadding, 
+                    maxLat + latPadding, 
+                    maxLng + lngPadding);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al actualizar marcadores: {ex.Message}", Severity.Error);
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnMapMoveEnd(double minLat, double minLng, double maxLat, double maxLng, int zoom)
+    {
+        // Actualizar bounds y zoom solo si han cambiado significativamente
+        var boundsChanged = Math.Abs(_currentMinLat - minLat) > 0.1 ||
+                           Math.Abs(_currentMinLng - minLng) > 0.1 ||
+                           Math.Abs(_currentMaxLat - maxLat) > 0.1 ||
+                           Math.Abs(_currentMaxLng - maxLng) > 0.1;
+
+        var zoomChanged = _currentZoom != zoom;
+
+        if (boundsChanged || zoomChanged)
+        {
+            _currentMinLat = minLat;
+            _currentMinLng = minLng;
+            _currentMaxLat = maxLat;
+            _currentMaxLng = maxLng;
+            _currentZoom = zoom;
+
+            await LoadClusters();
+        }
+    }
+
+    [JSInvokable]
+    public void OnClusterClick(int clusterIndex)
+    {
+        if (clusterIndex < 0 || clusterIndex >= _clusters.Count)
+            return;
+
+        var cluster = _clusters[clusterIndex];
+        
+        // Navegar al timeline con la fecha del cluster
+        // Usamos la fecha más temprana para ir al inicio del grupo
+        var date = cluster.EarliestDate;
+        var dateString = date.ToString("yyyy-MM-dd");
+        
+        // Navegar al timeline - la página Timeline manejará el parámetro date
+        Navigation.NavigateTo($"/?date={dateString}");
+    }
+
+    public void Dispose()
+    {
+        _objRef?.Dispose();
+        if (_markers.Any())
+        {
+            JS.InvokeVoidAsync("mapHelpers.removeAllMarkers", _markers);
+        }
+    }
+
+    private class MapBounds
+    {
+        public double MinLat { get; set; }
+        public double MinLng { get; set; }
+        public double MaxLat { get; set; }
+        public double MaxLng { get; set; }
+    }
+}
