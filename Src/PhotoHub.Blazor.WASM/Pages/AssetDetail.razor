@@ -150,7 +150,7 @@ else if (_asset != null)
                 @if (_asset.Exif != null)
                 {
                     <MudDivider Class="my-4" Style="background-color: #333;" />
-                    <MudText Typo="Typo.subtitle1" Class="font-weight-bold mb-1">EXIF</MudText>
+                    <MudText Typo="Typo.subtitle1" Class="font-weight-bold mb-1">Información técnica</MudText>
                     <MudList T="string" Dense="true" ReadOnly="true">
                         @if (_asset.Exif.CameraMake != null)
                         {
@@ -164,7 +164,51 @@ else if (_asset != null)
                                 <MudText Typo="Typo.body2">@_asset.Exif.Width x @_asset.Exif.Height</MudText>
                             </MudListItem>
                         }
+                        @if (_asset.Exif.Iso.HasValue || _asset.Exif.Aperture.HasValue || _asset.Exif.ShutterSpeed.HasValue)
+                        {
+                            <MudListItem Icon="@Icons.Material.Filled.Settings" IconColor="Color.Info">
+                                <MudText Typo="Typo.body2">
+                                    @( _asset.Exif.Iso.HasValue ? $"ISO {_asset.Exif.Iso} " : "" )
+                                    @( _asset.Exif.Aperture.HasValue ? $"f/{_asset.Exif.Aperture:0.#} " : "" )
+                                    @if (_asset.Exif.ShutterSpeed.HasValue)
+                                    {
+                                        var ss = _asset.Exif.ShutterSpeed.Value;
+                                        var ssText = ss < 1 ? $"1/{(int)Math.Round(1 / ss)}s" : $"{ss:0.#}s";
+                                        <span>@ssText </span>
+                                    }
+                                    @( _asset.Exif.FocalLength.HasValue ? $"{_asset.Exif.FocalLength:0.#}mm" : "" )
+                                </MudText>
+                            </MudListItem>
+                        }
                     </MudList>
+
+                    @if (_asset.Exif.Latitude.HasValue && _asset.Exif.Longitude.HasValue)
+                    {
+                        <MudDivider Class="my-4" Style="background-color: #333;" />
+                        <MudText Typo="Typo.subtitle1" Class="font-weight-bold mb-1">Ubicación</MudText>
+                        <MudList T="string" Dense="true" ReadOnly="true">
+                            <MudListItem Icon="@Icons.Material.Filled.LocationOn" IconColor="Color.Info">
+                                <div class="d-flex flex-column">
+                                    <MudText Typo="Typo.body2">@_asset.Exif.Latitude.Value.ToString("F6"), @_asset.Exif.Longitude.Value.ToString("F6")</MudText>
+                                    @if (_asset.Exif.Altitude.HasValue)
+                                    {
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Altitud: @_asset.Exif.Altitude.Value.ToString("F0") m</MudText>
+                                    }
+                                    <MudLink Href="@($"https://www.google.com/maps/search/?api=1&query={_asset.Exif.Latitude},{_asset.Exif.Longitude}")" 
+                                             Target="_blank" Underline="Underline.Hover" Color="Color.Primary" Class="mt-1">
+                                        Ver en Google Maps
+                                    </MudLink>
+                                </div>
+                            </MudListItem>
+                        </MudList>
+                    }
+
+                    @if (!string.IsNullOrEmpty(_asset.Exif.Description))
+                    {
+                        <MudDivider Class="my-4" Style="background-color: #333;" />
+                        <MudText Typo="Typo.subtitle1" Class="font-weight-bold mb-1">Descripción</MudText>
+                        <MudText Typo="Typo.body2" Class="px-4 py-2" Style="font-style: italic;">@_asset.Exif.Description</MudText>
+                    }
                 }
 
                 @if (_asset.Tags.Any())

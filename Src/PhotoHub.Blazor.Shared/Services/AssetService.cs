@@ -59,6 +59,13 @@ public class AssetService : IAssetService
                     Orientation = response.Exif.Orientation,
                     Latitude = response.Exif.Latitude,
                     Longitude = response.Exif.Longitude,
+                    Altitude = response.Exif.Altitude,
+                    Iso = response.Exif.Iso,
+                    Aperture = response.Exif.Aperture,
+                    ShutterSpeed = response.Exif.ShutterSpeed,
+                    FocalLength = response.Exif.FocalLength,
+                    Description = response.Exif.Description,
+                    Keywords = response.Exif.Keywords,
                     Software = response.Exif.Software
                 } : null,
                 Thumbnails = response.Thumbnails.Select(t => new ThumbnailInfo

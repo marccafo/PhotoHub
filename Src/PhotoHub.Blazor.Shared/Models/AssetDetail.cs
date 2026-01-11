@@ -49,6 +49,13 @@ public class ExifData
     public int? Orientation { get; set; }
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
+    public double? Altitude { get; set; }
+    public int? Iso { get; set; }
+    public double? Aperture { get; set; }
+    public double? ShutterSpeed { get; set; }
+    public double? FocalLength { get; set; }
+    public string? Description { get; set; }
+    public string? Keywords { get; set; }
     public string? Software { get; set; }
 }
 

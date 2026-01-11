@@ -71,6 +71,13 @@ public class AssetDetailEndpoint : IEndpoint
                     Orientation = asset.Exif.Orientation,
                     Latitude = asset.Exif.Latitude,
                     Longitude = asset.Exif.Longitude,
+                    Altitude = asset.Exif.Altitude,
+                    Iso = asset.Exif.Iso,
+                    Aperture = asset.Exif.Aperture,
+                    ShutterSpeed = asset.Exif.ShutterSpeed,
+                    FocalLength = asset.Exif.FocalLength,
+                    Description = asset.Exif.Description,
+                    Keywords = asset.Exif.Keywords,
                     Software = null // Not available in AssetExif model
                 } : null,
                 Thumbnails = asset.Thumbnails.Select(t => new ThumbnailInfoResponse
