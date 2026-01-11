@@ -10,13 +10,33 @@
 
 <PageTitle>Mapa - PhotoHub</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.False" Class="pa-0" Style="height: calc(100vh - 64px);">
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-0" Style="height: calc(100vh - 64px); position: relative;">
     @if (_loading)
     {
         <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000;">
             <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
         </div>
     }
+    
+    <!-- Selector de estilo del mapa -->
+    <div class="map-style-selector">
+        <MudButtonGroup Variant="Variant.Filled" Size="Size.Small" Class="map-style-buttons">
+            <MudButton Color="@(_mapStyle == "dark" ? Color.Primary : Color.Default)" 
+                       Variant="Variant.Filled"
+                       OnClick="@(() => ChangeMapStyle("dark"))"
+                       StartIcon="@Icons.Material.Filled.DarkMode"
+                       Class="map-style-button">
+                Oscuro
+            </MudButton>
+            <MudButton Color="@(_mapStyle == "light" ? Color.Primary : Color.Default)" 
+                       Variant="Variant.Filled"
+                       OnClick="@(() => ChangeMapStyle("light"))"
+                       StartIcon="@Icons.Material.Filled.LightMode"
+                       Class="map-style-button">
+                Claro
+            </MudButton>
+        </MudButtonGroup>
+    </div>
     
     <div id="map-container" style="width: 100%; height: 100%; position: relative;">
         <div id="map" style="width: 100%; height: 100%;"></div>
@@ -38,10 +58,26 @@
         border-radius: 50%;
     }
     
-    /* Diseño flat para los marcadores del mapa */
-    .map-cluster-icon > div {
-        box-shadow: none !important;
-        filter: none !important;
+    /* Estilos para el selector de estilo del mapa */
+    .map-style-selector {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 1000;
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 8px;
+        padding: 4px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(10px);
+    }
+    
+    .map-style-buttons {
+        margin: 0;
+    }
+    
+    .map-style-button {
+        min-width: 90px;
+        font-weight: 500;
     }
     
     /* Estilos simplificados para los controles de Leaflet */
@@ -123,47 +159,6 @@
     .leaflet-control-fullscreen:hover {
         background-color: #f4f4f4;
     }
-    
-    /* Simplificar el diseño del mapa */
-    .leaflet-container {
-        font-family: inherit;
-        background: #f5f5f5;
-    }
-    
-    .leaflet-popup-content-wrapper {
-        border-radius: 4px;
-    }
-    
-    /* Estilo más simple y limpio */
-    .leaflet-bar {
-        box-shadow: 0 1px 5px rgba(0,0,0,0.4);
-        border-radius: 4px;
-    }
-    
-    .leaflet-bar a {
-        background-color: #fff;
-        border-bottom: 1px solid #ccc;
-    }
-    
-    .leaflet-bar a:first-child {
-        border-top-left-radius: 4px;
-        border-top-right-radius: 4px;
-    }
-    
-    .leaflet-bar a:last-child {
-        border-bottom-left-radius: 4px;
-        border-bottom-right-radius: 4px;
-        border-bottom: none;
-    }
-    
-    .leaflet-bar a:hover {
-        background-color: #f4f4f4;
-    }
-    
-    /* Estilo para el control de ubicación */
-    .leaflet-control-locate {
-        border-radius: 4px;
-    }
 </style>
 
 @code {
@@ -176,6 +171,7 @@
     private double _currentMaxLat = 90;
     private double _currentMaxLng = 180;
     private int _currentZoom = 2;
+    private string _mapStyle = "dark";
 
     protected override async Task OnInitializedAsync()
     {
@@ -192,10 +188,10 @@
                 await Task.Delay(100);
                 
                 // Inicializar el mapa (centro en España por defecto, pero se ajustará automáticamente)
-                await JS.InvokeVoidAsync("mapHelpers.initMap", "map", 40.4168, -3.7038, 6);
+                await JS.InvokeVoidAsync("mapHelpers.initMap", "map", 40.4168, -3.7038, 6, _mapStyle);
 
                 // Esperar a que el mapa se inicialice completamente
-                await Task.Delay(200);
+                await Task.Delay(500);
 
                 // Configurar listener para cambios en el mapa
                 await JS.InvokeVoidAsync("mapHelpers.onMapMoveEnd", _objRef);
@@ -399,6 +395,12 @@
         
         // Navegar al timeline - la página Timeline manejará el parámetro date
         Navigation.NavigateTo($"/?date={dateString}");
+    }
+
+    private async Task ChangeMapStyle(string style)
+    {
+        _mapStyle = style;
+        await JS.InvokeVoidAsync("mapHelpers.setStyle", style);
     }
 
     public void Dispose()

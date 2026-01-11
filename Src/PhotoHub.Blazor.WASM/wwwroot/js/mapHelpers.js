@@ -1,7 +1,8 @@
 window.mapHelpers = {
     _mapInstance: null,
+    _currentStyle: 'dark',
     
-    initMap: function (elementId, centerLat, centerLng, zoom) {
+    initMap: function (elementId, centerLat, centerLng, zoom, style) {
         if (typeof L === 'undefined') {
             console.error('Leaflet library not loaded');
             return null;
@@ -17,26 +18,39 @@ window.mapHelpers = {
             const map = L.map(elementId, {
                 center: [centerLat, centerLng],
                 zoom: zoom,
-                zoomControl: true, // Controles de zoom por defecto
-                attributionControl: true // Control de atribución
+                zoomControl: true,
+                attributionControl: true
             });
             
-            // Capa de OpenStreetMap
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            // Usar tiles con estilo similar a Immich
+            // Para dark: usar CartoDB Dark Matter
+            // Para light: usar CartoDB Positron
+            let tileUrl, attribution;
+            
+            if (style === 'light') {
+                // Estilo claro y simple
+                tileUrl = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+                attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+            } else {
+                // Estilo oscuro y simple
+                tileUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+                attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+            }
+            
+            L.tileLayer(tileUrl, {
+                attribution: attribution,
+                subdomains: 'abcd',
                 maxZoom: 19
             }).addTo(map);
             
-            // Agregar control de escala (abajo a la izquierda)
+            // Agregar control de escala
             L.control.scale({
                 position: 'bottomleft',
                 metric: true,
                 imperial: false
             }).addTo(map);
             
-            // Agregar control de ubicación actual (si está disponible)
-            // Nota: L.control.locate requiere el plugin leaflet-locatecontrol
-            // Por ahora, creamos un control simple manualmente
+            // Agregar control de ubicación
             if (navigator.geolocation) {
                 const locateControl = L.control({
                     position: 'topleft'
@@ -122,7 +136,8 @@ window.mapHelpers = {
             fullscreenControl.addTo(map);
             
             window.mapHelpers._mapInstance = map;
-            console.log('Map initialized successfully');
+            window.mapHelpers._currentStyle = style || 'dark';
+            console.log('Map initialized successfully with style:', style);
             return map;
         } catch (error) {
             console.error('Error initializing map:', error);
@@ -132,6 +147,37 @@ window.mapHelpers = {
     
     getMap: function () {
         return window.mapHelpers._mapInstance;
+    },
+    
+    setStyle: function (style) {
+        const map = window.mapHelpers._mapInstance;
+        if (!map) return;
+        
+        // Remover todas las capas de tiles existentes
+        map.eachLayer(function(layer) {
+            if (layer instanceof L.TileLayer) {
+                map.removeLayer(layer);
+            }
+        });
+        
+        // Agregar nueva capa con el estilo seleccionado
+        let tileUrl, attribution;
+        
+        if (style === 'light') {
+            tileUrl = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+            attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+        } else {
+            tileUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+            attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+        }
+        
+        L.tileLayer(tileUrl, {
+            attribution: attribution,
+            subdomains: 'abcd',
+            maxZoom: 19
+        }).addTo(map);
+        
+        window.mapHelpers._currentStyle = style;
     },
     
     addClusterMarker: function (lat, lng, count, thumbnailUrl, dotNetRef, clusterIndex) {
@@ -175,7 +221,7 @@ window.mapHelpers = {
                              object-fit: cover;
                              border-radius: 50%;
                          "
-                         onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'width: ${size}px; height: ${size}px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 14px; background: #1976d2; border-radius: 50%; border: 2px solid #1976d2; position: relative;\\'><div style=\\'position: absolute; top: -8px; right: -8px; background: #ff5722; color: white; font-weight: bold; font-size: 12px; padding: 3px 7px; border-radius: 12px; min-width: 22px; text-align: center; border: 2px solid white; line-height: 1.2; z-index: 1000;\\'>${count}</div></div>';"
+                         onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'width: ${size}px; height: ${size}px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 14px; background: #1976d2; border-radius: 50%; border: 2px solid #1976d2; position: relative;\\'><div style=\\'position: absolute; top: -8px; right: -8px; background: #ff5722; color: white; font-weight: bold; font-size: 12px; padding: 3px 7px; border-radius: 12px; min-width: 22px; text-align: center; border: 2px solid white; line-height: 1.2; z-index: 1000; box-shadow: 0 1px 3px rgba(0,0,0,0.2);\\'>${count}</div></div>';"
                     />
                     <div style="
                         position: absolute;
@@ -243,13 +289,13 @@ window.mapHelpers = {
         
         const marker = L.marker([lat, lng], { icon: icon }).addTo(map);
         
-        console.log(`Marker added to map at [${lat}, ${lng}]`);
-        
         marker.on('click', function() {
             if (dotNetRef) {
                 dotNetRef.invokeMethodAsync('OnClusterClick', clusterIndex).catch(err => console.error('Error calling OnClusterClick:', err));
             }
         });
+        
+        console.log(`Marker added to map at [${lat}, ${lng}]`);
         
         return { marker };
     },
