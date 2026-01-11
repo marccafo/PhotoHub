@@ -9,6 +9,56 @@
 
 <PageTitle>Explorador - PhotoHub</PageTitle>
 
+<style>
+    .folder-card-container {
+        position: relative;
+        cursor: pointer;
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        overflow: hidden;
+        transition: transform 0.2s, box-shadow 0.2s;
+        background-color: var(--mud-palette-surface);
+        border-radius: 4px;
+        border: 1px solid var(--mud-palette-divider);
+    }
+    .folder-card-container:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+    }
+    .folder-card-thumbnail {
+        width: 100%;
+        height: 70%;
+        object-fit: cover;
+    }
+    .folder-card-icon {
+        width: 100%;
+        height: 70%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, var(--mud-palette-primary-lighten) 0%, var(--mud-palette-primary-darken) 100%);
+    }
+    .folder-card-info {
+        height: 30%;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        background-color: var(--mud-palette-surface);
+    }
+    .folder-card-name {
+        font-weight: 600;
+        font-size: 0.875rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .folder-card-count {
+        font-size: 0.75rem;
+        color: var(--mud-palette-text-secondary);
+    }
+</style>
+
 <MudText Typo="Typo.h4" Class="mb-4">Explorador</MudText>
 
 <MudGrid>
@@ -37,29 +87,65 @@
             <MudBreadcrumbs Items="@_breadcrumbs" />
         }
         
-        @if (_loadingAssets)
+        @if (_loadingAssets || _loadingSubFolders)
         {
             <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
         }
         
-        @if (_assets.Any())
+        @* Mostrar subcarpetas con miniaturas *@
+        @if (_subFoldersWithThumbnails.Any())
         {
-            <MudGrid Class="mt-4">
-                @foreach (var asset in _assets)
+            <MudText Typo="Typo.h6" Class="mt-4 mb-3">@(_selectedFolder != null ? "Carpetas" : "Carpetas raíz")</MudText>
+            <MudGrid Class="mb-4">
+                @foreach (var folderData in _subFoldersWithThumbnails)
                 {
                     <MudItem xs="12" sm="6" md="4" lg="3" xl="2">
-                        <AssetCard Asset="@asset" OnAssetClick="OpenAsset" />
+                        <div class="folder-card-container" @onclick="@(() => OnFolderSelected(folderData.Folder))">
+                            @if (folderData.FirstAsset != null && folderData.FirstAsset.HasThumbnails)
+                            {
+                                <img src="@folderData.FirstAsset.ThumbnailUrl" alt="@folderData.Folder.Name" class="folder-card-thumbnail" loading="lazy" />
+                            }
+                            else
+                            {
+                                <div class="folder-card-icon">
+                                    <MudIcon Icon="@Icons.Material.Filled.Folder" Size="Size.Large" Color="Color.Primary" />
+                                </div>
+                            }
+                            
+                            <div class="folder-card-info">
+                                <MudText Typo="Typo.body2" Class="folder-card-name">@folderData.Folder.Name</MudText>
+                                <MudText Typo="Typo.caption" Class="folder-card-count">@folderData.Folder.AssetCount archivos</MudText>
+                            </div>
+                        </div>
                     </MudItem>
                 }
             </MudGrid>
         }
-        else if (!_loadingAssets && _selectedFolder != null)
+        
+        @if (_selectedFolder != null)
         {
-            <MudAlert Severity="Severity.Info" Class="mt-4">Esta carpeta no contiene archivos.</MudAlert>
+            
+            @* Mostrar assets de la carpeta actual *@
+            @if (_assets.Any())
+            {
+                <MudText Typo="Typo.h6" Class="mt-4 mb-3">Archivos</MudText>
+                <MudGrid Class="mt-4">
+                    @foreach (var asset in _assets)
+                    {
+                        <MudItem xs="12" sm="6" md="4" lg="3" xl="2">
+                            <AssetCard Asset="@asset" OnAssetClick="OpenAsset" />
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
+            else if (!_loadingAssets && !_subFoldersWithThumbnails.Any())
+            {
+                <MudAlert Severity="Severity.Info" Class="mt-4">Esta carpeta no contiene archivos ni subcarpetas.</MudAlert>
+            }
         }
-        else if (!_loadingAssets)
+        else if (!_loadingAssets && !_loadingSubFolders && !_subFoldersWithThumbnails.Any())
         {
-            <MudAlert Severity="Severity.Info" Class="mt-4">Selecciona una carpeta para ver sus archivos.</MudAlert>
+            <MudAlert Severity="Severity.Info" Class="mt-4">Selecciona una carpeta para ver su contenido.</MudAlert>
         }
     </MudItem>
 </MudGrid>
@@ -71,11 +157,63 @@
     private List<TimelineItem> _assets = new();
     private bool _loadingFolders = true;
     private bool _loadingAssets = false;
+    private bool _loadingSubFolders = false;
     private List<BreadcrumbItem> _breadcrumbs = new();
+    private List<FolderWithThumbnail> _subFoldersWithThumbnails = new();
+    
+    private class FolderWithThumbnail
+    {
+        public FolderItem Folder { get; set; } = null!;
+        public TimelineItem? FirstAsset { get; set; }
+    }
 
     protected override async Task OnInitializedAsync()
     {
         await LoadFolders();
+        // Si hay carpetas raíz, cargar sus miniaturas
+        if (_folderTree.Any())
+        {
+            await LoadRootFoldersWithThumbnails();
+        }
+    }
+    
+    private async Task LoadRootFoldersWithThumbnails()
+    {
+        try
+        {
+            _loadingSubFolders = true;
+            _subFoldersWithThumbnails = new List<FolderWithThumbnail>();
+            
+            // Para cada carpeta raíz, obtener el primer asset para mostrar su miniatura
+            foreach (var folder in _folderTree)
+            {
+                var folderData = new FolderWithThumbnail { Folder = folder };
+                
+                // Obtener el primer asset de la carpeta si tiene assets
+                if (folder.AssetCount > 0)
+                {
+                    try
+                    {
+                        var assets = await FolderService.GetFolderAssetsAsync(folder.Id);
+                        folderData.FirstAsset = assets.FirstOrDefault();
+                    }
+                    catch
+                    {
+                        // Si falla, simplemente no mostramos miniatura
+                    }
+                }
+                
+                _subFoldersWithThumbnails.Add(folderData);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar carpetas raíz: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingSubFolders = false;
+        }
     }
 
     private async Task LoadFolders()
@@ -111,7 +249,12 @@
     {
         if (folder == null) return;
         _selectedFolder = folder;
-        await LoadFolderAssets(folder.Id);
+        // Limpiar carpetas raíz cuando se selecciona una carpeta
+        _subFoldersWithThumbnails.Clear();
+        await Task.WhenAll(
+            LoadFolderAssets(folder.Id),
+            LoadSubFoldersWithThumbnails(folder)
+        );
         UpdateBreadcrumbs(folder);
     }
 
@@ -155,6 +298,50 @@
         else
         {
             _breadcrumbs.Add(new BreadcrumbItem(folder.Name, null, disabled: true));
+        }
+    }
+
+    private async Task LoadSubFoldersWithThumbnails(FolderItem folder)
+    {
+        try
+        {
+            _loadingSubFolders = true;
+            _subFoldersWithThumbnails = new List<FolderWithThumbnail>();
+            
+            if (folder.SubFolders == null || !folder.SubFolders.Any())
+            {
+                return;
+            }
+            
+            // Para cada subcarpeta, obtener el primer asset para mostrar su miniatura
+            foreach (var subFolder in folder.SubFolders)
+            {
+                var folderData = new FolderWithThumbnail { Folder = subFolder };
+                
+                // Obtener el primer asset de la subcarpeta si tiene assets
+                if (subFolder.AssetCount > 0)
+                {
+                    try
+                    {
+                        var assets = await FolderService.GetFolderAssetsAsync(subFolder.Id);
+                        folderData.FirstAsset = assets.FirstOrDefault();
+                    }
+                    catch
+                    {
+                        // Si falla, simplemente no mostramos miniatura
+                    }
+                }
+                
+                _subFoldersWithThumbnails.Add(folderData);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar subcarpetas: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingSubFolders = false;
         }
     }
 
