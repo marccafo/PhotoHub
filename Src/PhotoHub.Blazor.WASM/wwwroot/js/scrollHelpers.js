@@ -102,12 +102,10 @@ window.scrollHelpers = {
                 }
             }
             
-            // Calcular progreso total del scroll
+            // Calcular progreso total del scroll (solo para compatibilidad con la firma del método)
             let winScroll, height;
             if (scrollContainer === window) {
-                // Usar window.scrollY para mejor compatibilidad
                 winScroll = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
-                // Calcular altura total del documento menos la altura visible
                 height = Math.max(
                     document.documentElement.scrollHeight - document.documentElement.clientHeight,
                     document.body.scrollHeight - document.body.clientHeight
@@ -119,22 +117,8 @@ window.scrollHelpers = {
             
             const scrolled = height > 0 ? (winScroll / height) * 100 : 0;
             
-            // Calcular posición del handle en píxeles
-            // El handle se mueve dentro del timeline-nav-wrapper que tiene padding-top: 40px y padding-bottom: 40px
-            const navWrapper = document.querySelector('.timeline-nav-wrapper');
-            let handleTopPixels = 40; // Posición inicial (padding-top)
-            
-            if (navWrapper) {
-                const navHeight = navWrapper.offsetHeight;
-                const paddingTop = 40;
-                const paddingBottom = 40;
-                const handleHeight = 40;
-                const availableHeight = navHeight - paddingTop - paddingBottom - handleHeight;
-                // Mapear el porcentaje de scroll (0-100) al área disponible
-                handleTopPixels = paddingTop + (scrolled / 100) * availableHeight;
-            }
-            
-            dotnetHelper.invokeMethodAsync('OnScrollUpdated', activeId, scrolled, handleTopPixels);
+            // Ya no necesitamos calcular la posición del handle, pero mantenemos la firma del método
+            dotnetHelper.invokeMethodAsync('OnScrollUpdated', activeId, scrolled, 0);
         };
 
         if (scrollContainer === window) {
@@ -143,63 +127,76 @@ window.scrollHelpers = {
             scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
         }
         window._timelineScrollHandler = handleScroll;
+        
+        // Ejecutar inmediatamente para actualizar el estado inicial
+        handleScroll();
     },
-    initTimelineDrag: function (dotnetHelper, containerId) {
-        const container = document.getElementById(containerId);
-        if (!container) return;
-
-        let isDragging = false;
-
-        const handleDrag = (e) => {
-            if (!isDragging) return;
+    updateScrollProgress: function (dotnetHelper) {
+        const scrollContainer = this.getScrollContainer();
+        if (!scrollContainer) return;
+        
+        let winScroll, height;
+        if (scrollContainer === window) {
+            winScroll = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
+            height = Math.max(
+                document.documentElement.scrollHeight - document.documentElement.clientHeight,
+                document.body.scrollHeight - document.body.clientHeight
+            );
+        } else {
+            winScroll = scrollContainer.scrollTop;
+            height = scrollContainer.scrollHeight - scrollContainer.clientHeight;
+        }
+        
+        const scrolled = height > 0 ? (winScroll / height) * 100 : 0;
+        dotnetHelper.invokeMethodAsync('OnScrollUpdated', '', scrolled, 0);
+    },
+    setupTimelineHover: function (dotnetHelper, groupIds, groupLabels) {
+        window._timelineGroupIds = groupIds;
+        window._timelineGroupLabels = groupLabels;
+    },
+    getTimelineHoverPosition: function (dotnetHelper, clientY) {
+        const indicator = document.querySelector('.timeline-scroll-indicator');
+        if (!indicator || !window._timelineGroupIds || !window._timelineGroupLabels) return;
+        
+        const rect = indicator.getBoundingClientRect();
+        const relativeY = clientY - rect.top;
+        const percentage = Math.max(0, Math.min(100, (1 - (relativeY / rect.height)) * 100));
+        
+        const scrollContainer = this.getScrollContainer();
+        if (!scrollContainer) return;
+        
+        // Calcular la posición de scroll correspondiente al porcentaje
+        const scrollHeight = scrollContainer.scrollHeight - scrollContainer.clientHeight;
+        const targetScroll = (percentage / 100) * scrollHeight;
+        
+        // Encontrar el grupo más cercano a esa posición
+        let closestIndex = 0;
+        let closestDistance = Infinity;
+        
+        window._timelineGroupIds.forEach((groupId, index) => {
+            const groupElement = document.getElementById(groupId);
+            if (!groupElement) return;
             
-            const scrollContainer = this.getScrollContainer();
-            const navWrapper = document.querySelector('.timeline-nav-wrapper');
-            if (!navWrapper) return;
-            
-            const rect = navWrapper.getBoundingClientRect();
-            const clientY = e.clientY || (e.touches && e.touches[0].clientY);
-            const y = clientY - rect.top;
-            
-            // Calcular porcentaje considerando los paddings (40px arriba y abajo)
-            const paddingTop = 40;
-            const paddingBottom = 40;
-            const availableHeight = rect.height - paddingTop - paddingBottom;
-            const relativeY = y - paddingTop;
-            let percentage = relativeY / availableHeight;
-            percentage = Math.max(0, Math.min(1, percentage));
-            
+            let groupTop;
             if (scrollContainer === window) {
-                const scrollHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
-                window.scrollTo(0, scrollHeight * percentage);
+                const groupRect = groupElement.getBoundingClientRect();
+                groupTop = groupRect.top + window.scrollY;
             } else {
-                const scrollHeight = scrollContainer.scrollHeight - scrollContainer.clientHeight;
-                scrollContainer.scrollTop = scrollHeight * percentage;
+                groupTop = groupElement.offsetTop;
             }
-        };
-
-        const startDragging = (e) => {
-            isDragging = true;
-            handleDrag(e);
-            document.addEventListener('mousemove', handleDrag);
-            document.addEventListener('mouseup', stopDragging);
-            document.addEventListener('touchmove', handleDrag);
-            document.addEventListener('touchend', stopDragging);
-            container.classList.add('dragging');
-        };
-
-        const stopDragging = () => {
-            isDragging = false;
-            document.removeEventListener('mousemove', handleDrag);
-            document.removeEventListener('mouseup', stopDragging);
-            document.removeEventListener('touchmove', handleDrag);
-            document.removeEventListener('touchend', stopDragging);
-            container.classList.remove('dragging');
-        };
-
-        container.addEventListener('mousedown', startDragging);
-        container.addEventListener('touchstart', startDragging);
-    }
+            
+            const distance = Math.abs(groupTop - targetScroll);
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestIndex = index;
+            }
+        });
+        
+        if (closestIndex < window._timelineGroupLabels.length) {
+            const dateLabel = window._timelineGroupLabels[closestIndex];
+            dotnetHelper.invokeMethodAsync('OnHoverPositionCalculated', percentage, dateLabel);
+        }
+    },
 };
 
 window.videoHelpers = {

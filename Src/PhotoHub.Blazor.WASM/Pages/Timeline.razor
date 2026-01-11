@@ -15,47 +15,72 @@
     <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
 }
 
-<div class="timeline-container" id="timeline-scroll-container">
-    <div class="timeline-content">
-        @if (_groupedAssets.Any())
-        {
-            @foreach (var group in _groupedAssets)
-            {
-                <div class="mb-6" id="@GetGroupId(group.Key)">
-                    <MudText Typo="Typo.h6" Class="mb-3 font-weight-bold ml-1">@group.Key</MudText>
-                    <MudGrid Spacing="1">
-                        @foreach (var asset in group.Value)
+<div class="timeline-wrapper">
+    <div class="timeline-main-container">
+        <div class="timeline-content-wrapper">
+            <div class="timeline-container" id="timeline-scroll-container">
+                <div class="timeline-content">
+                    @if (_groupedAssets.Any())
+                    {
+                        @foreach (var group in _groupedAssets)
                         {
-                            <MudItem xs="4" sm="3" md="2" lg="2" xl="1">
-                                <AssetCard Asset="@asset" OnAssetClick="OpenAsset" />
-                            </MudItem>
+                            <div class="mb-6" id="@GetGroupId(group.Key)">
+                                <MudText Typo="Typo.h6" Class="mb-3 font-weight-bold ml-1">@group.Key</MudText>
+                                <MudGrid Spacing="1">
+                                    @foreach (var asset in group.Value)
+                                    {
+                                        <MudItem xs="4" sm="3" md="2" lg="2" xl="1">
+                                            <AssetCard Asset="@asset" OnAssetClick="OpenAsset" />
+                                        </MudItem>
+                                    }
+                                </MudGrid>
+                            </div>
                         }
-                    </MudGrid>
+                    }
+                    else if (!_loading)
+                    {
+                        <MudAlert Severity="Severity.Info">No hay fotografías disponibles. Escanea un directorio para comenzar.</MudAlert>
+                    }
+                </div>
+            </div>
+        </div>
+        
+        <div class="timeline-sidebar">
+            @if (_groupedAssets.Any())
+            {
+                <div class="timeline-scroll-indicator" 
+                     @onmouseenter="@(() => _showTimelineIndicator = true)"
+                     @onmouseleave="@(() => _showTimelineIndicator = false)"
+                     @onmousemove="@OnScrollIndicatorMouseMove">
+                    <div class="timeline-scroll-track">
+                        <div class="timeline-scroll-progress" style="@($"height: {Math.Max(0.1, _scrollProgress)}%")"></div>
+                        @foreach (var monthMarker in GetMonthMarkers())
+                        {
+                            <div class="timeline-month-dot" style="@($"bottom: {monthMarker.Position}%")"></div>
+                        }
+                        @if (_showTimelineIndicator && !string.IsNullOrEmpty(_hoverDate))
+                        {
+                            <div class="timeline-hover-line" style="@($"bottom: {_hoverPosition}%")">
+                                <div class="timeline-hover-label">@_hoverDate</div>
+                            </div>
+                        }
+                    </div>
                 </div>
             }
-        }
-        else if (!_loading)
-        {
-            <MudAlert Severity="Severity.Info">No hay fotografías disponibles. Escanea un directorio para comenzar.</MudAlert>
-        }
+        </div>
     </div>
-
+    
     @if (_groupedAssets.Any())
     {
         <div class="timeline-nav-wrapper">
             <div id="timeline-nav-container" class="vertical-timeline-nav">
-                <div class="timeline-handle" style="@(_handleStyle)">
-                    <div class="timeline-handle-marker"></div>
-                </div>
-                
                 @foreach (var group in _groupedAssets)
                 {
                     var groupKey = group.Key;
                     <div class="timeline-nav-item @(IsActive(groupKey) ? "active" : "")" 
                          style="@(GetGroupStyle(groupKey))"
                          @onclick="@(() => ScrollToGroup(groupKey))">
-                        <div class="timeline-dot"></div>
-                        <span class="timeline-nav-label">@GetShortLabel(groupKey)</span>
+                        <span class="timeline-nav-label">@GetYearFromGroup(groupKey)</span>
                     </div>
                 }
             </div>
@@ -86,38 +111,147 @@
         position: relative !important;
     }
 
+    /* Contenedor principal del timeline */
+    .timeline-wrapper {
+        position: relative;
+        width: 100%;
+        height: calc(100vh - 64px);
+    }
+
+    /* Contenedor principal con flex para layout horizontal */
+    .timeline-main-container {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        position: relative;
+    }
+
+    /* Contenedor del contenido principal */
+    .timeline-content-wrapper {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
     /* El contenedor del timeline es el único con scroll */
     .timeline-container {
         display: flex;
         position: relative;
         width: 100%;
-        height: calc(100vh - 64px); /* Altura fija: viewport menos altura del AppBar */
+        height: 100%;
         overflow-y: auto;
         overflow-x: hidden;
     }
 
-    /* Estilo de barra de scroll del timeline-container */
+    /* Ocultar la barra de scroll vertical nativa */
     .timeline-container::-webkit-scrollbar {
-        width: 8px;
-    }
-
-    .timeline-container::-webkit-scrollbar-track {
+        width: 0px;
         background: transparent;
     }
 
-    .timeline-container::-webkit-scrollbar-thumb {
-        background-color: rgba(0, 0, 0, 0.2);
-        border-radius: 4px;
-    }
-
-    .timeline-container::-webkit-scrollbar-thumb:hover {
-        background-color: rgba(0, 0, 0, 0.3);
+    .timeline-container {
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none; /* IE y Edge */
     }
 
     .timeline-content {
         flex: 1;
-        padding-right: 32px;
+        padding-right: 50px; /* Espacio para el sidebar */
         padding-bottom: 200px;
+    }
+
+    /* Sidebar con barra de scroll */
+    .timeline-sidebar {
+        width: 30px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px 4px;
+        flex-shrink: 0;
+        background-color: transparent;
+    }
+
+    /* Contenedor del indicador de scroll */
+    .timeline-scroll-indicator {
+        width: 3px;
+        height: calc(100vh - 64px - 40px);
+        max-height: 400px;
+        position: relative;
+        background-color: var(--mud-palette-divider);
+        border-radius: 2px;
+        margin-bottom: 20px;
+        flex-shrink: 0;
+    }
+
+    /* Track de la barra de scroll */
+    .timeline-scroll-track {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        border-radius: 2px;
+        overflow: hidden;
+    }
+
+    /* Barra de progreso vertical */
+    .timeline-scroll-progress {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 0%;
+        background-color: #4285f4;
+        border-radius: 2px;
+        transition: height 0.1s linear;
+        box-shadow: 0 0 4px rgba(66, 133, 244, 0.5);
+    }
+
+    /* Línea horizontal que aparece al hacer hover */
+    .timeline-hover-line {
+        position: absolute;
+        left: 100%;
+        width: 300px;
+        height: 2px;
+        background-color: #4285f4;
+        margin-left: 8px;
+        pointer-events: none;
+        z-index: 1300;
+        transform: translateY(-50%);
+        box-shadow: 0 0 4px rgba(66, 133, 244, 0.6);
+    }
+
+    /* Etiqueta de fecha en la línea horizontal */
+    .timeline-hover-label {
+        position: absolute;
+        left: 100%;
+        top: 50%;
+        transform: translateY(-50%);
+        margin-left: 16px;
+        padding: 4px 10px;
+        background-color: var(--mud-palette-surface);
+        color: var(--mud-palette-text-primary);
+        font-size: 0.75rem;
+        font-weight: 600;
+        white-space: nowrap;
+        border-radius: 4px;
+        box-shadow: var(--mud-elevation-3);
+        border: 1px solid var(--mud-palette-primary);
+        pointer-events: none;
+        z-index: 1301;
+    }
+
+    /* Puntos que indican los meses entre años */
+    .timeline-month-dot {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 3px;
+        height: 3px;
+        background-color: var(--mud-palette-text-secondary);
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 1299;
+        opacity: 0.5;
     }
 
     .timeline-nav-wrapper {
@@ -125,13 +259,13 @@
         right: 0;
         top: 64px; /* Debajo del AppBar */
         bottom: 0;
-        width: 80px; /* Más ancho para las etiquetas visibles */
+        width: 60px;
         z-index: 1200; 
         display: flex;
-        justify-content: flex-end; /* Alinear a la derecha */
+        justify-content: flex-end;
         background-color: transparent;
-        padding-top: 40px; 
-        padding-bottom: 40px; 
+        padding-top: 20px; 
+        padding-bottom: 20px; 
         pointer-events: none; 
     }
 
@@ -139,29 +273,7 @@
         position: relative;
         height: 100%;
         width: 100%;
-        cursor: pointer;
-        user-select: none;
-        pointer-events: auto; /* Reactiva interacciones para la barra */
-    }
-
-    .timeline-handle {
-        position: absolute;
-        right: 0;
-        width: 100%;
-        height: 40px; /* Tamaño del tirador */
-        pointer-events: none;
-        transition: top 0.05s linear;
-    }
-
-    .timeline-handle-marker {
-        position: absolute;
-        right: 0;
-        top: 0;
-        width: 6px;
-        height: 100%;
-        background-color: var(--mud-palette-primary) !important;
-        border-radius: 3px 0 0 3px;
-        box-shadow: -1px 0 4px rgba(0,0,0,0.2);
+        pointer-events: auto;
     }
 
     .timeline-nav-item {
@@ -169,26 +281,16 @@
         right: 0;
         display: flex;
         align-items: center;
-        flex-direction: row-reverse;
+        justify-content: flex-end;
         transform: translateY(-50%);
         transition: all 0.2s ease;
-        opacity: 0.8;
+        opacity: 0.6;
         pointer-events: auto;
+        cursor: pointer;
     }
 
-    .timeline-dot {
-        width: 8px;
-        height: 8px;
-        background-color: var(--mud-palette-divider);
-        border-radius: 50%;
-        margin-left: 10px;
-        z-index: 2;
-        transition: all 0.2s ease;
-    }
-
-    .timeline-nav-item.active .timeline-dot {
-        background-color: var(--mud-palette-primary);
-        transform: scale(1.5);
+    .timeline-nav-item:hover {
+        opacity: 1;
     }
 
     .timeline-nav-item.active {
@@ -196,28 +298,18 @@
     }
 
     .timeline-nav-label {
-        font-size: 0.7rem;
-        font-weight: 600;
+        font-size: 0.75rem;
+        font-weight: 500;
         color: var(--mud-palette-text-secondary);
         white-space: nowrap;
-        background-color: var(--mud-palette-surface);
-        padding: 2px 8px;
-        border-radius: 12px;
-        box-shadow: var(--mud-elevation-1);
-        border: 1px solid var(--mud-palette-divider);
         transition: all 0.2s ease;
-        margin-right: 5px;
+        padding-right: 8px;
     }
 
     .timeline-nav-item.active .timeline-nav-label {
         color: var(--mud-palette-text-primary);
-        box-shadow: var(--mud-elevation-3);
-        font-size: 0.8rem;
-    }
-
-    .vertical-timeline-nav:hover .timeline-nav-item, 
-    .vertical-timeline-nav.dragging .timeline-nav-item {
-        opacity: 1;
+        font-weight: 600;
+        font-size: 0.85rem;
     }
 
 </style>
@@ -227,12 +319,10 @@
     private Dictionary<string, List<TimelineItem>> _groupedAssets = new();
     private bool _loading = true;
     private string _activeGroup = "";
-    private double _scrollPercentage = 0;
-    private double _handleTopPixels = 40; // Posición inicial del handle
-    
-    // El handle se mueve proporcionalmente al scroll dentro del área disponible
-    // La posición se calcula en JavaScript para mayor precisión
-    private string _handleStyle => $"top: {_handleTopPixels.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}px;";
+    private double _scrollProgress = 0;
+    private bool _showTimelineIndicator = false;
+    private double _hoverPosition = 0;
+    private string _hoverDate = "";
     private DotNetObjectReference<Timeline>? _objRef;
 
     protected override async Task OnInitializedAsync()
@@ -272,6 +362,13 @@
             {
                 await SetupScrollListener();
                 
+                // Inicializar el progreso del scroll después de que el listener esté configurado
+                if (_objRef != null)
+                {
+                    await Task.Delay(100);
+                    await JS.InvokeVoidAsync("scrollHelpers.updateScrollProgress", _objRef);
+                }
+                
                 // Si hay un parámetro de fecha en la query string, hacer scroll a esa fecha
                 var dateParam = GetDateFromQuery();
                 if (!string.IsNullOrEmpty(dateParam))
@@ -308,15 +405,16 @@
             _objRef = DotNetObjectReference.Create(this);
         }
         var groupIds = _groupedAssets.Keys.Select(GetGroupId).ToList();
+        // Para el hover, usar los nombres completos de los grupos (mes y año)
+        var groupFullNames = _groupedAssets.Keys.ToList();
         await JS.InvokeVoidAsync("scrollHelpers.onWindowScroll", _objRef, groupIds);
-        await JS.InvokeVoidAsync("scrollHelpers.initTimelineDrag", _objRef, "timeline-nav-container");
+        await JS.InvokeVoidAsync("scrollHelpers.setupTimelineHover", _objRef, groupIds, groupFullNames);
     }
 
     [JSInvokable]
     public void OnScrollUpdated(string activeGroupId, double percentage, double handleTopPixels)
     {
-        _scrollPercentage = percentage;
-        _handleTopPixels = handleTopPixels;
+        _scrollProgress = percentage;
         var groupName = _groupedAssets.Keys.FirstOrDefault(k => GetGroupId(k) == activeGroupId);
         if (!string.IsNullOrEmpty(groupName))
         {
@@ -391,6 +489,22 @@
 
     private bool IsActive(string groupName) => _activeGroup == groupName;
 
+    private void OnScrollIndicatorMouseMove(Microsoft.AspNetCore.Components.Web.MouseEventArgs e)
+    {
+        if (!_groupedAssets.Any() || _objRef == null) return;
+        JS.InvokeVoidAsync("scrollHelpers.getTimelineHoverPosition", 
+            _objRef, 
+            e.ClientY);
+    }
+
+    [JSInvokable]
+    public void OnHoverPositionCalculated(double percentage, string dateLabel)
+    {
+        _hoverPosition = percentage;
+        _hoverDate = dateLabel;
+        StateHasChanged();
+    }
+
     private string GetShortLabel(string groupName)
     {
         // "Enero 2024" -> "Ene 2024"
@@ -400,6 +514,49 @@
         
         var month = parts[0].Length > 3 ? parts[0].Substring(0, 3) : parts[0];
         return $"{char.ToUpper(month[0]) + month.Substring(1)} {parts[1]}";
+    }
+
+    private string GetYearFromGroup(string groupName)
+    {
+        // "Enero 2024" -> "2024"
+        if (string.IsNullOrEmpty(groupName)) return "";
+        var parts = groupName.Split(' ');
+        return parts.Length >= 2 ? parts[1] : "";
+    }
+
+    private List<MonthMarker> GetMonthMarkers()
+    {
+        var markers = new List<MonthMarker>();
+        if (!_groupedAssets.Any()) return markers;
+
+        var groups = _groupedAssets.Keys.ToList();
+        var previousYear = "";
+        double previousPosition = 0;
+        
+        // Agrupar por año para identificar transiciones entre años
+        foreach (var group in groups)
+        {
+            var year = GetYearFromGroup(group);
+            var position = GetGroupPosition(group);
+            
+            // Si cambió el año, agregar un punto entre el último mes del año anterior y el primer mes del nuevo año
+            if (year != previousYear && !string.IsNullOrEmpty(previousYear))
+            {
+                // El punto debe estar en el medio entre dos años
+                var midPosition = (previousPosition + position) / 2;
+                markers.Add(new MonthMarker { Position = midPosition, IsYearTransition = true });
+            }
+            previousYear = year;
+            previousPosition = position;
+        }
+
+        return markers;
+    }
+
+    private class MonthMarker
+    {
+        public double Position { get; set; }
+        public bool IsYearTransition { get; set; }
     }
 
     public void Dispose()
