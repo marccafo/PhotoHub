@@ -64,7 +64,7 @@ public class ExifExtractorService
                     try
                     {
                         // Use FFprobe to get video dimensions
-                        var mediaInfo = FFmpeg.GetMediaInfo(filePath).GetAwaiter().GetResult();
+                        var mediaInfo = FFmpeg.GetMediaInfo(filePath, cancellationToken).Result;
                         var videoStream = mediaInfo.VideoStreams.FirstOrDefault();
                         if (videoStream != null)
                         {
@@ -90,7 +90,7 @@ public class ExifExtractorService
     
     private bool IsVideoFile(string extension)
     {
-        var videoExtensions = new[] { ".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm", ".m4v", ".3gp", ".mpeg", ".mpg" };
+        var videoExtensions = new[] { ".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm", ".m4v", ".3gp", ".mpeg", ".mpg", ".3g2", ".3gpp", ".amv", ".asf", ".f4v", ".m2v", ".mp2", ".mpe", ".mpv", ".ogv", ".qt", ".vob" };
         return videoExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
     }
 

@@ -1,4 +1,11 @@
 ﻿FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
+# Instalar ffmpeg y dependencias para procesamiento de imágenes
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libgdiplus \
+    libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 USER $APP_UID
 WORKDIR /app
 EXPOSE 8080

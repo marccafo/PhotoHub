@@ -94,15 +94,43 @@ public class ThumbnailGeneratorService
                     IConversion conversion;
                     try 
                     {
+                        Console.WriteLine($"[DEBUG] Starting FFmpeg snapshot at 1s for {assetId}: {sourceFilePath}");
                         conversion = await FFmpeg.Conversions.FromSnippet.Snapshot(sourceFilePath, tempFramePath, TimeSpan.FromSeconds(1));
-                        Console.WriteLine($"[DEBUG] Starting FFmpeg snapshot at 1s for {assetId}");
                         await conversion.Start(cancellationToken);
                     }
-                    catch
+                    catch (Exception ex1)
                     {
-                        Console.WriteLine($"[WARNING] FFmpeg snapshot at 1s failed for {assetId}, trying at 0s");
-                        conversion = await FFmpeg.Conversions.FromSnippet.Snapshot(sourceFilePath, tempFramePath, TimeSpan.FromSeconds(0));
-                        await conversion.Start(cancellationToken);
+                        Console.WriteLine($"[WARNING] FFmpeg snapshot at 1s failed for {assetId}: {ex1.Message}. Trying at 0s");
+                        try
+                        {
+                            conversion = await FFmpeg.Conversions.FromSnippet.Snapshot(sourceFilePath, tempFramePath, TimeSpan.FromSeconds(0));
+                            await conversion.Start(cancellationToken);
+                        }
+                        catch (Exception ex2)
+                        {
+                            Console.WriteLine($"[ERROR] FFmpeg snapshot at 0s also failed for {assetId}: {ex2.Message}");
+                            
+                            // Fallback: try to use a more manual approach if snippet fails
+                            // Sometimes snapshots fail if the video is too short or has issues at the start
+                            Console.WriteLine($"[DEBUG] Trying manual FFmpeg command for {assetId}");
+                            string ffmpegExe = OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg";
+                            string ffmpegPath = string.IsNullOrEmpty(FFmpeg.ExecutablesPath) ? ffmpegExe : Path.Combine(FFmpeg.ExecutablesPath, ffmpegExe);
+                            
+                            var process = new System.Diagnostics.Process
+                            {
+                                StartInfo = new System.Diagnostics.ProcessStartInfo
+                                {
+                                    FileName = ffmpegPath,
+                                    Arguments = $"-i \"{sourceFilePath}\" -ss 00:00:00.500 -vframes 1 \"{tempFramePath}\" -y",
+                                    RedirectStandardOutput = true,
+                                    RedirectStandardError = true,
+                                    UseShellExecute = false,
+                                    CreateNoWindow = true
+                                }
+                            };
+                            process.Start();
+                            await process.WaitForExitAsync(cancellationToken);
+                        }
                     }
                     
                     Console.WriteLine($"[DEBUG] FFmpeg conversion finished for {assetId}");
@@ -451,7 +479,7 @@ public class ThumbnailGeneratorService
     
     private bool IsVideoFile(string extension)
     {
-        var videoExtensions = new[] { ".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm", ".m4v", ".3gp", ".mpeg", ".mpg" };
+        var videoExtensions = new[] { ".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm", ".m4v", ".3gp", ".mpeg", ".mpg", ".3g2", ".3gpp", ".amv", ".asf", ".f4v", ".m2v", ".mp2", ".mpe", ".mpv", ".ogv", ".qt", ".vob" };
         return videoExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
     }
 }

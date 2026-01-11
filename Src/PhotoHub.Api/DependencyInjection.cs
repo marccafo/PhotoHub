@@ -3,6 +3,7 @@ using PhotoHub.API.Shared.Data;
 using PhotoHub.API.Shared.Interfaces;
 using PhotoHub.API.Shared.Services;
 using Xabe.FFmpeg;
+using Xabe.FFmpeg.Downloader;
 
 namespace PhotoHub.Api;
 
@@ -18,40 +19,76 @@ public static class DependencyInjection
         builder.Services.AddScoped<IMlJobService, MlJobService>();
         builder.Services.AddHostedService<MlJobProcessorService>();
 
+        // Configure FFmpeg
+        ConfigureFFmpeg(builder.Configuration);
+    }
+
+    private static void ConfigureFFmpeg(IConfiguration configuration)
+    {
         // Configure FFmpeg path if provided in configuration
-        var ffmpegPath = builder.Configuration["FFMPEG_PATH"];
+        var ffmpegPath = configuration["FFMPEG_PATH"];
         if (!string.IsNullOrEmpty(ffmpegPath))
         {
             FFmpeg.SetExecutablesPath(ffmpegPath);
         }
-        else
+        else if (OperatingSystem.IsWindows())
         {
-            // Try common locations if not set
+            // Try common locations if not set on Windows
             var commonPaths = new[] { 
                 @"C:\ffmpeg\bin", 
                 @"C:\Program Files\ffmpeg\bin",
-                Path.Combine(Directory.GetCurrentDirectory(), "ffmpeg", "bin")
+                Path.Combine(Directory.GetCurrentDirectory(), "ffmpeg")
             };
             
+            bool found = false;
             foreach (var path in commonPaths)
             {
                 if (Directory.Exists(path))
                 {
                     FFmpeg.SetExecutablesPath(path);
                     Console.WriteLine($"[INFO] FFmpeg path set to: {path}");
-                    
-                    // Check if both ffmpeg and ffprobe exist
-                    var ffmpegExe = OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg";
-                    var ffprobeExe = OperatingSystem.IsWindows() ? "ffprobe.exe" : "ffprobe";
-                    
-                    if (!File.Exists(Path.Combine(path, ffmpegExe)))
-                        Console.WriteLine($"[WARNING] {ffmpegExe} not found in {path}");
-                    if (!File.Exists(Path.Combine(path, ffprobeExe)))
-                        Console.WriteLine($"[WARNING] {ffprobeExe} not found in {path}");
-                        
+                    found = true;
                     break;
                 }
             }
+
+            if (!found)
+            {
+                // If not found, we'll use a local 'ffmpeg' folder
+                var localPath = Path.Combine(Directory.GetCurrentDirectory(), "ffmpeg");
+                if (!Directory.Exists(localPath))
+                {
+                    Directory.CreateDirectory(localPath);
+                }
+                FFmpeg.SetExecutablesPath(localPath);
+                Console.WriteLine($"[INFO] FFmpeg path set to local folder: {localPath}");
+            }
+        }
+        // In Linux/Docker, if not set, Xabe.FFmpeg will look for 'ffmpeg' in the system PATH by default
+    }
+
+    public static async Task EnsureFFmpegAsync(this WebApplication app)
+    {
+        var ffmpegPath = FFmpeg.ExecutablesPath;
+        var ffmpegExe = OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg";
+        var ffprobeExe = OperatingSystem.IsWindows() ? "ffprobe.exe" : "ffprobe";
+
+        if (!File.Exists(Path.Combine(ffmpegPath, ffmpegExe)) || !File.Exists(Path.Combine(ffmpegPath, ffprobeExe)))
+        {
+            Console.WriteLine("[INFO] FFmpeg or FFprobe not found. Downloading...");
+            try
+            {
+                await FFmpegDownloader.GetLatestVersion(FFmpegVersion.Official, ffmpegPath);
+                Console.WriteLine("[INFO] FFmpeg downloaded successfully.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ERROR] Failed to download FFmpeg: {ex.Message}");
+            }
+        }
+        else
+        {
+            Console.WriteLine("[INFO] FFmpeg and FFprobe found.");
         }
     }
 

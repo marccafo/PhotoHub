@@ -46,6 +46,7 @@
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=${POSTGRES_DB:-photohub};Username=${POSTGRES_USER:-photohub_user};Password=${POSTGRES_PASSWORD:-photohub_password}
       - PHOTOS_DIR=${PHOTOS_DIR:-C:/Photos}
+      - THUMBNAILS_PATH=${THUMBNAILS_PATH:-C:/Thumbnails}
     depends_on:
       postgres:
         condition: service_healthy
@@ -57,8 +58,10 @@
         source: ${PHOTOS_DIR:-C:/Photos}
         target: /photos
         read_only: true
+      - photohub_thumbnails:${THUMBNAILS_PATH:-C:/Thumbnails}
 
 volumes:
   postgres_data:
   pgadmin_data:
+  photohub_thumbnails:
 
