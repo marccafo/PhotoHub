@@ -15,7 +15,7 @@
     <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
 }
 
-<div class="timeline-container">
+<div class="timeline-container" id="timeline-scroll-container">
     <div class="timeline-content">
         @if (_groupedAssets.Any())
         {
@@ -44,7 +44,6 @@
     {
         <div class="timeline-nav-wrapper">
             <div id="timeline-nav-container" class="vertical-timeline-nav">
-                <div class="timeline-line"></div>
                 <div class="timeline-handle" style="@(_handleStyle)">
                     <div class="timeline-handle-marker"></div>
                 </div>
@@ -65,30 +64,60 @@
 </div>
 
 <style>
-    /* Ocultar barra de scroll nativa para esta página */
-    :global(html, body, .mud-layout, .mud-main-content) {
-        scrollbar-width: none !important; /* Firefox */
-        -ms-overflow-style: none !important; /* IE and Edge */
-        overflow-y: overlay !important; /* Chrome/Safari - prevent layout shift */
+    /* Desactivar scroll en body/html y contenedores de MudBlazor */
+    :global(body.timeline-page) {
+        overflow: hidden !important;
+        height: 100vh !important;
     }
 
-    :global(html::-webkit-scrollbar, body::-webkit-scrollbar, .mud-main-content::-webkit-scrollbar, .mud-layout::-webkit-scrollbar) {
-        display: none !important; /* Chrome, Safari and Opera */
-        width: 0 !important;
-        height: 0 !important;
+    :global(body.timeline-page html) {
+        overflow: hidden !important;
+        height: 100vh !important;
     }
 
+    :global(body.timeline-page .mud-layout) {
+        overflow: hidden !important;
+        height: 100vh !important;
+    }
+
+    :global(body.timeline-page .mud-main-content) {
+        overflow: hidden !important;
+        height: 100vh !important;
+        position: relative !important;
+    }
+
+    /* El contenedor del timeline es el único con scroll */
     .timeline-container {
         display: flex;
         position: relative;
         width: 100%;
-        min-height: calc(100vh - 64px);
+        height: calc(100vh - 64px); /* Altura fija: viewport menos altura del AppBar */
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+
+    /* Estilo de barra de scroll del timeline-container */
+    .timeline-container::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    .timeline-container::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .timeline-container::-webkit-scrollbar-thumb {
+        background-color: rgba(0, 0, 0, 0.2);
+        border-radius: 4px;
+    }
+
+    .timeline-container::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(0, 0, 0, 0.3);
     }
 
     .timeline-content {
         flex: 1;
         padding-right: 32px;
-        padding-bottom: 200px; /* Spazio extra per garantire lo scroll completo */
+        padding-bottom: 200px;
     }
 
     .timeline-nav-wrapper {
@@ -115,16 +144,6 @@
         pointer-events: auto; /* Reactiva interacciones para la barra */
     }
 
-    .timeline-line {
-        position: absolute;
-        right: 0;
-        top: 0;
-        bottom: 0;
-        width: 4px;
-        background-color: var(--mud-palette-divider);
-        transition: width 0.2s, background-color 0.2s;
-    }
-
     .timeline-handle {
         position: absolute;
         right: 0;
@@ -140,7 +159,7 @@
         top: 0;
         width: 6px;
         height: 100%;
-        background-color: var(--mud-palette-primary);
+        background-color: var(--mud-palette-primary) !important;
         border-radius: 3px 0 0 3px;
         box-shadow: -1px 0 4px rgba(0,0,0,0.2);
     }
@@ -201,12 +220,6 @@
         opacity: 1;
     }
 
-    /* Estilo durante el arrastre o hover */
-    .vertical-timeline-nav:hover .timeline-line,
-    .vertical-timeline-nav.dragging .timeline-line {
-        width: 12px;
-        background-color: var(--mud-palette-primary-hover);
-    }
 </style>
 
 @code {
@@ -215,7 +228,11 @@
     private bool _loading = true;
     private string _activeGroup = "";
     private double _scrollPercentage = 0;
-    private string _handleStyle => $"top: calc({_scrollPercentage.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}% - {(_scrollPercentage * 40 / 100).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}px);";
+    private double _handleTopPixels = 40; // Posición inicial del handle
+    
+    // El handle se mueve proporcionalmente al scroll dentro del área disponible
+    // La posición se calcula en JavaScript para mayor precisión
+    private string _handleStyle => $"top: {_handleTopPixels.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}px;";
     private DotNetObjectReference<Timeline>? _objRef;
 
     protected override async Task OnInitializedAsync()
@@ -225,9 +242,15 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && _groupedAssets.Any())
+        if (firstRender)
         {
-            await SetupScrollListener();
+            // Agregar clase al body para aplicar estilos específicos de Timeline
+            await JS.InvokeVoidAsync("scrollHelpers.enableTimelineScroll");
+            
+            if (_groupedAssets.Any())
+            {
+                await SetupScrollListener();
+            }
         }
     }
 
@@ -243,9 +266,10 @@
     }
 
     [JSInvokable]
-    public void OnScrollUpdated(string activeGroupId, double percentage)
+    public void OnScrollUpdated(string activeGroupId, double percentage, double handleTopPixels)
     {
         _scrollPercentage = percentage;
+        _handleTopPixels = handleTopPixels;
         var groupName = _groupedAssets.Keys.FirstOrDefault(k => GetGroupId(k) == activeGroupId);
         if (!string.IsNullOrEmpty(groupName))
         {
@@ -334,5 +358,7 @@
     public void Dispose()
     {
         _objRef?.Dispose();
+        // Remover clase del body al salir de la página
+        JS.InvokeVoidAsync("scrollHelpers.disableTimelineScroll");
     }
 }

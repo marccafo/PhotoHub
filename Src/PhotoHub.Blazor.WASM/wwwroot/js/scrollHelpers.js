@@ -1,19 +1,44 @@
 window.scrollHelpers = {
+    enableTimelineScroll: function() {
+        // Agregar clase al body para aplicar estilos de scroll unificado
+        document.body.classList.add('timeline-page');
+        // Desactivar scroll en html y body
+        document.documentElement.style.overflow = 'hidden';
+        document.documentElement.style.height = '100vh';
+        document.body.style.overflow = 'hidden';
+        document.body.style.height = '100vh';
+    },
+    disableTimelineScroll: function() {
+        // Remover clase del body al salir de la página
+        document.body.classList.remove('timeline-page');
+        // Restaurar estilos por defecto
+        document.documentElement.style.overflow = '';
+        document.documentElement.style.height = '';
+        document.body.style.overflow = '';
+        document.body.style.height = '';
+    },
     getScrollContainer: function() {
-        // En Blazor con MudBlazor, el scroll suele estar en .mud-main-content o en html/body
+        // En la página de Timeline, usar el contenedor del timeline como único scroll
+        const timelineContainer = document.getElementById('timeline-scroll-container');
+        if (timelineContainer) {
+            return timelineContainer;
+        }
+        
+        // Para otras páginas, mantener el comportamiento original
         const mainContent = document.querySelector('.mud-main-content');
         if (mainContent && mainContent.scrollHeight > mainContent.clientHeight) {
-            // Verificamos si realmente tiene el scroll activo
             const style = window.getComputedStyle(mainContent);
-            if (style.overflowY !== 'hidden' && style.display !== 'none') {
+            if (style.overflowY !== 'hidden' && style.display !== 'none' && style.overflowY !== 'visible') {
                 return mainContent;
             }
         }
         
-        // Si no es .mud-main-content, probamos con el layout o finalmente window
         const layout = document.querySelector('.mud-layout');
         if (layout && layout.scrollHeight > layout.clientHeight) {
-            return layout;
+            const style = window.getComputedStyle(layout);
+            if (style.overflowY !== 'hidden' && style.display !== 'none' && style.overflowY !== 'visible') {
+                return layout;
+            }
         }
 
         return window;
@@ -21,18 +46,21 @@ window.scrollHelpers = {
     scrollToElement: function (id) {
         const element = document.getElementById(id);
         const scrollContainer = this.getScrollContainer();
-        if (element) {
-            const appBarHeight = document.querySelector('.mud-appbar')?.offsetHeight || 0;
-            
-            // Calculamos la posición relativa al contenedor
+        if (element && scrollContainer) {
+            // Para el contenedor del timeline, calculamos la posición relativa
             let elementPosition;
             if (scrollContainer === window) {
-                elementPosition = element.getBoundingClientRect().top + window.pageYOffset;
+                // Para window, usamos getBoundingClientRect + scrollY
+                const rect = element.getBoundingClientRect();
+                const appBarHeight = document.querySelector('.mud-appbar')?.offsetHeight || 0;
+                elementPosition = rect.top + window.scrollY - appBarHeight - 10;
             } else {
-                elementPosition = element.offsetTop;
+                // Para contenedores internos (como timeline-container), usamos offsetTop
+                // El offsetTop es relativo al padre posicionado
+                elementPosition = element.offsetTop - 10;
             }
             
-            const offsetPosition = elementPosition - 10;
+            const offsetPosition = Math.max(0, elementPosition);
 
             if (scrollContainer === window) {
                 window.scrollTo({
@@ -57,9 +85,19 @@ window.scrollHelpers = {
                 const element = document.getElementById(id);
                 if (element) {
                     const rect = element.getBoundingClientRect();
-                    // Ajustar rect.top relativo a la parte superior de la ventana
-                    if (rect.top <= 150) { 
-                        activeId = id;
+                    // Para el contenedor del timeline, comparamos con la parte superior del contenedor
+                    if (scrollContainer === window) {
+                        // Para window, comparamos con la parte superior de la ventana
+                        if (rect.top <= 150) { 
+                            activeId = id;
+                        }
+                    } else {
+                        // Para contenedores internos, comparamos con la parte superior del contenedor
+                        const containerRect = scrollContainer.getBoundingClientRect();
+                        const relativeTop = rect.top - containerRect.top;
+                        if (relativeTop <= 150) { 
+                            activeId = id;
+                        }
                     }
                 }
             }
@@ -67,15 +105,36 @@ window.scrollHelpers = {
             // Calcular progreso total del scroll
             let winScroll, height;
             if (scrollContainer === window) {
-                winScroll = window.pageYOffset || document.documentElement.scrollTop;
-                height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+                // Usar window.scrollY para mejor compatibilidad
+                winScroll = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
+                // Calcular altura total del documento menos la altura visible
+                height = Math.max(
+                    document.documentElement.scrollHeight - document.documentElement.clientHeight,
+                    document.body.scrollHeight - document.body.clientHeight
+                );
             } else {
                 winScroll = scrollContainer.scrollTop;
                 height = scrollContainer.scrollHeight - scrollContainer.clientHeight;
             }
             
             const scrolled = height > 0 ? (winScroll / height) * 100 : 0;
-            dotnetHelper.invokeMethodAsync('OnScrollUpdated', activeId, scrolled);
+            
+            // Calcular posición del handle en píxeles
+            // El handle se mueve dentro del timeline-nav-wrapper que tiene padding-top: 40px y padding-bottom: 40px
+            const navWrapper = document.querySelector('.timeline-nav-wrapper');
+            let handleTopPixels = 40; // Posición inicial (padding-top)
+            
+            if (navWrapper) {
+                const navHeight = navWrapper.offsetHeight;
+                const paddingTop = 40;
+                const paddingBottom = 40;
+                const handleHeight = 40;
+                const availableHeight = navHeight - paddingTop - paddingBottom - handleHeight;
+                // Mapear el porcentaje de scroll (0-100) al área disponible
+                handleTopPixels = paddingTop + (scrolled / 100) * availableHeight;
+            }
+            
+            dotnetHelper.invokeMethodAsync('OnScrollUpdated', activeId, scrolled, handleTopPixels);
         };
 
         if (scrollContainer === window) {
@@ -95,10 +154,19 @@ window.scrollHelpers = {
             if (!isDragging) return;
             
             const scrollContainer = this.getScrollContainer();
-            const rect = container.getBoundingClientRect();
+            const navWrapper = document.querySelector('.timeline-nav-wrapper');
+            if (!navWrapper) return;
+            
+            const rect = navWrapper.getBoundingClientRect();
             const clientY = e.clientY || (e.touches && e.touches[0].clientY);
             const y = clientY - rect.top;
-            let percentage = y / rect.height;
+            
+            // Calcular porcentaje considerando los paddings (40px arriba y abajo)
+            const paddingTop = 40;
+            const paddingBottom = 40;
+            const availableHeight = rect.height - paddingTop - paddingBottom;
+            const relativeY = y - paddingTop;
+            let percentage = relativeY / availableHeight;
             percentage = Math.max(0, Math.min(1, percentage));
             
             if (scrollContainer === window) {
