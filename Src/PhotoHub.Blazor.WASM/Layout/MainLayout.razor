@@ -5,7 +5,7 @@
 @inject NavigationManager Navigation
 @inject LayoutService LayoutService
 
-<MudThemeProvider @bind-IsDarkMode="@_isDarkMode" Theme="_theme" />
+<MudThemeProvider IsDarkMode="LayoutService.IsDarkMode" Theme="_theme" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
@@ -36,6 +36,11 @@
             <MudSpacer />
 
             <div class="d-flex align-center">
+                <MudTooltip Text="Alternar modo claro/oscuro">
+                    <MudIconButton Icon="@(LayoutService.IsDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" 
+                                   Color="Color.Inherit" 
+                                   OnClick="@LayoutService.ToggleDarkModeAsync" />
+                </MudTooltip>
                 <MudTooltip Text="Subir">
                     <MudIconButton Icon="@Icons.Material.Filled.CloudUpload" Color="Color.Inherit" OnClick="@(() => Navigation.NavigateTo("/scan"))" />
                 </MudTooltip>
@@ -88,7 +93,6 @@
 
 @code {
     private bool _drawerOpen = true;
-    private bool _isDarkMode = true;
     private string _searchQuery = "";
 
     private MudTheme _theme = new MudTheme()
@@ -97,9 +101,12 @@
         {
             Primary = "#4285f4",
             AppbarBackground = "#ffffff",
+            AppbarText = "#202124",
             Background = "#f8f9fa",
             Surface = "#ffffff",
             DrawerBackground = "#ffffff",
+            TextPrimary = "#202124",
+            TextSecondary = "#5f6368",
         },
         PaletteDark = new PaletteDark()
         {
