@@ -100,4 +100,20 @@ public class AssetService : IAssetService
             return new List<TimelineItem>();
         }
     }
+
+    public async Task<UploadResponse?> UploadAssetAsync(string fileName, Stream content, CancellationToken cancellationToken = default)
+    {
+        using var multipartContent = new MultipartFormDataContent();
+        using var streamContent = new StreamContent(content);
+        multipartContent.Add(streamContent, "file", fileName);
+
+        var response = await _httpClient.PostAsync("/api/assets/upload", multipartContent, cancellationToken);
+        
+        if (response.IsSuccessStatusCode)
+        {
+            return await response.Content.ReadFromJsonAsync<UploadResponse>(cancellationToken: cancellationToken);
+        }
+
+        return null;
+    }
 }

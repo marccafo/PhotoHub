@@ -8,7 +8,7 @@ Accept: application/json
 ###
 
 ### Scan Assets - Scan media directory (using container path)
-GET {{HostUrl}}/api/assets/scan?directoryPath=/photos
+GET {{HostUrl}}/api/assets/scan?directoryPath=/assets
 Accept: application/json
 
 ###
