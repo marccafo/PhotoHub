@@ -29,4 +29,8 @@
       <ProjectReference Include="..\PhotoHub.Blazor.WASM\PhotoHub.Blazor.WASM.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="Migrations\" />
+    </ItemGroup>
+
 </Project>

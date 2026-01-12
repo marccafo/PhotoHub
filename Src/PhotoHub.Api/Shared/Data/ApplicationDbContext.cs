@@ -18,6 +18,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<User> Users { get; set; }
     public DbSet<Folder> Folders { get; set; }
     public DbSet<FolderPermission> FolderPermissions { get; set; }
+    public DbSet<Setting> Settings { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -248,6 +249,19 @@ public class ApplicationDbContext : DbContext
                     v => v.HasValue 
                         ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) 
                         : null);
+        });
+
+        // Configure Setting entity
+        modelBuilder.Entity<Setting>(entity =>
+        {
+            entity.HasKey(e => e.Key);
+            entity.Property(e => e.Key).HasMaxLength(100);
+            entity.Property(e => e.Value).HasMaxLength(1000);
+            entity.Property(e => e.UpdatedAt)
+                .HasColumnType("timestamp without time zone")
+                .HasConversion(
+                    v => v.Kind == DateTimeKind.Utc ? DateTime.SpecifyKind(v, DateTimeKind.Unspecified) : v,
+                    v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
         });
     }
 }

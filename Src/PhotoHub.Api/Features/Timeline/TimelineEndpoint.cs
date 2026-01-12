@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using PhotoHub.API.Shared.Data;
 using PhotoHub.API.Shared.Interfaces;
 using PhotoHub.API.Shared.Models;
+using PhotoHub.API.Shared.Services;
+using PhotoHub.Blazor.Shared.Models;
 using Scalar.AspNetCore;
 
 namespace PhotoHub.API.Features.Timeline;
@@ -28,6 +30,8 @@ public class TimelineEndpoint : IEndpoint
 
     private async Task<IResult> Handle(
         [FromServices] ApplicationDbContext dbContext,
+        [FromServices] DirectoryScanner directoryScanner,
+        [FromServices] SettingsService settingsService,
         CancellationToken cancellationToken)
     {
         try
@@ -52,10 +56,57 @@ public class TimelineEndpoint : IEndpoint
                 Type = asset.Type.ToString(),
                 Checksum = asset.Checksum,
                 HasExif = asset.Exif != null,
-                HasThumbnails = asset.Thumbnails.Any()
-            });
+                HasThumbnails = asset.Thumbnails.Any(),
+                SyncStatus = AssetSyncStatus.Synced
+            }).ToList();
 
-            return Results.Ok(timelineItems);
+            // Detect non-indexed files in configured assets path
+            var assetsPath = await settingsService.GetAssetsPathAsync();
+
+            if (Directory.Exists(assetsPath))
+            {
+                Console.WriteLine($"[DEBUG] Scanning directory for new assets: {assetsPath}");
+                var scannedFiles = (await directoryScanner.ScanDirectoryAsync(assetsPath, cancellationToken)).ToList();
+                Console.WriteLine($"[DEBUG] Found {scannedFiles.Count} files in filesystem");
+                
+                // Normalizar rutas existentes para una comparación robusta
+                var existingPaths = assets
+                    .Select(a => a.FullPath.Replace('\\', '/').TrimEnd('/'))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                int pendingCount = 0;
+                foreach (var file in scannedFiles)
+                {
+                    var normalizedFilePath = file.FullPath.Replace('\\', '/').TrimEnd('/');
+                    
+                    if (!existingPaths.Contains(normalizedFilePath))
+                    {
+                        pendingCount++;
+                        timelineItems.Add(new TimelineResponse
+                        {
+                            Id = 0,
+                            FileName = file.FileName,
+                            FullPath = file.FullPath,
+                            FileSize = file.FileSize,
+                            CreatedDate = file.CreatedDate,
+                            ModifiedDate = file.ModifiedDate,
+                            Extension = file.Extension,
+                            ScannedAt = DateTime.MinValue,
+                            Type = file.AssetType.ToString(),
+                            SyncStatus = AssetSyncStatus.Pending
+                        });
+                    }
+                }
+                Console.WriteLine($"[DEBUG] Identified {pendingCount} pending assets to show in timeline");
+            }
+
+            // Re-order by most recent date (preferring CreatedDate but handles cases where only ModifiedDate is available)
+            var orderedTimeline = timelineItems
+                .OrderByDescending(a => a.SyncStatus == AssetSyncStatus.Pending ? a.ModifiedDate : a.CreatedDate)
+                .ThenByDescending(a => a.FileName)
+                .ToList();
+
+            return Results.Ok(orderedTimeline);
         }
         catch (Exception ex)
         {

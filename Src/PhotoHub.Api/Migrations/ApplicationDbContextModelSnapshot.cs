@@ -357,6 +357,25 @@ namespace PhotoHub.Api.Migrations
                     b.ToTable("FolderPermissions");
                 });
 
+            modelBuilder.Entity("PhotoHub.API.Shared.Models.Setting", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("Settings");
+                });
+
             modelBuilder.Entity("PhotoHub.API.Shared.Models.User", b =>
                 {
                     b.Property<int>("Id")

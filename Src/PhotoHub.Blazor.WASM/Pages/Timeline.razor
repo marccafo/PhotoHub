@@ -471,7 +471,15 @@
 
     private void OpenAsset(TimelineItem asset)
     {
-        Navigation.NavigateTo($"/asset/{asset.Id}");
+        if (asset.SyncStatus == AssetSyncStatus.Synced)
+        {
+            Navigation.NavigateTo($"/asset/{asset.Id}");
+        }
+        else
+        {
+            var encodedPath = System.Net.WebUtility.UrlEncode(asset.FullPath);
+            Navigation.NavigateTo($"/asset/0?path={encodedPath}");
+        }
     }
 
     private string GetGroupId(string groupName)

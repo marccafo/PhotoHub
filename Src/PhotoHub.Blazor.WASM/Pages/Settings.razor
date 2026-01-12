@@ -1,0 +1,96 @@
+@page "/settings"
+@using PhotoHub.Blazor.Shared.Services
+@using MudBlazor
+@inject ISettingsService SettingsService
+@inject ISnackbar Snackbar
+
+<PageTitle>Configuración - PhotoHub</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Configuración</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="6">
+        <MudCard>
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Almacenamiento de Assets</MudText>
+                    <MudText Typo="Typo.body2">Configura la ruta principal donde se almacenan tus fotos y vídeos.</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudTextField @bind-Value="_assetsPath" 
+                              Label="Ruta de Assets" 
+                              HelperText="Esta ruta se usará para el Timeline y las subidas."
+                              Variant="Variant.Outlined"
+                              FullWidth="true"
+                              Class="mb-4" />
+                
+                <MudAlert Severity="Severity.Info" Class="mb-4">
+                    Ruta actual en el servidor: <strong>@_currentServerPath</strong>
+                </MudAlert>
+
+                <MudButton Variant="Variant.Filled" 
+                           Color="Color.Primary" 
+                           OnClick="SaveAssetsPath"
+                           Disabled="_saving"
+                           StartIcon="@Icons.Material.Filled.Save">
+                    @if (_saving)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ml-2" />
+                    }
+                    Guardar Configuración
+                </MudButton>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private string _assetsPath = "";
+    private string _currentServerPath = "";
+    private bool _saving = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _assetsPath = await SettingsService.GetSettingAsync("AssetsPath");
+        _currentServerPath = await SettingsService.GetAssetsPathAsync();
+        
+        if (string.IsNullOrEmpty(_assetsPath))
+        {
+            _assetsPath = _currentServerPath;
+        }
+    }
+
+    private async Task SaveAssetsPath()
+    {
+        if (string.IsNullOrWhiteSpace(_assetsPath))
+        {
+            Snackbar.Add("La ruta no puede estar vacía", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            _saving = true;
+            var success = await SettingsService.SaveSettingAsync("AssetsPath", _assetsPath);
+            
+            if (success)
+            {
+                Snackbar.Add("Configuración guardada correctamente", Severity.Success);
+                _currentServerPath = await SettingsService.GetAssetsPathAsync();
+            }
+            else
+            {
+                Snackbar.Add("Error al guardar la configuración", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

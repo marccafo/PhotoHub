@@ -5,6 +5,7 @@
 @inject IScanService ScanService
 @inject IAssetService AssetService
 @inject ISnackbar Snackbar
+@inject ISettingsService SettingsService
 
 <PageTitle>Escanear - PhotoHub</PageTitle>
 
@@ -112,13 +113,18 @@
 }
 
 @code {
-    private string _directoryPath = "/assets";
+    private string _directoryPath = "";
     private bool _scanning = false;
     private double _progress = 0;
     private string _currentStatus = "Esperando inicio...";
     private ScanStatistics? _statistics;
     private ScanProgressUpdate? _lastUpdate;
     private List<ScanProgressUpdate> _updates = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _directoryPath = await SettingsService.GetAssetsPathAsync();
+    }
 
     private async Task StartScan()
     {

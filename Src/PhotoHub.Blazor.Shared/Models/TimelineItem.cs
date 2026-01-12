@@ -14,9 +14,14 @@ public class TimelineItem
     public string Checksum { get; set; } = string.Empty;
     public bool HasExif { get; set; }
     public bool HasThumbnails { get; set; }
+    public AssetSyncStatus SyncStatus { get; set; } = AssetSyncStatus.Synced;
     
-    public string ThumbnailUrl => $"/api/assets/{Id}/thumbnail?size=Medium";
-    public string ContentUrl => $"/api/assets/{Id}/content";
+    public string ThumbnailUrl => SyncStatus == AssetSyncStatus.Synced 
+        ? $"/api/assets/{Id}/thumbnail?size=Medium" 
+        : $"/api/assets/pending/content?path={System.Net.WebUtility.UrlEncode(FullPath)}";
+    public string ContentUrl => SyncStatus == AssetSyncStatus.Synced 
+        ? $"/api/assets/{Id}/content" 
+        : $"/api/assets/pending/content?path={System.Net.WebUtility.UrlEncode(FullPath)}";
     public string DisplayDate => CreatedDate.ToString("dd MMM yyyy");
     public string FileSizeFormatted => FormatFileSize(FileSize);
     

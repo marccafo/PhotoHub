@@ -27,19 +27,13 @@ public class UploadAssetsEndpoint : IEndpoint
         [FromServices] ThumbnailGeneratorService thumbnailService,
         [FromServices] MediaRecognitionService mediaRecognitionService,
         [FromServices] IMlJobService mlJobService,
+        [FromServices] SettingsService settingsService,
         CancellationToken cancellationToken)
     {
         if (file == null || file.Length == 0)
             return Results.BadRequest("No file uploaded");
 
-        var assetsPath = Environment.GetEnvironmentVariable("ASSETS_PATH") 
-                        ?? Path.Combine(Directory.GetCurrentDirectory(), "assets");
-
-        // Use the container path if running in Docker
-        if (Directory.Exists("/assets"))
-        {
-            assetsPath = "/assets";
-        }
+        var assetsPath = await settingsService.GetAssetsPathAsync();
 
         if (!Directory.Exists(assetsPath))
             Directory.CreateDirectory(assetsPath);

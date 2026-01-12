@@ -12,7 +12,7 @@ using PhotoHub.API.Shared.Data;
 namespace PhotoHub.Api.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260108203409_InitialCreate")]
+    [Migration("20260112131240_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -358,6 +358,25 @@ namespace PhotoHub.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("FolderPermissions");
+                });
+
+            modelBuilder.Entity("PhotoHub.API.Shared.Models.Setting", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("Settings");
                 });
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.User", b =>

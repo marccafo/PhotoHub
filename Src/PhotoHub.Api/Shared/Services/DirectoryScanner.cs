@@ -38,33 +38,43 @@ public class DirectoryScanner
 
         await Task.Run(() =>
         {
-            var allFiles = Directory.GetFiles(directoryPath, "*.*", SearchOption.AllDirectories);
-
-            foreach (var filePath in allFiles)
+            try 
             {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                // Skip hidden files
-                var fileInfo = new FileInfo(filePath);
-                if ((fileInfo.Attributes & FileAttributes.Hidden) == FileAttributes.Hidden)
-                    continue;
-
-                var extension = Path.GetExtension(filePath);
-                if (AllowedExtensions.Contains(extension))
+                var enumerationOptions = new EnumerationOptions
                 {
-                    var assetType = ImageExtensions.Contains(extension) ? AssetType.IMAGE : AssetType.VIDEO;
-                    
-                    files.Add(new ScannedFile
+                    RecurseSubdirectories = true,
+                    IgnoreInaccessible = true,
+                    AttributesToSkip = FileAttributes.Hidden | FileAttributes.System
+                };
+
+                var allFiles = Directory.EnumerateFiles(directoryPath, "*.*", enumerationOptions);
+
+                foreach (var filePath in allFiles)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    var extension = Path.GetExtension(filePath);
+                    if (AllowedExtensions.Contains(extension))
                     {
-                        FileName = fileInfo.Name,
-                        FullPath = fileInfo.FullName,
-                        FileSize = fileInfo.Length,
-                        CreatedDate = fileInfo.CreationTimeUtc,
-                        ModifiedDate = fileInfo.LastWriteTimeUtc,
-                        Extension = extension,
-                        AssetType = assetType
-                    });
+                        var fileInfo = new FileInfo(filePath);
+                        var assetType = ImageExtensions.Contains(extension) ? AssetType.IMAGE : AssetType.VIDEO;
+                        
+                        files.Add(new ScannedFile
+                        {
+                            FileName = fileInfo.Name,
+                            FullPath = fileInfo.FullName,
+                            FileSize = fileInfo.Length,
+                            CreatedDate = fileInfo.CreationTimeUtc,
+                            ModifiedDate = fileInfo.LastWriteTimeUtc,
+                            Extension = extension,
+                            AssetType = assetType
+                        });
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ERROR] Error scanning directory {directoryPath}: {ex.Message}");
             }
         }, cancellationToken);
 

@@ -16,6 +16,7 @@ public static class DependencyInjection
         builder.Services.AddScoped<ExifExtractorService>();
         builder.Services.AddScoped<ThumbnailGeneratorService>();
         builder.Services.AddScoped<MediaRecognitionService>();
+        builder.Services.AddScoped<SettingsService>();
         builder.Services.AddScoped<IMlJobService, MlJobService>();
         builder.Services.AddHostedService<MlJobProcessorService>();
 

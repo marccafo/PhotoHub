@@ -20,8 +20,12 @@ public class AssetDetail
     public List<ThumbnailInfo> Thumbnails { get; set; } = new();
     public List<string> Tags { get; set; } = new();
     
-    public string ThumbnailUrl => $"/api/assets/{Id}/thumbnail?size=Large";
-    public string ContentUrl => $"/api/assets/{Id}/content";
+    public string ThumbnailUrl => Id > 0 
+        ? $"/api/assets/{Id}/thumbnail?size=Large" 
+        : $"/api/assets/pending/content?path={System.Net.WebUtility.UrlEncode(FullPath)}";
+    public string ContentUrl => Id > 0 
+        ? $"/api/assets/{Id}/content" 
+        : $"/api/assets/pending/content?path={System.Net.WebUtility.UrlEncode(FullPath)}";
     public string DisplayDate => CreatedDate.ToString("dd MMM yyyy HH:mm");
     public string FileSizeFormatted => FormatFileSize(FileSize);
     

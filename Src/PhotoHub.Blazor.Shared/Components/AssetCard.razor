@@ -64,28 +64,54 @@
             filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));
             z-index: 2;
         }
+        .sync-status-icon {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            color: white;
+            filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));
+            z-index: 2;
+        }
+        .asset-pending {
+            opacity: 0.6;
+        }
     </style>
     
-    @if (Asset.HasThumbnails)
-    {
-        @if (Asset.Type == "VIDEO")
+    <div class="@(Asset.SyncStatus == AssetSyncStatus.Pending ? "asset-pending" : "") h-100 w-100">
+        @if (Asset.HasThumbnails || Asset.SyncStatus == AssetSyncStatus.Pending)
         {
-            <div class="video-preview-container">
-                <img src="@Asset.ThumbnailUrl" alt="@Asset.FileName" class="asset-card-image thumbnail" loading="lazy" />
-                <video @ref="_videoRef" src="@Asset.ContentUrl" muted loop class="asset-card-image preview-video" preload="metadata" playsinline></video>
-            </div>
+            @if (Asset.Type == "VIDEO")
+            {
+                <div class="video-preview-container">
+                    <img src="@Asset.ThumbnailUrl" alt="@Asset.FileName" class="asset-card-image thumbnail" loading="lazy" />
+                    <video @ref="_videoRef" src="@Asset.ContentUrl" muted loop class="asset-card-image preview-video" preload="metadata" playsinline></video>
+                </div>
+            }
+            else
+            {
+                <img src="@Asset.ThumbnailUrl" alt="@Asset.FileName" class="asset-card-image" loading="lazy" />
+            }
         }
         else
         {
-            <img src="@Asset.ThumbnailUrl" alt="@Asset.FileName" class="asset-card-image" loading="lazy" />
+            <div class="d-flex align-center justify-center w-100 h-100">
+                <MudIcon Icon="@GetAssetIcon(Asset.Type)" Size="Size.Large" Color="Color.Default" />
+            </div>
         }
-    }
-    else
-    {
-        <div class="d-flex align-center justify-center w-100 h-100">
-            <MudIcon Icon="@GetAssetIcon(Asset.Type)" Size="Size.Large" Color="Color.Default" />
-        </div>
-    }
+    </div>
+
+    <div class="sync-status-icon">
+        @if (Asset.SyncStatus == AssetSyncStatus.Synced)
+        {
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" />
+        }
+        else if (Asset.SyncStatus == AssetSyncStatus.Pending)
+        {
+            <MudTooltip Text="Pendiente de sincronizar">
+                <MudIcon Icon="@Icons.Material.Filled.CloudUpload" Size="Size.Small" Color="Color.Default" />
+            </MudTooltip>
+        }
+    </div>
 
     @if (Asset.Type != "IMAGE")
     {

@@ -1,3 +1,5 @@
+using PhotoHub.Blazor.Shared.Models;
+
 namespace PhotoHub.API.Features.Timeline;
 
 public class TimelineResponse
@@ -14,5 +16,6 @@ public class TimelineResponse
     public string Checksum { get; set; } = string.Empty;
     public bool HasExif { get; set; }
     public bool HasThumbnails { get; set; }
+    public AssetSyncStatus SyncStatus { get; set; }
 }
 

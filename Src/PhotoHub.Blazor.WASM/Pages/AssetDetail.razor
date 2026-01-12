@@ -93,7 +93,7 @@ else if (_asset != null)
                            Size="Size.Large"
                            OnClick="NavigatePrev"
                            OnClickStopPropagation="true"
-                           Disabled="@(_prevId == null)" />
+                           Disabled="@(_prevAsset == null)" />
 
             @if (_asset.Type == "VIDEO")
             {
@@ -117,7 +117,7 @@ else if (_asset != null)
                            Size="Size.Large"
                            OnClick="NavigateNext"
                            OnClickStopPropagation="true"
-                           Disabled="@(_nextId == null)" />
+                           Disabled="@(_nextAsset == null)" />
         </div>
 
         <div class="asset-info-drawer @(_infoOpen ? "" : "closed")">
@@ -234,15 +234,16 @@ else
 
 @code {
     [Parameter] public int AssetId { get; set; }
+    [SupplyParameterFromQuery] public string? Path { get; set; }
     
     private PhotoHub.Blazor.Shared.Models.AssetDetail? _asset;
     private bool _loading = true;
     private bool _infoOpen = false;
     private bool _toolbarVisible = true;
     
-    private int? _prevId;
-    private int? _nextId;
-    private List<int> _allIds = new();
+    private TimelineItem? _prevAsset;
+    private TimelineItem? _nextAsset;
+    private List<TimelineItem> _allAssets = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -286,26 +287,32 @@ else
                                        Color="Color.Inherit" OnClick="ToggleInfo" />
                     </MudTooltip>
                     
-                    <MudTooltip Text="Favorito">
-                        <MudToggleIconButton ToggledIcon="@Icons.Material.Filled.Favorite" 
-                                             Icon="@Icons.Material.Outlined.FavoriteBorder" 
-                                             Color="Color.Inherit" ToggledColor="Color.Error" />
-                    </MudTooltip>
+                    @if (_asset != null && _asset.Id > 0)
+                    {
+                        <MudTooltip Text="Favorito">
+                            <MudToggleIconButton ToggledIcon="@Icons.Material.Filled.Favorite" 
+                                                 Icon="@Icons.Material.Outlined.FavoriteBorder" 
+                                                 Color="Color.Inherit" ToggledColor="Color.Error" />
+                        </MudTooltip>
+                    }
 
                     <MudTooltip Text="Descargar">
                         <MudIconButton Icon="@Icons.Material.Outlined.Download" Color="Color.Inherit" />
                     </MudTooltip>
 
-                    <MudTooltip Text="Eliminar">
-                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Inherit" />
-                    </MudTooltip>
+                    @if (_asset != null && _asset.Id > 0)
+                    {
+                        <MudTooltip Text="Eliminar">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Inherit" />
+                        </MudTooltip>
 
-                    <MudMenu Icon="@Icons.Material.Outlined.MoreVert" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
-                        <MudMenuItem Icon="@Icons.Material.Outlined.Edit">Editar fecha y hora</MudMenuItem>
-                        <MudMenuItem Icon="@Icons.Material.Outlined.LocationOn">Editar ubicación</MudMenuItem>
-                        <MudMenuItem Icon="@Icons.Material.Outlined.Add">Añadir a álbum</MudMenuItem>
-                        <MudMenuItem Icon="@Icons.Material.Outlined.Archive">Archivar</MudMenuItem>
-                    </MudMenu>
+                        <MudMenu Icon="@Icons.Material.Outlined.MoreVert" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                            <MudMenuItem Icon="@Icons.Material.Outlined.Edit">Editar fecha y hora</MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Outlined.LocationOn">Editar ubicación</MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Outlined.Add">Añadir a álbum</MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Outlined.Archive">Archivar</MudMenuItem>
+                        </MudMenu>
+                    }
                 </div>
             </text>
         );
@@ -316,12 +323,21 @@ else
         try
         {
             _loading = true;
-            _asset = await AssetService.GetAssetDetailAsync(AssetId);
-            
-            if (_allIds.Count == 0)
+            if (AssetId > 0)
             {
-                var timeline = await AssetService.GetTimelineAsync();
-                _allIds = timeline.Select(a => a.Id).ToList();
+                _asset = await AssetService.GetAssetDetailAsync(AssetId);
+            }
+            else if (!string.IsNullOrEmpty(Path))
+            {
+                _asset = await AssetService.GetPendingAssetDetailAsync(Path);
+            }
+            
+            // Actualizar el navbar una vez cargado el asset para habilitar botones
+            UpdateNavbar();
+            
+            if (_allAssets.Count == 0)
+            {
+                _allAssets = await AssetService.GetTimelineAsync();
             }
             
             UpdateNavigation();
@@ -338,24 +354,46 @@ else
 
     private void UpdateNavigation()
     {
-        var currentIndex = _allIds.IndexOf(AssetId);
+        int currentIndex = -1;
+        if (AssetId > 0)
+        {
+            currentIndex = _allAssets.FindIndex(a => a.Id == AssetId);
+        }
+        else if (!string.IsNullOrEmpty(Path))
+        {
+            currentIndex = _allAssets.FindIndex(a => a.FullPath == Path);
+        }
+
         if (currentIndex != -1)
         {
-            _prevId = currentIndex > 0 ? _allIds[currentIndex - 1] : null;
-            _nextId = currentIndex < _allIds.Count - 1 ? _allIds[currentIndex + 1] : null;
+            _prevAsset = currentIndex > 0 ? _allAssets[currentIndex - 1] : null;
+            _nextAsset = currentIndex < _allAssets.Count - 1 ? _allAssets[currentIndex + 1] : null;
         }
     }
 
     private void NavigatePrev()
     {
-        if (_prevId.HasValue)
-            Navigation.NavigateTo($"/asset/{_prevId.Value}");
+        NavigateToAsset(_prevAsset);
     }
 
     private void NavigateNext()
     {
-        if (_nextId.HasValue)
-            Navigation.NavigateTo($"/asset/{_nextId.Value}");
+        NavigateToAsset(_nextAsset);
+    }
+
+    private void NavigateToAsset(TimelineItem? asset)
+    {
+        if (asset == null) return;
+
+        if (asset.SyncStatus == AssetSyncStatus.Synced)
+        {
+            Navigation.NavigateTo($"/asset/{asset.Id}");
+        }
+        else
+        {
+            var encodedPath = System.Net.WebUtility.UrlEncode(asset.FullPath);
+            Navigation.NavigateTo($"/asset/0?path={encodedPath}");
+        }
     }
 
     private void HandleKeyDown(KeyboardEventArgs e)
@@ -389,7 +427,7 @@ else
     private string GetNavButtonClass(bool isPrev)
     {
         var baseClass = isPrev ? "nav-button prev" : "nav-button next";
-        var hasId = isPrev ? _prevId != null : _nextId != null;
-        return _toolbarVisible && hasId ? baseClass : $"{baseClass} hidden";
+        var hasAsset = isPrev ? _prevAsset != null : _nextAsset != null;
+        return _toolbarVisible && hasAsset ? baseClass : $"{baseClass} hidden";
     }
 }
