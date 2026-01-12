@@ -9,69 +9,109 @@ using PhotoHub.API.Shared.Services;
 using PhotoHub.Blazor.Shared.Models;
 using Scalar.AspNetCore;
 
-namespace PhotoHub.API.Features.ScanAssets;
+namespace PhotoHub.API.Features.IndexAssets;
 
-public class ScanAssetsEndpoint : IEndpoint
+public class IndexAssetsEndpoint : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/assets/scan/stream", HandleStream)
-        .WithName("ScanAssetsStream")
+        var serviceProvider = app.ServiceProvider;
+        app.MapGet("/api/assets/index/stream", (
+            [FromServices] DirectoryScanner directoryScanner,
+            [FromServices] FileHashService hashService,
+            [FromServices] ExifExtractorService exifService,
+            [FromServices] ThumbnailGeneratorService thumbnailService,
+            [FromServices] MediaRecognitionService mediaRecognitionService,
+            [FromServices] IMlJobService mlJobService,
+            [FromServices] SettingsService settingsService,
+            [FromServices] ApplicationDbContext dbContext,
+            CancellationToken cancellationToken) => HandleStream(directoryScanner, hashService, exifService, thumbnailService, mediaRecognitionService, mlJobService, settingsService, dbContext, serviceProvider, cancellationToken))
+        .WithName("IndexAssetsStream")
         .WithTags("Assets")
-        .WithDescription("Streams the scanning process progress");
+        .WithDescription("Streams the scanning process progress for the internal assets directory");
 
-        app.MapGet("/api/assets/scan", Handle)
+        app.MapGet("/api/assets/index", Handle)
         .CodeSample(
-                codeSample: "curl -X GET \"http://localhost:5000/api/assets/scan?directoryPath=C:\\Photos\" -H \"Accept: application/json\"",
+                codeSample: "curl -X GET \"http://localhost:5000/api/assets/scan\" -H \"Accept: application/json\"",
                 label: "cURL Example")
-        .WithName("ScanAssets")
+        .WithName("IndexAssets")
         .WithTags("Assets")
-        .WithDescription("Scans a directory and returns the list of found media files (images and videos)")
+        .WithDescription("Scans the internal assets directory, extracts metadata, generates thumbnails, and updates the database with all found media files. Supports images (JPG, PNG, etc.) and videos (MP4, AVI, etc.)")
         .AddOpenApiOperationTransformer((operation, context, ct) =>
         {
-            operation.Summary = "Scans a media directory";
-            operation.Description = "This endpoint recursively scans a specified directory, extracts metadata, generates thumbnails, and updates the database with all found media files. Supports images (JPG, PNG, etc.) and videos (MP4, AVI, etc.)";
+            operation.Summary = "Scans the internal assets directory";
+            operation.Description = "This endpoint recursively scans the internal assets directory (ASSETS_PATH), extracts metadata, generates thumbnails, and updates the database with all found media files. Supports images (JPG, PNG, etc.) and videos (MP4, AVI, etc.)";
             return Task.CompletedTask;
         });
     }
 
-    private async IAsyncEnumerable<ScanProgressUpdate> HandleStream(
-        [FromServices] DirectoryScanner directoryScanner,
-        [FromServices] FileHashService hashService,
-        [FromServices] ExifExtractorService exifService,
-        [FromServices] ThumbnailGeneratorService thumbnailService,
-        [FromServices] MediaRecognitionService mediaRecognitionService,
-        [FromServices] IMlJobService mlJobService,
-        [FromServices] ApplicationDbContext dbContext,
-        [FromQuery] string directoryPath,
+    private async IAsyncEnumerable<IndexProgressUpdate> HandleStream(
+        DirectoryScanner directoryScanner,
+        FileHashService hashService,
+        ExifExtractorService exifService,
+        ThumbnailGeneratorService thumbnailService,
+        MediaRecognitionService mediaRecognitionService,
+        IMlJobService mlJobService,
+        SettingsService settingsService,
+        ApplicationDbContext dbContext,
+        IServiceProvider serviceProvider,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var channel = Channel.CreateUnbounded<ScanProgressUpdate>();
-        var scanStartTime = DateTime.UtcNow;
-        var stats = new ScanStatistics();
+        var channel = Channel.CreateUnbounded<IndexProgressUpdate>();
+        var indexStartTime = DateTime.UtcNow;
+        var stats = new IndexStatistics();
 
         // Background task to perform the scan
         _ = Task.Run(async () =>
         {
             try
             {
-                await channel.Writer.WriteAsync(new ScanProgressUpdate { Message = "Iniciando descubrimiento de archivos...", Percentage = 0 }, cancellationToken);
+                using var scope = serviceProvider.CreateScope();
+                var scopedSettingsService = scope.ServiceProvider.GetRequiredService<SettingsService>();
+                var scopedDbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                var scopedHashService = scope.ServiceProvider.GetRequiredService<FileHashService>();
+                var scopedExifService = scope.ServiceProvider.GetRequiredService<ExifExtractorService>();
+                var scopedMediaRecognitionService = scope.ServiceProvider.GetRequiredService<MediaRecognitionService>();
+                var scopedThumbnailService = scope.ServiceProvider.GetRequiredService<ThumbnailGeneratorService>();
+                var scopedMlJobService = scope.ServiceProvider.GetRequiredService<IMlJobService>();
+                
+                // Obtener la ruta interna del NAS (ASSETS_PATH)
+                var directoryPath = scopedSettingsService.GetInternalAssetsPath();
+                Console.WriteLine($"[SCAN] Indexando directorio interno: {directoryPath}");
+                
+                if (!Directory.Exists(directoryPath))
+                {
+                    await channel.Writer.WriteAsync(new IndexProgressUpdate 
+                    { 
+                        Message = $"Error: El directorio interno no existe: {directoryPath}", 
+                        IsCompleted = true 
+                    }, cancellationToken);
+                    return;
+                }
+                
+                await channel.Writer.WriteAsync(new IndexProgressUpdate { Message = "Iniciando descubrimiento de archivos...", Percentage = 0 }, cancellationToken);
                 
                 // STEP 1: Recursive file discovery
                 var scannedFilesList = (await directoryScanner.ScanDirectoryAsync(directoryPath, cancellationToken)).ToList();
                 stats.TotalFilesFound = scannedFilesList.Count;
                 
-                await channel.Writer.WriteAsync(new ScanProgressUpdate { Message = $"Descubiertos {stats.TotalFilesFound} archivos. Procesando...", Percentage = 10, Statistics = MapToBlazorStats(stats) }, cancellationToken);
+                await channel.Writer.WriteAsync(new IndexProgressUpdate { Message = $"Descubiertos {stats.TotalFilesFound} archivos. Procesando...", Percentage = 10, Statistics = MapToBlazorStats(stats) }, cancellationToken);
 
                 // Load existing assets for differential comparison
-                var existingAssetsByChecksum = await dbContext.Assets
-                    .ToDictionaryAsync(a => a.Checksum, a => a, cancellationToken);
+                // Manejar duplicados: si hay múltiples assets con el mismo checksum, tomar el más reciente
+                var allAssets = await dbContext.Assets.ToListAsync(cancellationToken);
+                var existingAssetsByChecksum = allAssets
+                    .Where(a => !string.IsNullOrEmpty(a.Checksum))
+                    .GroupBy(a => a.Checksum)
+                    .ToDictionary(g => g.Key, g => g.OrderByDescending(a => a.ScannedAt).First());
                 
-                var existingAssetsByPath = await dbContext.Assets
-                    .ToDictionaryAsync(a => a.FullPath, a => a, cancellationToken);
+                var existingAssetsByPath = allAssets
+                    .Where(a => !string.IsNullOrEmpty(a.FullPath))
+                    .GroupBy(a => a.FullPath)
+                    .ToDictionary(g => g.Key, g => g.OrderByDescending(a => a.ScannedAt).First());
                 
                 // STEP 2 & 3: Process files
-                var scanContext = new ScanContext
+                var indexContext = new IndexContext
                 {
                     AssetsToCreate = new List<Asset>(),
                     AssetsToUpdate = new List<Asset>(),
@@ -85,10 +125,10 @@ public class ScanAssetsEndpoint : IEndpoint
                 foreach (var file in scannedFilesList)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    scanContext.AssetsToDelete.Add(file.FullPath);
-                    await EnsureFolderStructureForFileAsync(dbContext, file.FullPath, scanContext.ProcessedDirectories, cancellationToken);
+                    indexContext.AssetsToDelete.Add(file.FullPath);
+                    await EnsureFolderStructureForFileAsync(dbContext, file.FullPath, indexContext.ProcessedDirectories, cancellationToken);
                     
-                    var changeResult = await VerifyFileChangesAsync(file, existingAssetsByPath, existingAssetsByChecksum, hashService, dbContext, stats, cancellationToken);
+                    var changeResult = await VerifyFileChangesAsync(file, existingAssetsByPath, existingAssetsByChecksum, hashService, dbContext, stats, settingsService, cancellationToken);
                     
                     if (!changeResult.ShouldSkip)
                     {
@@ -102,24 +142,24 @@ public class ScanAssetsEndpoint : IEndpoint
                         
                         if (!isNew)
                         {
-                            scanContext.AssetsToUpdate.Add(asset);
-                            scanContext.AllScannedAssets.Add(asset);
+                            indexContext.AssetsToUpdate.Add(asset);
+                            indexContext.AllScannedAssets.Add(asset);
                         }
                         else
                         {
-                            asset.ScannedAt = scanStartTime;
-                            scanContext.AssetsToCreate.Add(asset);
+                            asset.ScannedAt = indexStartTime;
+                            indexContext.AssetsToCreate.Add(asset);
                         }
                     }
                     else if (changeResult.ExistingAsset != null)
                     {
-                        scanContext.AllScannedAssets.Add(changeResult.ExistingAsset);
+                        indexContext.AllScannedAssets.Add(changeResult.ExistingAsset);
                     }
 
                     processedCount++;
                     if (processedCount % 10 == 0 || processedCount == scannedFilesList.Count)
                     {
-                        await channel.Writer.WriteAsync(new ScanProgressUpdate 
+                        await channel.Writer.WriteAsync(new IndexProgressUpdate 
                         { 
                             Message = $"Procesando archivo {processedCount} de {stats.TotalFilesFound}...", 
                             Percentage = 10 + (processedCount * 40.0 / scannedFilesList.Count),
@@ -129,16 +169,16 @@ public class ScanAssetsEndpoint : IEndpoint
                 }
 
                 // STEP 4: Database operations and thumbnail generation
-                await channel.Writer.WriteAsync(new ScanProgressUpdate { Message = "Guardando cambios y generando miniaturas...", Percentage = 50, Statistics = MapToBlazorStats(stats) }, cancellationToken);
+                await channel.Writer.WriteAsync(new IndexProgressUpdate { Message = "Guardando cambios y generando miniaturas...", Percentage = 50, Statistics = MapToBlazorStats(stats) }, cancellationToken);
                 
-                await ProcessDatabaseOperationsWithProgressAsync(scanContext, dbContext, thumbnailService, mediaRecognitionService, mlJobService, channel.Writer, stats, cancellationToken);
+                await ProcessDatabaseOperationsWithProgressAsync(indexContext, dbContext, thumbnailService, mediaRecognitionService, mlJobService, channel.Writer, stats, cancellationToken);
 
-                stats.ScanCompletedAt = DateTime.UtcNow;
-                stats.ScanDuration = stats.ScanCompletedAt - scanStartTime;
+                stats.IndexCompletedAt = DateTime.UtcNow;
+                stats.IndexDuration = stats.IndexCompletedAt - indexStartTime;
                 
-                await channel.Writer.WriteAsync(new ScanProgressUpdate 
+                await channel.Writer.WriteAsync(new IndexProgressUpdate 
                 { 
-                    Message = "Escaneo completado con éxito.", 
+                    Message = "Indexación completada con éxito.", 
                     Percentage = 100, 
                     Statistics = MapToBlazorStats(stats),
                     IsCompleted = true
@@ -146,7 +186,7 @@ public class ScanAssetsEndpoint : IEndpoint
             }
             catch (Exception ex)
             {
-                await channel.Writer.WriteAsync(new ScanProgressUpdate { Message = $"Error: {ex.Message}", IsCompleted = true }, cancellationToken);
+                await channel.Writer.WriteAsync(new IndexProgressUpdate { Message = $"Error: {ex.Message}", IsCompleted = true }, cancellationToken);
             }
             finally
             {
@@ -161,9 +201,9 @@ public class ScanAssetsEndpoint : IEndpoint
         }
     }
 
-    private PhotoHub.Blazor.Shared.Models.ScanStatistics MapToBlazorStats(ScanStatistics stats)
+    private PhotoHub.Blazor.Shared.Models.IndexStatistics MapToBlazorStats(IndexStatistics stats)
     {
-        return new PhotoHub.Blazor.Shared.Models.ScanStatistics
+        return new PhotoHub.Blazor.Shared.Models.IndexStatistics
         {
             TotalFilesFound = stats.TotalFilesFound,
             NewFiles = stats.NewFiles,
@@ -178,24 +218,24 @@ public class ScanAssetsEndpoint : IEndpoint
             MlJobsQueued = stats.MlJobsQueued,
             ThumbnailsGenerated = stats.ThumbnailsGenerated,
             ThumbnailsRegenerated = stats.ThumbnailsRegenerated,
-            ScanCompletedAt = stats.ScanCompletedAt,
-            ScanDuration = stats.ScanDuration
+            IndexCompletedAt = stats.IndexCompletedAt,
+            IndexDuration = stats.IndexDuration
         };
     }
 
     private async Task ProcessDatabaseOperationsWithProgressAsync(
-        ScanContext context,
+        IndexContext context,
         ApplicationDbContext dbContext,
         ThumbnailGeneratorService thumbnailService,
         MediaRecognitionService mediaRecognitionService,
         IMlJobService mlJobService,
-        ChannelWriter<ScanProgressUpdate> writer,
-        ScanStatistics apiStats,
+        ChannelWriter<IndexProgressUpdate> writer,
+        IndexStatistics apiStats,
         CancellationToken cancellationToken)
     {
         // STEP 4a: Cleanup - Remove orphaned assets
         await RemoveOrphanedAssetsAsync(context.AssetsToDelete, dbContext, apiStats, cancellationToken);
-        await writer.WriteAsync(new ScanProgressUpdate { Message = "Limpieza de archivos huérfanos completada.", Percentage = 60, Statistics = MapToBlazorStats(apiStats) }, cancellationToken);
+        await writer.WriteAsync(new IndexProgressUpdate { Message = "Limpieza de archivos huérfanos completada.", Percentage = 60, Statistics = MapToBlazorStats(apiStats) }, cancellationToken);
 
         // STEP 4b & 4c: Insert new assets and generate thumbnails
         if (context.AssetsToCreate.Any())
@@ -234,7 +274,7 @@ public class ScanAssetsEndpoint : IEndpoint
                 count++;
                 if (count % 5 == 0 || count == context.AssetsToCreate.Count)
                 {
-                    await writer.WriteAsync(new ScanProgressUpdate 
+                    await writer.WriteAsync(new IndexProgressUpdate 
                     { 
                         Message = $"Generando miniaturas para nuevos archivos ({count}/{context.AssetsToCreate.Count})...", 
                         Percentage = 60 + (count * 15.0 / context.AssetsToCreate.Count),
@@ -245,7 +285,7 @@ public class ScanAssetsEndpoint : IEndpoint
             await dbContext.SaveChangesAsync(cancellationToken);
         }
         
-        await writer.WriteAsync(new ScanProgressUpdate { Message = "Nuevos archivos procesados.", Percentage = 75, Statistics = MapToBlazorStats(apiStats) }, cancellationToken);
+        await writer.WriteAsync(new IndexProgressUpdate { Message = "Nuevos archivos procesados.", Percentage = 75, Statistics = MapToBlazorStats(apiStats) }, cancellationToken);
 
         // STEP 4d & 4e: Update existing assets and regenerate thumbnails
         if (context.AssetsToUpdate.Any())
@@ -273,7 +313,7 @@ public class ScanAssetsEndpoint : IEndpoint
                 count++;
                 if (count % 5 == 0 || count == context.AssetsToUpdate.Count)
                 {
-                    await writer.WriteAsync(new ScanProgressUpdate 
+                    await writer.WriteAsync(new IndexProgressUpdate 
                     { 
                         Message = $"Actualizando miniaturas ({count}/{context.AssetsToUpdate.Count})...", 
                         Percentage = 75 + (count * 10.0 / context.AssetsToUpdate.Count),
@@ -284,7 +324,7 @@ public class ScanAssetsEndpoint : IEndpoint
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        await writer.WriteAsync(new ScanProgressUpdate { Message = "Archivos actualizados.", Percentage = 85, Statistics = MapToBlazorStats(apiStats) }, cancellationToken);
+        await writer.WriteAsync(new IndexProgressUpdate { Message = "Archivos actualizados.", Percentage = 85, Statistics = MapToBlazorStats(apiStats) }, cancellationToken);
 
         // STEP 4f: Verify thumbnails for ALL scanned assets (those that didn't need update but might miss thumbnails)
         var unchangedAssets = context.AllScannedAssets
@@ -315,7 +355,7 @@ public class ScanAssetsEndpoint : IEndpoint
                 count++;
                 if (count % 10 == 0 || count == unchangedAssets.Count)
                 {
-                    await writer.WriteAsync(new ScanProgressUpdate 
+                    await writer.WriteAsync(new IndexProgressUpdate 
                     { 
                         Message = $"Verificando miniaturas existentes ({count}/{unchangedAssets.Count})...", 
                         Percentage = 85 + (count * 10.0 / unchangedAssets.Count),
@@ -327,7 +367,7 @@ public class ScanAssetsEndpoint : IEndpoint
         }
 
         await RemoveOrphanedFoldersAsync(context.ProcessedDirectories, dbContext, apiStats, cancellationToken);
-        await writer.WriteAsync(new ScanProgressUpdate { Message = "Limpieza de carpetas completada.", Percentage = 98, Statistics = MapToBlazorStats(apiStats) }, cancellationToken);
+        await writer.WriteAsync(new IndexProgressUpdate { Message = "Limpieza de carpetas completada.", Percentage = 98, Statistics = MapToBlazorStats(apiStats) }, cancellationToken);
     }
 
 
@@ -338,27 +378,42 @@ public class ScanAssetsEndpoint : IEndpoint
         [FromServices] ThumbnailGeneratorService thumbnailService,
         [FromServices] MediaRecognitionService mediaRecognitionService,
         [FromServices] IMlJobService mlJobService,
+        [FromServices] SettingsService settingsService,
         [FromServices] ApplicationDbContext dbContext,
-        string directoryPath,
         CancellationToken cancellationToken)
     {
-        var scanStartTime = DateTime.UtcNow;
-        var stats = new ScanStatistics();
+        var indexStartTime = DateTime.UtcNow;
+        var stats = new IndexStatistics();
         
         try
         {
+            // Obtener la ruta interna del NAS (ASSETS_PATH)
+            var directoryPath = settingsService.GetInternalAssetsPath();
+            Console.WriteLine($"[SCAN] Indexando directorio interno: {directoryPath}");
+            
+            if (!Directory.Exists(directoryPath))
+            {
+                return Results.NotFound(new { error = $"El directorio interno no existe: {directoryPath}" });
+            }
+            
             // STEP 1: Recursive file discovery
             var scannedFiles = await DiscoverFilesAsync(directoryScanner, directoryPath, stats, cancellationToken);
             
             // Load existing assets for differential comparison
-            var existingAssetsByChecksum = await dbContext.Assets
-                .ToDictionaryAsync(a => a.Checksum, a => a, cancellationToken);
+            // Manejar duplicados: si hay múltiples assets con el mismo checksum, tomar el más reciente
+            var allAssets = await dbContext.Assets.ToListAsync(cancellationToken);
+            var existingAssetsByChecksum = allAssets
+                .Where(a => !string.IsNullOrEmpty(a.Checksum))
+                .GroupBy(a => a.Checksum)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(a => a.ScannedAt).First());
             
-            var existingAssetsByPath = await dbContext.Assets
-                .ToDictionaryAsync(a => a.FullPath, a => a, cancellationToken);
+            var existingAssetsByPath = allAssets
+                .Where(a => !string.IsNullOrEmpty(a.FullPath))
+                .GroupBy(a => a.FullPath)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(a => a.ScannedAt).First());
             
             // STEP 2 & 3: Process files (change detection, EXIF extraction, recognition)
-            var scanContext = await ProcessFilesAsync(
+            var indexContext = await ProcessFilesAsync(
                 scannedFiles,
                 existingAssetsByChecksum,
                 existingAssetsByPath,
@@ -366,28 +421,30 @@ public class ScanAssetsEndpoint : IEndpoint
                 hashService,
                 exifService,
                 mediaRecognitionService,
-                scanStartTime,
+                settingsService,
+                indexStartTime,
                 stats,
                 cancellationToken);
             
             // STEP 4: Database operations and thumbnail generation (atomic transaction)
             await ProcessDatabaseOperationsAsync(
-                scanContext,
+                indexContext,
                 dbContext,
                 thumbnailService,
                 mediaRecognitionService,
                 mlJobService,
+                settingsService,
                 stats,
                 cancellationToken);
             
             // STEP 6: Finalization
-            stats.ScanCompletedAt = DateTime.UtcNow;
-            stats.ScanDuration = stats.ScanCompletedAt - scanStartTime;
+            stats.IndexCompletedAt = DateTime.UtcNow;
+            stats.IndexDuration = stats.IndexCompletedAt - indexStartTime;
             
-            var response = new ScanAssetsResponse
+            var response = new IndexAssetsResponse
             {
                 Statistics = MapToBlazorStats(stats),
-                AssetsProcessed = scanContext.AssetsToCreate.Count + scanContext.AssetsToUpdate.Count,
+                AssetsProcessed = indexContext.AssetsToCreate.Count + indexContext.AssetsToUpdate.Count,
                 Message = $"Scan completed successfully. Processed {stats.NewFiles} new, {stats.UpdatedFiles} updated, {stats.OrphanedFilesRemoved} files and {stats.OrphanedFoldersRemoved} folders removed. Generated {stats.ThumbnailsGenerated} new thumbnails, regenerated {stats.ThumbnailsRegenerated} missing thumbnails."
             };
             
@@ -414,7 +471,7 @@ public class ScanAssetsEndpoint : IEndpoint
     private async Task<IEnumerable<ScannedFile>> DiscoverFilesAsync(
         DirectoryScanner directoryScanner,
         string directoryPath,
-        ScanStatistics stats,
+        IndexStatistics stats,
         CancellationToken cancellationToken)
     {
         var scannedFiles = await directoryScanner.ScanDirectoryAsync(directoryPath, cancellationToken);
@@ -423,7 +480,7 @@ public class ScanAssetsEndpoint : IEndpoint
     }
 
     // STEP 2 & 3: Process files (change detection, EXIF extraction, recognition)
-    private async Task<ScanContext> ProcessFilesAsync(
+    private async Task<IndexContext> ProcessFilesAsync(
         IEnumerable<ScannedFile> scannedFiles,
         Dictionary<string, Asset> existingAssetsByChecksum,
         Dictionary<string, Asset> existingAssetsByPath,
@@ -431,11 +488,12 @@ public class ScanAssetsEndpoint : IEndpoint
         FileHashService hashService,
         ExifExtractorService exifService,
         MediaRecognitionService mediaRecognitionService,
-        DateTime scanStartTime,
-        ScanStatistics stats,
+        SettingsService settingsService,
+        DateTime indexStartTime,
+        IndexStatistics stats,
         CancellationToken cancellationToken)
     {
-        var context = new ScanContext
+        var context = new IndexContext
         {
             AssetsToCreate = new List<Asset>(),
             AssetsToUpdate = new List<Asset>(),
@@ -461,6 +519,7 @@ public class ScanAssetsEndpoint : IEndpoint
                 hashService,
                 dbContext,
                 stats,
+                settingsService,
                 cancellationToken);
             
             if (changeResult.ShouldSkip)
@@ -504,7 +563,7 @@ public class ScanAssetsEndpoint : IEndpoint
             }
             else
             {
-                asset.ScannedAt = scanStartTime;
+                asset.ScannedAt = indexStartTime;
             }
         }
         
@@ -531,10 +590,14 @@ public class ScanAssetsEndpoint : IEndpoint
         Dictionary<string, Asset> existingAssetsByChecksum,
         FileHashService hashService,
         ApplicationDbContext dbContext,
-        ScanStatistics stats,
+        IndexStatistics stats,
+        SettingsService settingsService,
         CancellationToken cancellationToken)
     {
-        var existingByPath = existingAssetsByPath.GetValueOrDefault(file.FullPath);
+        // Normalizar la ruta del archivo indexado si está en la biblioteca gestionada para comparar con la BD
+        var dbPath = await settingsService.VirtualizePathAsync(file.FullPath);
+
+        var existingByPath = existingAssetsByPath.GetValueOrDefault(dbPath);
         var needsFullCheck = existingByPath == null || 
             hashService.HasFileChanged(file.FullPath, existingByPath.FileSize, existingByPath.ModifiedDate);
         
@@ -554,10 +617,10 @@ public class ScanAssetsEndpoint : IEndpoint
         Asset? asset;
         bool isNew = false;
         
-        if (existingByChecksum != null && existingByChecksum.FullPath != file.FullPath)
+        if (existingByChecksum != null && existingByChecksum.FullPath != dbPath)
         {
             // File was moved/renamed - update path
-            existingByChecksum.FullPath = file.FullPath;
+            existingByChecksum.FullPath = dbPath;
             existingByChecksum.FileName = file.FileName;
             existingByChecksum.ModifiedDate = file.ModifiedDate;
             existingByChecksum.FileSize = file.FileSize;
@@ -582,7 +645,7 @@ public class ScanAssetsEndpoint : IEndpoint
             asset = new Asset
             {
                 FileName = file.FileName,
-                FullPath = file.FullPath,
+                FullPath = dbPath,
                 FileSize = file.FileSize,
                 Checksum = checksum,
                 Type = file.AssetType,
@@ -610,7 +673,7 @@ public class ScanAssetsEndpoint : IEndpoint
         Asset asset,
         string filePath,
         ExifExtractorService exifService,
-        ScanStatistics stats,
+        IndexStatistics stats,
         CancellationToken cancellationToken)
     {
         var extractedExif = await exifService.ExtractExifAsync(filePath, cancellationToken);
@@ -626,7 +689,7 @@ public class ScanAssetsEndpoint : IEndpoint
         Asset asset,
         string filePath,
         MediaRecognitionService mediaRecognitionService,
-        ScanStatistics stats,
+        IndexStatistics stats,
         CancellationToken cancellationToken)
     {
         if (asset.Exif == null)
@@ -650,12 +713,13 @@ public class ScanAssetsEndpoint : IEndpoint
 
     // STEP 4: Database operations and thumbnail generation (atomic transaction)
     private async Task ProcessDatabaseOperationsAsync(
-        ScanContext context,
+        IndexContext context,
         ApplicationDbContext dbContext,
         ThumbnailGeneratorService thumbnailService,
         MediaRecognitionService mediaRecognitionService,
         IMlJobService mlJobService,
-        ScanStatistics stats,
+        SettingsService settingsService,
+        IndexStatistics stats,
         CancellationToken cancellationToken)
     {
         using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -688,14 +752,21 @@ public class ScanAssetsEndpoint : IEndpoint
                 stats,
                 cancellationToken);
             
-            // STEP 5: Cleanup - Remove orphaned assets
+            // STEP 5: Cleanup - Remove duplicate assets (same checksum)
+            await RemoveDuplicateAssetsAsync(
+                dbContext,
+                stats,
+                settingsService,
+                cancellationToken);
+            
+            // STEP 5b: Cleanup - Remove orphaned assets
             await RemoveOrphanedAssetsAsync(
                 context.AssetsToDelete,
                 dbContext,
                 stats,
                 cancellationToken);
             
-            // STEP 5b: Cleanup - Remove orphaned folders
+            // STEP 5c: Cleanup - Remove orphaned folders
             await RemoveOrphanedFoldersAsync(
                 context.ProcessedDirectories,
                 dbContext,
@@ -718,7 +789,7 @@ public class ScanAssetsEndpoint : IEndpoint
         ThumbnailGeneratorService thumbnailService,
         MediaRecognitionService mediaRecognitionService,
         IMlJobService mlJobService,
-        ScanStatistics stats,
+        IndexStatistics stats,
         CancellationToken cancellationToken)
     {
         if (!assetsToCreate.Any())
@@ -760,7 +831,7 @@ public class ScanAssetsEndpoint : IEndpoint
         List<Asset> assets,
         ApplicationDbContext dbContext,
         ThumbnailGeneratorService thumbnailService,
-        ScanStatistics stats,
+        IndexStatistics stats,
         CancellationToken cancellationToken)
     {
         if (!assets.Any())
@@ -788,7 +859,7 @@ public class ScanAssetsEndpoint : IEndpoint
         ApplicationDbContext dbContext,
         MediaRecognitionService mediaRecognitionService,
         IMlJobService mlJobService,
-        ScanStatistics stats,
+        IndexStatistics stats,
         CancellationToken cancellationToken)
     {
         var imageAssets = assets.Where(a => a.Type == AssetType.IMAGE).ToList();
@@ -814,7 +885,7 @@ public class ScanAssetsEndpoint : IEndpoint
         List<Asset> assetsToUpdate,
         ApplicationDbContext dbContext,
         ThumbnailGeneratorService thumbnailService,
-        ScanStatistics stats,
+        IndexStatistics stats,
         CancellationToken cancellationToken)
     {
         if (!assetsToUpdate.Any())
@@ -835,7 +906,7 @@ public class ScanAssetsEndpoint : IEndpoint
         List<Asset> assets,
         ApplicationDbContext dbContext,
         ThumbnailGeneratorService thumbnailService,
-        ScanStatistics stats,
+        IndexStatistics stats,
         CancellationToken cancellationToken)
     {
         if (!assets.Any())
@@ -887,7 +958,7 @@ public class ScanAssetsEndpoint : IEndpoint
         List<Asset> assetsToUpdate,
         ApplicationDbContext dbContext,
         ThumbnailGeneratorService thumbnailService,
-        ScanStatistics stats,
+        IndexStatistics stats,
         CancellationToken cancellationToken)
     {
         var unchangedAssets = allScannedAssets
@@ -938,10 +1009,98 @@ public class ScanAssetsEndpoint : IEndpoint
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    private async Task RemoveDuplicateAssetsAsync(
+        ApplicationDbContext dbContext,
+        IndexStatistics stats,
+        SettingsService settingsService,
+        CancellationToken cancellationToken)
+    {
+        // Encontrar assets duplicados por checksum
+        var allAssets = await dbContext.Assets
+            .Where(a => !string.IsNullOrEmpty(a.Checksum))
+            .ToListAsync(cancellationToken);
+        
+        var duplicateGroups = allAssets
+            .GroupBy(a => a.Checksum)
+            .Where(g => g.Count() > 1)
+            .ToList();
+        
+        if (!duplicateGroups.Any())
+            return;
+        
+        var duplicatesToRemove = new List<Asset>();
+        
+        foreach (var group in duplicateGroups)
+        {
+            // Mantener el más reciente (por ScannedAt) o el que tiene ID más bajo si no tienen ScannedAt
+            var assetsInGroup = group.OrderByDescending(a => a.ScannedAt).ThenBy(a => a.Id).ToList();
+            var assetToKeep = assetsInGroup.First();
+            var duplicates = assetsInGroup.Skip(1).ToList();
+            
+            // Verificar que el asset a mantener tenga el archivo físico
+            var physicalPath = await settingsService.ResolvePhysicalPathAsync(assetToKeep.FullPath);
+            if (!File.Exists(physicalPath))
+            {
+                // Si el asset a mantener no tiene archivo, mantener el siguiente que sí tenga
+                var assetWithFile = assetsInGroup.FirstOrDefault(a =>
+                {
+                    var path = settingsService.ResolvePhysicalPathAsync(a.FullPath).Result;
+                    return File.Exists(path);
+                });
+                
+                if (assetWithFile != null)
+                {
+                    duplicatesToRemove.Add(assetToKeep);
+                    assetToKeep = assetWithFile;
+                    duplicates = assetsInGroup.Where(a => a.Id != assetToKeep.Id).ToList();
+                }
+            }
+            
+            duplicatesToRemove.AddRange(duplicates);
+            
+            // Si hay múltiples assets con el mismo checksum pero diferentes rutas, 
+            // actualizar el asset a mantener con la ruta más reciente
+            if (duplicates.Any())
+            {
+                var mostRecentPath = assetsInGroup
+                    .OrderByDescending(a => a.ScannedAt)
+                    .ThenByDescending(a => a.ModifiedDate)
+                    .First()
+                    .FullPath;
+                
+                if (assetToKeep.FullPath != mostRecentPath)
+                {
+                    assetToKeep.FullPath = mostRecentPath;
+                    assetToKeep.FileName = Path.GetFileName(mostRecentPath);
+                }
+            }
+        }
+        
+        if (duplicatesToRemove.Any())
+        {
+            // Eliminar thumbnails y EXIF de los duplicados
+            var duplicateIds = duplicatesToRemove.Select(a => a.Id).ToList();
+            var duplicateThumbnails = await dbContext.AssetThumbnails
+                .Where(t => duplicateIds.Contains(t.AssetId))
+                .ToListAsync(cancellationToken);
+            
+            var duplicateExifs = await dbContext.AssetExifs
+                .Where(e => duplicateIds.Contains(e.AssetId))
+                .ToListAsync(cancellationToken);
+            
+            dbContext.AssetThumbnails.RemoveRange(duplicateThumbnails);
+            dbContext.AssetExifs.RemoveRange(duplicateExifs);
+            dbContext.Assets.RemoveRange(duplicatesToRemove);
+            
+            stats.DuplicateAssetsRemoved = duplicatesToRemove.Count;
+            Console.WriteLine($"[SCAN] Eliminados {duplicatesToRemove.Count} assets duplicados");
+        }
+    }
+
     private async Task RemoveOrphanedAssetsAsync(
         HashSet<string> assetsToDelete,
         ApplicationDbContext dbContext,
-        ScanStatistics stats,
+        IndexStatistics stats,
         CancellationToken cancellationToken)
     {
         var allAssetPaths = await dbContext.Assets
@@ -976,7 +1135,7 @@ public class ScanAssetsEndpoint : IEndpoint
     private async Task RemoveOrphanedFoldersAsync(
         HashSet<string> processedDirectories,
         ApplicationDbContext dbContext,
-        ScanStatistics stats,
+        IndexStatistics stats,
         CancellationToken cancellationToken)
     {
         // Normalize processed directories for comparison
@@ -1107,7 +1266,7 @@ public class ScanAssetsEndpoint : IEndpoint
 }
 
 // Helper classes for refactoring
-internal class ScanContext
+internal class IndexContext
 {
     public List<Asset> AssetsToCreate { get; set; } = new();
     public List<Asset> AssetsToUpdate { get; set; } = new();
@@ -1124,7 +1283,7 @@ internal class FileChangeResult
     public Asset? ExistingAsset { get; set; }
 }
 
-public class ScanStatistics
+public class IndexStatistics
 {
     public int TotalFilesFound { get; set; }
     public int NewFiles { get; set; }
@@ -1139,6 +1298,7 @@ public class ScanStatistics
     public int MlJobsQueued { get; set; }
     public int ThumbnailsGenerated { get; set; }
     public int ThumbnailsRegenerated { get; set; }
-    public DateTime ScanCompletedAt { get; set; }
-    public TimeSpan ScanDuration { get; set; }
+    public int DuplicateAssetsRemoved { get; set; }
+    public DateTime IndexCompletedAt { get; set; }
+    public TimeSpan IndexDuration { get; set; }
 }

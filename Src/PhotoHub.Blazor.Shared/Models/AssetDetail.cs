@@ -19,6 +19,7 @@ public class AssetDetail
     public ExifData? Exif { get; set; }
     public List<ThumbnailInfo> Thumbnails { get; set; } = new();
     public List<string> Tags { get; set; } = new();
+    public AssetSyncStatus SyncStatus { get; set; } = AssetSyncStatus.Pending;
     
     public string ThumbnailUrl => Id > 0 
         ? $"/api/assets/{Id}/thumbnail?size=Large" 

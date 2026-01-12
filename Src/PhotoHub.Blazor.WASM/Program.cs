@@ -22,7 +22,7 @@ builder.Services.AddMudServices();
 // Agregar servicios personalizados
 builder.Services.AddScoped<LayoutService>();
 builder.Services.AddScoped<IAssetService, AssetService>();
-builder.Services.AddScoped<IScanService, ScanService>();
+builder.Services.AddScoped<IIndexService, IndexService>();
 builder.Services.AddScoped<IFolderService, FolderService>();
 builder.Services.AddScoped<IMapService, MapService>();
 builder.Services.AddScoped<ISettingsService, PhotoHub.Blazor.Shared.Services.SettingsService>();

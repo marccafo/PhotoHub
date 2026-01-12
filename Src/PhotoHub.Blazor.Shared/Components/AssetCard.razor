@@ -1,4 +1,5 @@
 @using MudBlazor
+@using PhotoHub.Blazor.Shared.Services
 @using PhotoHub.Blazor.Shared.Models
 @using Microsoft.JSInterop
 
@@ -77,8 +78,8 @@
         }
     </style>
     
-    <div class="@(Asset.SyncStatus == AssetSyncStatus.Pending ? "asset-pending" : "") h-100 w-100">
-        @if (Asset.HasThumbnails || Asset.SyncStatus == AssetSyncStatus.Pending)
+    <div class="@(Asset.SyncStatus == AssetSyncStatus.Pending || Asset.SyncStatus == AssetSyncStatus.Copied ? "asset-pending" : "") h-100 w-100">
+        @if (Asset.SyncStatus == AssetSyncStatus.Synced || Asset.SyncStatus == AssetSyncStatus.Pending || Asset.SyncStatus == AssetSyncStatus.Copied)
         {
             @if (Asset.Type == "VIDEO")
             {
@@ -103,13 +104,29 @@
     <div class="sync-status-icon">
         @if (Asset.SyncStatus == AssetSyncStatus.Synced)
         {
-            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" />
+            <MudTooltip Text="Sincronizado e indexado">
+                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" />
+            </MudTooltip>
+        }
+        else if (Asset.SyncStatus == AssetSyncStatus.Copied)
+        {
+            <MudTooltip Text="Copiado. Ejecuta la indexación para indexarlo">
+                <MudIcon Icon="@Icons.Material.Filled.CloudDone" Size="Size.Small" Color="Color.Warning" />
+            </MudTooltip>
         }
         else if (Asset.SyncStatus == AssetSyncStatus.Pending)
         {
-            <MudTooltip Text="Pendiente de sincronizar">
-                <MudIcon Icon="@Icons.Material.Filled.CloudUpload" Size="Size.Small" Color="Color.Default" />
+            <MudTooltip Text="Sincronizar ahora">
+                <MudIconButton Icon="@Icons.Material.Filled.CloudUpload" 
+                               Size="Size.Small" 
+                               Color="Color.Default" 
+                               OnClick="SyncNow" 
+                               OnClickStopPropagation="true" />
             </MudTooltip>
+        }
+        else if (Asset.SyncStatus == AssetSyncStatus.Syncing)
+        {
+            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
         }
     </div>
 
@@ -131,12 +148,47 @@
     [Parameter] public TimelineItem Asset { get; set; } = null!;
     [Parameter] public EventCallback<TimelineItem> OnAssetClick { get; set; }
     [Inject] private IJSRuntime JS { get; set; } = null!;
+    [Inject] private IAssetService AssetService { get; set; } = null!;
+    [Inject] private ISnackbar Snackbar { get; set; } = null!;
 
     private ElementReference _videoRef;
 
     private async Task OnClick()
     {
+        if (Asset.SyncStatus == AssetSyncStatus.Syncing) return;
         await OnAssetClick.InvokeAsync(Asset);
+    }
+
+    private async Task SyncNow()
+    {
+        if (Asset.SyncStatus != AssetSyncStatus.Pending) return;
+
+        Asset.SyncStatus = AssetSyncStatus.Syncing;
+        StateHasChanged();
+
+        var result = await AssetService.SyncAssetAsync(Asset.FullPath);
+        if (result != null && !string.IsNullOrEmpty(result.Message))
+        {
+            // Si tiene AssetId, significa que ya estaba indexado
+            if (result.AssetId.HasValue)
+            {
+                Asset.Id = result.AssetId.Value;
+                Asset.SyncStatus = AssetSyncStatus.Synced;
+                Asset.HasThumbnails = true;
+            }
+            else
+            {
+                // El archivo se copió correctamente, pero aún no está indexado
+                Asset.SyncStatus = AssetSyncStatus.Copied;
+            }
+            Snackbar.Add(result.Message, Severity.Success);
+        }
+        else
+        {
+            Asset.SyncStatus = AssetSyncStatus.Pending;
+            Snackbar.Add("Error al sincronizar el asset", Severity.Error);
+        }
+        StateHasChanged();
     }
 
     private async Task HandleMouseOver()

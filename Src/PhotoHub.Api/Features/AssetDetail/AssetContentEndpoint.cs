@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using PhotoHub.API.Shared.Data;
 using PhotoHub.API.Shared.Interfaces;
 using PhotoHub.API.Shared.Models;
+using PhotoHub.API.Shared.Services;
 
 namespace PhotoHub.API.Features.AssetDetail;
 
@@ -17,6 +18,7 @@ public class AssetContentEndpoint : IEndpoint
 
     private async Task<IResult> Handle(
         [FromServices] ApplicationDbContext dbContext,
+        [FromServices] SettingsService settingsService,
         [FromRoute] int assetId,
         CancellationToken cancellationToken)
     {
@@ -27,15 +29,17 @@ public class AssetContentEndpoint : IEndpoint
             return Results.NotFound(new { error = $"Asset with ID {assetId} not found" });
         }
 
-        if (!File.Exists(asset.FullPath))
+        var physicalPath = await settingsService.ResolvePhysicalPathAsync(asset.FullPath);
+
+        if (!File.Exists(physicalPath))
         {
-            return Results.NotFound(new { error = $"File not found at: {asset.FullPath}" });
+            return Results.NotFound(new { error = $"File not found at: {physicalPath}" });
         }
 
-        var extension = Path.GetExtension(asset.FullPath).ToLowerInvariant();
+        var extension = Path.GetExtension(physicalPath).ToLowerInvariant();
         var contentType = GetContentType(extension, asset.Type);
 
-        return Results.File(asset.FullPath, contentType, enableRangeProcessing: true);
+        return Results.File(physicalPath, contentType, enableRangeProcessing: true);
     }
 
     private string GetContentType(string extension, AssetType type)

@@ -48,6 +48,7 @@ public class MlJobProcessorService : BackgroundService
         using var scope = _serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var mlJobService = scope.ServiceProvider.GetRequiredService<IMlJobService>();
+        var settingsService = scope.ServiceProvider.GetRequiredService<SettingsService>();
         
         var pendingJobs = await mlJobService.GetPendingJobsAsync(cancellationToken);
         
@@ -60,7 +61,7 @@ public class MlJobProcessorService : BackgroundService
         {
             try
             {
-                await ProcessJobAsync(job, dbContext, cancellationToken);
+                await ProcessJobAsync(job, dbContext, settingsService, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -76,6 +77,7 @@ public class MlJobProcessorService : BackgroundService
     private async Task ProcessJobAsync(
         AssetMlJob job, 
         ApplicationDbContext dbContext, 
+        SettingsService settingsService,
         CancellationToken cancellationToken)
     {
         job.Status = MlJobStatus.Processing;
@@ -87,9 +89,16 @@ public class MlJobProcessorService : BackgroundService
             .Include(a => a.Exif)
             .FirstOrDefaultAsync(a => a.Id == job.AssetId, cancellationToken);
         
-        if (asset == null || !File.Exists(asset.FullPath))
+        if (asset == null)
         {
-            throw new FileNotFoundException($"Asset {job.AssetId} not found");
+            throw new Exception($"Asset {job.AssetId} not found");
+        }
+
+        var physicalPath = await settingsService.ResolvePhysicalPathAsync(asset.FullPath);
+        
+        if (!File.Exists(physicalPath))
+        {
+            throw new FileNotFoundException($"Asset {job.AssetId} file not found at: {physicalPath}");
         }
         
         // Process based on job type

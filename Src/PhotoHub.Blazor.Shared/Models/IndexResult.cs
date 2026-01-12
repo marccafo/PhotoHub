@@ -1,13 +1,13 @@
 namespace PhotoHub.Blazor.Shared.Models;
 
-public class ScanResult
+public class IndexResult
 {
-    public ScanStatistics Statistics { get; set; } = new();
+    public IndexStatistics Statistics { get; set; } = new();
     public int AssetsProcessed { get; set; }
     public string Message { get; set; } = string.Empty;
 }
 
-public class ScanStatistics
+public class IndexStatistics
 {
     public int TotalFilesFound { get; set; }
     public int NewFiles { get; set; }
@@ -22,6 +22,7 @@ public class ScanStatistics
     public int MlJobsQueued { get; set; }
     public int ThumbnailsGenerated { get; set; }
     public int ThumbnailsRegenerated { get; set; }
-    public DateTime ScanCompletedAt { get; set; }
-    public TimeSpan ScanDuration { get; set; }
+    public int DuplicateAssetsRemoved { get; set; }
+    public DateTime IndexCompletedAt { get; set; }
+    public TimeSpan IndexDuration { get; set; }
 }

@@ -15,6 +15,51 @@
     <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
 }
 
+@if (_pendingAssetsCount > 0 && !_syncingAll)
+{
+    <MudCard Class="mb-4" Elevation="2">
+        <MudCardContent>
+            <div class="d-flex align-center justify-space-between">
+                <div>
+                    <MudText Typo="Typo.h6">@_pendingAssetsCount foto(s) pendiente(s) de sincronizar</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Se copiarán al directorio interno para su indexación</MudText>
+                </div>
+                <MudButton Variant="Variant.Filled" 
+                           Color="Color.Primary" 
+                           StartIcon="@Icons.Material.Filled.CloudUpload"
+                           OnClick="SyncAllPendingAssets"
+                           Disabled="@_syncingAll">
+                    Sincronizar Todas
+                </MudButton>
+            </div>
+        </MudCardContent>
+    </MudCard>
+}
+
+@if (_syncingAll)
+{
+    <MudCard Class="mb-4" Elevation="2">
+        <MudCardContent>
+            <div class="d-flex align-center gap-3">
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                <div class="flex-grow-1">
+                    <MudText Typo="Typo.body1">@_syncProgressMessage</MudText>
+                    <MudProgressLinear Color="Color.Primary" Value="@_syncProgress" Class="mt-2" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        @_syncCurrent de @_syncTotal sincronizadas (@_syncSuccessful exitosas, @_syncFailed fallidas)
+                    </MudText>
+                </div>
+                <MudButton Variant="Variant.Text" 
+                           Color="Color.Error" 
+                           OnClick="CancelSyncAll"
+                           Size="Size.Small">
+                    Cancelar
+                </MudButton>
+            </div>
+        </MudCardContent>
+    </MudCard>
+}
+
 <div class="timeline-wrapper">
     <div class="timeline-main-container">
         <div class="timeline-content-wrapper">
@@ -39,7 +84,7 @@
                     }
                     else if (!_loading)
                     {
-                        <MudAlert Severity="Severity.Info">No hay fotografías disponibles. Escanea un directorio para comenzar.</MudAlert>
+                        <MudAlert Severity="Severity.Info">No hay fotografías disponibles. Indexa un directorio para comenzar.</MudAlert>
                     }
                 </div>
             </div>
@@ -323,6 +368,17 @@
     private double _hoverPosition = 0;
     private string _hoverDate = "";
     private DotNetObjectReference<Timeline>? _objRef;
+    
+    // Sincronización múltiple
+    private int _pendingAssetsCount = 0;
+    private bool _syncingAll = false;
+    private string _syncProgressMessage = "";
+    private double _syncProgress = 0;
+    private int _syncCurrent = 0;
+    private int _syncTotal = 0;
+    private int _syncSuccessful = 0;
+    private int _syncFailed = 0;
+    private CancellationTokenSource? _syncCancellationTokenSource;
 
     protected override async Task OnInitializedAsync()
     {
@@ -467,6 +523,9 @@
             .OrderByDescending(a => a.CreatedDate)
             .GroupBy(a => a.CreatedDate.ToString("MMMM yyyy", new System.Globalization.CultureInfo("es-ES")))
             .ToDictionary(g => char.ToUpper(g.Key[0]) + g.Key.Substring(1), g => g.ToList());
+        
+        // Contar assets pendientes
+        _pendingAssetsCount = _assets.Count(a => a.SyncStatus == AssetSyncStatus.Pending);
     }
 
     private void OpenAsset(TimelineItem asset)
@@ -566,9 +625,94 @@
         public bool IsYearTransition { get; set; }
     }
 
+    private async Task SyncAllPendingAssets()
+    {
+        var pendingAssets = _assets.Where(a => a.SyncStatus == AssetSyncStatus.Pending).ToList();
+        if (!pendingAssets.Any())
+        {
+            Snackbar.Add("No hay fotos pendientes de sincronizar", Severity.Info);
+            return;
+        }
+
+        _syncingAll = true;
+        _syncTotal = pendingAssets.Count;
+        _syncCurrent = 0;
+        _syncSuccessful = 0;
+        _syncFailed = 0;
+        _syncProgress = 0;
+        _syncProgressMessage = "Iniciando sincronización...";
+        _syncCancellationTokenSource = new CancellationTokenSource();
+        
+        StateHasChanged();
+
+        try
+        {
+            var paths = pendingAssets.Select(a => a.FullPath).ToList();
+            
+            await foreach (var update in AssetService.SyncMultipleAssetsAsync(paths, _syncCancellationTokenSource.Token))
+            {
+                _syncCurrent = update.Current;
+                _syncTotal = update.Total;
+                _syncSuccessful = update.Successful;
+                _syncFailed = update.Failed;
+                _syncProgress = update.Percentage;
+                _syncProgressMessage = update.Message;
+                
+                // Actualizar el estado del asset en la lista
+                var asset = _assets.FirstOrDefault(a => a.FullPath == update.CurrentPath);
+                if (asset != null)
+                {
+                    if (update.Message.Contains("Error"))
+                    {
+                        asset.SyncStatus = AssetSyncStatus.Pending;
+                    }
+                    else
+                    {
+                        asset.SyncStatus = AssetSyncStatus.Copied;
+                    }
+                }
+                
+                StateHasChanged();
+                
+                if (update.IsCompleted)
+                {
+                    break;
+                }
+            }
+
+            // Recargar timeline para actualizar estados
+            await LoadTimeline();
+            
+            Snackbar.Add($"Sincronización completada: {_syncSuccessful} exitosas, {_syncFailed} fallidas", 
+                _syncFailed > 0 ? Severity.Warning : Severity.Success);
+        }
+        catch (OperationCanceledException)
+        {
+            Snackbar.Add("Sincronización cancelada", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error durante la sincronización: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _syncingAll = false;
+            _syncCancellationTokenSource?.Dispose();
+            _syncCancellationTokenSource = null;
+            StateHasChanged();
+        }
+    }
+
+    private void CancelSyncAll()
+    {
+        _syncCancellationTokenSource?.Cancel();
+    }
+
     public void Dispose()
     {
         _objRef?.Dispose();
+        _syncCancellationTokenSource?.Cancel();
+        _syncCancellationTokenSource?.Dispose();
         // Remover clase del body al salir de la página
         JS.InvokeVoidAsync("scrollHelpers.disableTimelineScroll");
     }

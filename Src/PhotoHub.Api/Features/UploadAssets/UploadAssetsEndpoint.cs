@@ -33,10 +33,11 @@ public class UploadAssetsEndpoint : IEndpoint
         if (file == null || file.Length == 0)
             return Results.BadRequest("No file uploaded");
 
-        var assetsPath = await settingsService.GetAssetsPathAsync();
+        // Determinar la ruta interna de la biblioteca (Managed Library) - siempre usar la ruta del NAS
+        var managedLibraryPath = settingsService.GetInternalAssetsPath();
 
-        if (!Directory.Exists(assetsPath))
-            Directory.CreateDirectory(assetsPath);
+        if (!Directory.Exists(managedLibraryPath))
+            Directory.CreateDirectory(managedLibraryPath);
 
         // 1. Save file to temporary location to calculate hash
         var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString() + Path.GetExtension(file.FileName));
@@ -58,15 +59,15 @@ public class UploadAssetsEndpoint : IEndpoint
                 return Results.Ok(new { message = "Asset already exists", assetId = existingAsset.Id });
             }
 
-            // 4. Move to final destination
+            // 4. Move to final destination (Managed Library)
             var finalFileName = file.FileName;
-            var targetPath = Path.Combine(assetsPath, finalFileName);
+            var targetPath = Path.Combine(managedLibraryPath, finalFileName);
 
             // Handle filename collisions
             if (File.Exists(targetPath))
             {
                 finalFileName = $"{Guid.NewGuid()}_{file.FileName}";
-                targetPath = Path.Combine(assetsPath, finalFileName);
+                targetPath = Path.Combine(managedLibraryPath, finalFileName);
             }
 
             File.Move(tempPath, targetPath);
@@ -76,10 +77,13 @@ public class UploadAssetsEndpoint : IEndpoint
             var extension = Path.GetExtension(targetPath).ToLowerInvariant();
             var assetType = GetAssetType(extension);
 
+            // Normalizar FullPath para la BD: si está en la biblioteca gestionada, usamos el prefijo /assets
+            var dbPath = await settingsService.VirtualizePathAsync(targetPath);
+
             var asset = new Asset
             {
                 FileName = finalFileName,
-                FullPath = targetPath,
+                FullPath = dbPath,
                 FileSize = fileInfo.Length,
                 Checksum = checksum,
                 Type = assetType,

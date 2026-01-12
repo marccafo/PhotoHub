@@ -240,6 +240,7 @@ else
     private bool _loading = true;
     private bool _infoOpen = false;
     private bool _toolbarVisible = true;
+    private bool _syncing = false;
     
     private TimelineItem? _prevAsset;
     private TimelineItem? _nextAsset;
@@ -270,6 +271,22 @@ else
                 <MudSpacer />
                 
                 <div class="d-flex align-center gap-1" @onclick:stopPropagation="true">
+                    @if (_asset != null && (_asset.Id == 0 || _asset.SyncStatus == AssetSyncStatus.Pending))
+                    {
+                        <MudTooltip Text="Sincronizar ahora">
+                            <MudIconButton Icon="@Icons.Material.Filled.CloudUpload" 
+                                           Color="Color.Primary" 
+                                           OnClick="SyncAsset"
+                                           Disabled="@_syncing" />
+                        </MudTooltip>
+                    }
+                    else if (_asset != null && _asset.SyncStatus == AssetSyncStatus.Copied)
+                    {
+                        <MudTooltip Text="Archivo copiado. Ejecuta la indexación para indexarlo">
+                            <MudIcon Icon="@Icons.Material.Filled.CloudDone" Color="Color.Warning" />
+                        </MudTooltip>
+                    }
+
                     <MudTooltip Text="Compartir">
                         <MudIconButton Icon="@Icons.Material.Outlined.Share" Color="Color.Inherit" />
                     </MudTooltip>
@@ -417,6 +434,46 @@ else
     private void ToggleToolbar()
     {
         _toolbarVisible = !_toolbarVisible;
+    }
+
+    private async Task SyncAsset()
+    {
+        if (_asset == null || string.IsNullOrEmpty(_asset.FullPath) || _syncing) return;
+
+        try
+        {
+            _syncing = true;
+            UpdateNavbar();
+            StateHasChanged();
+
+            var result = await AssetService.SyncAssetAsync(_asset.FullPath);
+            if (result != null && !string.IsNullOrEmpty(result.Message))
+            {
+                Snackbar.Add(result.Message, Severity.Success);
+                
+                // Si tiene AssetId, significa que ya estaba indexado, navegar a él
+                if (result.AssetId.HasValue)
+                {
+                    Navigation.NavigateTo($"/asset/{result.AssetId.Value}");
+                }
+                // Si no tiene AssetId, el archivo se copió pero aún no está indexado
+                // El usuario puede quedarse en la vista actual o ejecutar la indexación
+            }
+            else
+            {
+                Snackbar.Add("Error al sincronizar el asset", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _syncing = false;
+            UpdateNavbar();
+            StateHasChanged();
+        }
     }
 
     private string GetAssetIcon(string type)

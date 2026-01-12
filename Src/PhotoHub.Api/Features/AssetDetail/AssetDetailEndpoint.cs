@@ -88,7 +88,8 @@ public class AssetDetailEndpoint : IEndpoint
                     Height = t.Height,
                     AssetId = t.AssetId
                 }).ToList(),
-                Tags = asset.Tags.Select(t => t.TagType.ToString()).ToList()
+                Tags = asset.Tags.Select(t => t.TagType.ToString()).ToList(),
+                SyncStatus = PhotoHub.Blazor.Shared.Models.AssetSyncStatus.Synced
             };
 
             return Results.Ok(response);

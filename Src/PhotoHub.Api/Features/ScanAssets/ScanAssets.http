@@ -1,14 +1,14 @@
 ### Variables
 @HostUrl = http://localhost:5000
 
-### Scan Assets - Scan media directory (using host path)
-GET {{HostUrl}}/api/assets/scan?directoryPath=C:\Photos
+### Scan Assets - Scan internal assets directory (ASSETS_PATH)
+GET {{HostUrl}}/api/assets/scan
 Accept: application/json
 
 ###
 
-### Scan Assets - Scan media directory (using container path)
-GET {{HostUrl}}/api/assets/scan?directoryPath=/assets
+### Scan Assets Stream - Stream scanning progress for internal assets directory
+GET {{HostUrl}}/api/assets/scan/stream
 Accept: application/json
 
 ###

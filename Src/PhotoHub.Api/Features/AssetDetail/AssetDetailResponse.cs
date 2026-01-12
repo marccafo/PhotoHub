@@ -19,6 +19,7 @@ public class AssetDetailResponse
     public ExifDataResponse? Exif { get; set; }
     public List<ThumbnailInfoResponse> Thumbnails { get; set; } = new();
     public List<string> Tags { get; set; } = new();
+    public PhotoHub.Blazor.Shared.Models.AssetSyncStatus SyncStatus { get; set; } = PhotoHub.Blazor.Shared.Models.AssetSyncStatus.Synced;
 }
 
 public class ExifDataResponse

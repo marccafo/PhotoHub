@@ -30,6 +30,7 @@ public class ThumbnailEndpoint : IEndpoint
     private async Task<IResult> Handle(
         [FromServices] ApplicationDbContext dbContext,
         [FromServices] ThumbnailGeneratorService thumbnailService,
+        [FromServices] SettingsService settingsService,
         [FromRoute] int assetId,
         [FromQuery] string size = "Medium",
         CancellationToken cancellationToken = default)
@@ -55,9 +56,36 @@ public class ThumbnailEndpoint : IEndpoint
             var thumbnail = await dbContext.AssetThumbnails
                 .FirstOrDefaultAsync(t => t.AssetId == assetId && t.Size == thumbnailSize, cancellationToken);
 
-            if (thumbnail == null)
+            // If thumbnail doesn't exist in DB or file doesn't exist, generate it on-demand
+            if (thumbnail == null || (thumbnail != null && !File.Exists(thumbnail.FilePath)))
             {
-                return Results.NotFound(new { error = $"Thumbnail not found for asset {assetId} with size {size}" });
+                Console.WriteLine($"[THUMBNAIL] Generating thumbnail on-demand for asset {assetId}, size {size}");
+                
+                // Resolve physical path of the asset
+                var physicalPath = await settingsService.ResolvePhysicalPathAsync(asset.FullPath);
+                
+                if (!File.Exists(physicalPath))
+                {
+                    return Results.NotFound(new { error = $"Asset file not found at path: {physicalPath}" });
+                }
+
+                // Generate thumbnails for all sizes (to ensure we have them all)
+                var generatedThumbnails = await thumbnailService.GenerateThumbnailsAsync(physicalPath, assetId, cancellationToken);
+                
+                if (generatedThumbnails.Any())
+                {
+                    // Save to database
+                    dbContext.AssetThumbnails.AddRange(generatedThumbnails);
+                    await dbContext.SaveChangesAsync(cancellationToken);
+                    
+                    // Find the requested size
+                    thumbnail = generatedThumbnails.FirstOrDefault(t => t.Size == thumbnailSize);
+                }
+                
+                if (thumbnail == null)
+                {
+                    return Results.NotFound(new { error = $"Failed to generate thumbnail for asset {assetId} with size {size}" });
+                }
             }
 
             // Check if file exists

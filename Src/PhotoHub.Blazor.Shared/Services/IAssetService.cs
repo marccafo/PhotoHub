@@ -10,10 +10,19 @@ public interface IAssetService
     Task<AssetDetail?> GetPendingAssetDetailAsync(string path);
     Task<List<TimelineItem>> GetAssetsByFolderAsync(int? folderId);
     Task<UploadResponse?> UploadAssetAsync(string fileName, Stream content, CancellationToken cancellationToken = default);
+    Task<SyncAssetResponse?> SyncAssetAsync(string path, CancellationToken cancellationToken = default);
+    IAsyncEnumerable<SyncProgressUpdate> SyncMultipleAssetsAsync(IEnumerable<string> paths, CancellationToken cancellationToken = default);
 }
 
 public class UploadResponse
 {
     public string Message { get; set; } = string.Empty;
     public int? AssetId { get; set; }
+}
+
+public class SyncAssetResponse
+{
+    public string Message { get; set; } = string.Empty;
+    public int? AssetId { get; set; } // Opcional: solo se devuelve si el asset ya estaba indexado
+    public string? TargetPath { get; set; } // Ruta donde se copió el archivo
 }

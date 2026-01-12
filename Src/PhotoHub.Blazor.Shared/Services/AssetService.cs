@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Runtime.CompilerServices;
 using PhotoHub.Blazor.Shared.Models;
 
 namespace PhotoHub.Blazor.Shared.Services;
@@ -99,7 +100,8 @@ public class AssetService : IAssetService
                 Height = t.Height,
                 AssetId = t.AssetId
             }).ToList(),
-            Tags = response.Tags
+            Tags = response.Tags,
+            SyncStatus = response.SyncStatus
         };
     }
 
@@ -133,5 +135,70 @@ public class AssetService : IAssetService
         }
 
         return null;
+    }
+
+    public async Task<SyncAssetResponse?> SyncAssetAsync(string path, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsync($"/api/assets/sync?path={System.Net.WebUtility.UrlEncode(path)}", null, cancellationToken);
+            if (response.IsSuccessStatusCode)
+            {
+                return await response.Content.ReadFromJsonAsync<SyncAssetResponse>(cancellationToken: cancellationToken);
+            }
+        }
+        catch
+        {
+            // Ignore
+        }
+        return null;
+    }
+
+    public async IAsyncEnumerable<SyncProgressUpdate> SyncMultipleAssetsAsync(
+        IEnumerable<string> paths, 
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var pathsList = paths.ToList();
+        var total = pathsList.Count;
+        var processed = 0;
+        var successful = 0;
+        var failed = 0;
+
+        foreach (var path in pathsList)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var result = await SyncAssetAsync(path, cancellationToken);
+            processed++;
+
+            if (result != null && !string.IsNullOrEmpty(result.Message))
+            {
+                successful++;
+                yield return new SyncProgressUpdate
+                {
+                    Current = processed,
+                    Total = total,
+                    Successful = successful,
+                    Failed = failed,
+                    CurrentPath = path,
+                    Message = $"Sincronizado: {Path.GetFileName(path)}",
+                    IsCompleted = processed == total
+                };
+            }
+            else
+            {
+                failed++;
+                yield return new SyncProgressUpdate
+                {
+                    Current = processed,
+                    Total = total,
+                    Successful = successful,
+                    Failed = failed,
+                    CurrentPath = path,
+                    Message = $"Error al sincronizar: {Path.GetFileName(path)}",
+                    IsCompleted = processed == total
+                };
+            }
+        }
     }
 }

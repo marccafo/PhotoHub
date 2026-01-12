@@ -2,31 +2,28 @@
 @using PhotoHub.Blazor.Shared.Services
 @using PhotoHub.Blazor.Shared.Models
 @using MudBlazor
-@inject IScanService ScanService
+@inject IIndexService IndexService
 @inject IAssetService AssetService
 @inject ISnackbar Snackbar
 @inject ISettingsService SettingsService
 
-<PageTitle>Escanear - PhotoHub</PageTitle>
+<PageTitle>Indexar - PhotoHub</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">Escanear Assets</MudText>
+<MudText Typo="Typo.h4" Class="mb-4">Indexar Assets</MudText>
 
 <MudGrid>
     <MudItem xs="12">
         <MudCard Height="100%">
             <MudCardHeader>
                 <CardHeaderContent>
-                    <MudText Typo="Typo.h6">Escanear Directorio Local</MudText>
-                    <MudText Typo="Typo.body2">Analiza una carpeta existente en el servidor.</MudText>
+                    <MudText Typo="Typo.h6">Indexar Directorio Interno</MudText>
+                    <MudText Typo="Typo.body2">Analiza el directorio interno de assets (ASSETS_PATH) para indexar nuevos archivos sincronizados.</MudText>
                 </CardHeaderContent>
             </MudCardHeader>
             <MudCardContent>
-                <MudTextField @bind-Value="_directoryPath" 
-                              Label="Ruta del Directorio" 
-                              HelperText="Ingresa la ruta completa del directorio a escanear"
-                              Variant="Variant.Outlined"
-                              FullWidth="true"
-                              Class="mb-4" />
+                <MudAlert Severity="Severity.Info" Class="mb-4">
+                    Se indexará el directorio interno configurado en ASSETS_PATH. Solo se indexarán los archivos que ya están en el directorio interno de la aplicación.
+                </MudAlert>
                 
                 <MudButton Variant="Variant.Filled" 
                            Color="Color.Secondary" 
@@ -37,7 +34,7 @@
                     {
                         <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ml-2" />
                     }
-                    Iniciar Escaneo
+                    Iniciar Indexación
                 </MudButton>
             </MudCardContent>
         </MudCard>
@@ -49,7 +46,7 @@
     <MudCard Class="mt-4">
         <MudCardHeader>
             <CardHeaderContent>
-                <MudText Typo="Typo.h6">Estado del Escaneo</MudText>
+                <MudText Typo="Typo.h6">Estado de la Indexación</MudText>
             </CardHeaderContent>
             <CardHeaderActions>
                 @if (_scanning)
@@ -113,27 +110,15 @@
 }
 
 @code {
-    private string _directoryPath = "";
     private bool _scanning = false;
     private double _progress = 0;
     private string _currentStatus = "Esperando inicio...";
-    private ScanStatistics? _statistics;
-    private ScanProgressUpdate? _lastUpdate;
-    private List<ScanProgressUpdate> _updates = new();
-
-    protected override async Task OnInitializedAsync()
-    {
-        _directoryPath = await SettingsService.GetAssetsPathAsync();
-    }
+    private IndexStatistics? _statistics;
+    private IndexProgressUpdate? _lastUpdate;
+    private List<IndexProgressUpdate> _updates = new();
 
     private async Task StartScan()
     {
-        if (string.IsNullOrWhiteSpace(_directoryPath))
-        {
-            Snackbar.Add("Por favor ingresa una ruta de directorio", Severity.Warning);
-            return;
-        }
-
         try
         {
             _scanning = true;
@@ -144,7 +129,7 @@
             
             using var cts = new CancellationTokenSource();
             
-            await foreach (var update in ScanService.ScanDirectoryAsync(_directoryPath, cts.Token))
+            await foreach (var update in IndexService.IndexDirectoryAsync(cts.Token))
             {
                 _lastUpdate = update;
                 _currentStatus = update.Message;
@@ -159,13 +144,13 @@
             
             if (_lastUpdate?.IsCompleted == true)
             {
-                Snackbar.Add("Escaneo completado exitosamente", Severity.Success);
+                Snackbar.Add("Indexación completada exitosamente", Severity.Success);
             }
         }
         catch (Exception ex)
         {
             _currentStatus = $"Error: {ex.Message}";
-            Snackbar.Add($"Error durante el escaneo: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Error durante la indexación: {ex.Message}", Severity.Error);
         }
         finally
         {

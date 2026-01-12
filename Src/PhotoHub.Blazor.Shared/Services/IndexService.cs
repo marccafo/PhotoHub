@@ -5,7 +5,7 @@ using PhotoHub.Blazor.Shared.Models;
 
 namespace PhotoHub.Blazor.Shared.Services;
 
-public class ScanService : IScanService
+public class IndexService : IIndexService
 {
     private readonly HttpClient _httpClient;
     private static readonly JsonSerializerOptions _jsonOptions = new()
@@ -13,16 +13,15 @@ public class ScanService : IScanService
         PropertyNameCaseInsensitive = true
     };
 
-    public ScanService(HttpClient httpClient)
+    public IndexService(HttpClient httpClient)
     {
         _httpClient = httpClient;
     }
 
-    public IAsyncEnumerable<ScanProgressUpdate> ScanDirectoryAsync(
-        string directoryPath, 
+    public IAsyncEnumerable<IndexProgressUpdate> IndexDirectoryAsync(
         CancellationToken cancellationToken = default)
     {
-        var url = $"/api/assets/scan/stream?directoryPath={Uri.EscapeDataString(directoryPath)}";
-        return _httpClient.GetFromJsonAsAsyncEnumerable<ScanProgressUpdate>(url, _jsonOptions, cancellationToken)!;
+        var url = "/api/assets/index/stream";
+        return _httpClient.GetFromJsonAsAsyncEnumerable<IndexProgressUpdate>(url, _jsonOptions, cancellationToken)!;
     }
 }
