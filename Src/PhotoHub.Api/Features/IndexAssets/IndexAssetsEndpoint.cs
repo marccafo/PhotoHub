@@ -171,7 +171,7 @@ public class IndexAssetsEndpoint : IEndpoint
                 // STEP 4: Database operations and thumbnail generation
                 await channel.Writer.WriteAsync(new IndexProgressUpdate { Message = "Guardando cambios y generando miniaturas...", Percentage = 50, Statistics = MapToBlazorStats(stats) }, cancellationToken);
                 
-                await ProcessDatabaseOperationsWithProgressAsync(indexContext, dbContext, thumbnailService, mediaRecognitionService, mlJobService, channel.Writer, stats, cancellationToken);
+                await ProcessDatabaseOperationsWithProgressAsync(indexContext, dbContext, thumbnailService, mediaRecognitionService, mlJobService, settingsService, channel.Writer, stats, cancellationToken);
 
                 stats.IndexCompletedAt = DateTime.UtcNow;
                 stats.IndexDuration = stats.IndexCompletedAt - indexStartTime;
@@ -229,6 +229,7 @@ public class IndexAssetsEndpoint : IEndpoint
         ThumbnailGeneratorService thumbnailService,
         MediaRecognitionService mediaRecognitionService,
         IMlJobService mlJobService,
+        SettingsService settingsService,
         ChannelWriter<IndexProgressUpdate> writer,
         IndexStatistics apiStats,
         CancellationToken cancellationToken)
@@ -257,11 +258,25 @@ public class IndexAssetsEndpoint : IEndpoint
             int count = 0;
             foreach (var asset in context.AssetsToCreate)
             {
-                var thumbnails = await thumbnailService.GenerateThumbnailsAsync(asset.FullPath, asset.Id, cancellationToken);
+                // Resolver la ruta física del archivo antes de generar miniaturas
+                var physicalPath = await settingsService.ResolvePhysicalPathAsync(asset.FullPath);
+                if (string.IsNullOrEmpty(physicalPath))
+                {
+                    Console.WriteLine($"[WARNING] Could not resolve physical path for asset {asset.Id}: {asset.FullPath}");
+                    count++;
+                    continue;
+                }
+                
+                var thumbnails = await thumbnailService.GenerateThumbnailsAsync(physicalPath, asset.Id, cancellationToken);
                 if (thumbnails.Any())
                 {
                     dbContext.AssetThumbnails.AddRange(thumbnails);
                     apiStats.ThumbnailsGenerated += thumbnails.Count;
+                    Console.WriteLine($"[THUMBNAIL] Generated {thumbnails.Count} thumbnails for asset {asset.Id} (Total: {apiStats.ThumbnailsGenerated})");
+                }
+                else
+                {
+                    Console.WriteLine($"[WARNING] No thumbnails generated for asset {asset.Id}: {physicalPath}");
                 }
                 
                 if (mediaRecognitionService.ShouldTriggerMlJob(asset, asset.Exif))
@@ -732,6 +747,7 @@ public class IndexAssetsEndpoint : IEndpoint
                 thumbnailService,
                 mediaRecognitionService,
                 mlJobService,
+                settingsService,
                 stats,
                 cancellationToken);
             
@@ -740,6 +756,7 @@ public class IndexAssetsEndpoint : IEndpoint
                 context.AssetsToUpdate,
                 dbContext,
                 thumbnailService,
+                settingsService,
                 stats,
                 cancellationToken);
             
@@ -749,6 +766,7 @@ public class IndexAssetsEndpoint : IEndpoint
                 context.AssetsToUpdate,
                 dbContext,
                 thumbnailService,
+                settingsService,
                 stats,
                 cancellationToken);
             
@@ -789,6 +807,7 @@ public class IndexAssetsEndpoint : IEndpoint
         ThumbnailGeneratorService thumbnailService,
         MediaRecognitionService mediaRecognitionService,
         IMlJobService mlJobService,
+        SettingsService settingsService,
         IndexStatistics stats,
         CancellationToken cancellationToken)
     {
@@ -814,6 +833,7 @@ public class IndexAssetsEndpoint : IEndpoint
             assetsToCreate,
             dbContext,
             thumbnailService,
+            settingsService,
             stats,
             cancellationToken);
         
@@ -831,6 +851,7 @@ public class IndexAssetsEndpoint : IEndpoint
         List<Asset> assets,
         ApplicationDbContext dbContext,
         ThumbnailGeneratorService thumbnailService,
+        SettingsService settingsService,
         IndexStatistics stats,
         CancellationToken cancellationToken)
     {
@@ -839,8 +860,16 @@ public class IndexAssetsEndpoint : IEndpoint
         
         foreach (var asset in assets)
         {
+            // Resolver la ruta física del archivo antes de generar miniaturas
+            var physicalPath = await settingsService.ResolvePhysicalPathAsync(asset.FullPath);
+            if (string.IsNullOrEmpty(physicalPath))
+            {
+                Console.WriteLine($"[WARNING] Could not resolve physical path for asset {asset.Id}: {asset.FullPath}");
+                continue;
+            }
+            
             var thumbnails = await thumbnailService.GenerateThumbnailsAsync(
-                asset.FullPath,
+                physicalPath,
                 asset.Id,
                 cancellationToken);
             
@@ -848,6 +877,7 @@ public class IndexAssetsEndpoint : IEndpoint
             {
                 dbContext.AssetThumbnails.AddRange(thumbnails);
                 stats.ThumbnailsGenerated += thumbnails.Count;
+                Console.WriteLine($"[THUMBNAIL] Generated {thumbnails.Count} thumbnails for asset {asset.Id}");
             }
         }
         
@@ -885,6 +915,7 @@ public class IndexAssetsEndpoint : IEndpoint
         List<Asset> assetsToUpdate,
         ApplicationDbContext dbContext,
         ThumbnailGeneratorService thumbnailService,
+        SettingsService settingsService,
         IndexStatistics stats,
         CancellationToken cancellationToken)
     {
@@ -898,6 +929,7 @@ public class IndexAssetsEndpoint : IEndpoint
             assetsToUpdate,
             dbContext,
             thumbnailService,
+            settingsService,
             stats,
             cancellationToken);
     }
@@ -906,6 +938,7 @@ public class IndexAssetsEndpoint : IEndpoint
         List<Asset> assets,
         ApplicationDbContext dbContext,
         ThumbnailGeneratorService thumbnailService,
+        SettingsService settingsService,
         IndexStatistics stats,
         CancellationToken cancellationToken)
     {
@@ -932,20 +965,26 @@ public class IndexAssetsEndpoint : IEndpoint
                     dbContext.AssetThumbnails.RemoveRange(thumbnailsToRemove);
                 }
                 
-                // Generate missing thumbnails
-                var allThumbnails = await thumbnailService.GenerateThumbnailsAsync(
-                    asset.FullPath,
-                    asset.Id,
-                    cancellationToken);
-                
-                var newThumbnails = allThumbnails
-                    .Where(t => missingSizes.Contains(t.Size))
-                    .ToList();
-                
-                if (newThumbnails.Any())
+                // Resolver la ruta física del archivo antes de generar miniaturas
+                var physicalPath = await settingsService.ResolvePhysicalPathAsync(asset.FullPath);
+                if (!string.IsNullOrEmpty(physicalPath))
                 {
-                    dbContext.AssetThumbnails.AddRange(newThumbnails);
-                    stats.ThumbnailsRegenerated += newThumbnails.Count;
+                    // Generate missing thumbnails
+                    var allThumbnails = await thumbnailService.GenerateThumbnailsAsync(
+                        physicalPath,
+                        asset.Id,
+                        cancellationToken);
+                    
+                    var newThumbnails = allThumbnails
+                        .Where(t => missingSizes.Contains(t.Size))
+                        .ToList();
+                    
+                    if (newThumbnails.Any())
+                    {
+                        dbContext.AssetThumbnails.AddRange(newThumbnails);
+                        stats.ThumbnailsRegenerated += newThumbnails.Count;
+                        Console.WriteLine($"[THUMBNAIL] Regenerated {newThumbnails.Count} thumbnails for updated asset {asset.Id}");
+                    }
                 }
             }
         }
@@ -958,6 +997,7 @@ public class IndexAssetsEndpoint : IEndpoint
         List<Asset> assetsToUpdate,
         ApplicationDbContext dbContext,
         ThumbnailGeneratorService thumbnailService,
+        SettingsService settingsService,
         IndexStatistics stats,
         CancellationToken cancellationToken)
     {
@@ -988,20 +1028,26 @@ public class IndexAssetsEndpoint : IEndpoint
                     dbContext.AssetThumbnails.RemoveRange(thumbnailsToRemove);
                 }
                 
-                // Generate missing thumbnails
-                var allThumbnails = await thumbnailService.GenerateThumbnailsAsync(
-                    asset.FullPath,
-                    asset.Id,
-                    cancellationToken);
-                
-                var newThumbnails = allThumbnails
-                    .Where(t => missingSizes.Contains(t.Size))
-                    .ToList();
-                
-                if (newThumbnails.Any())
+                // Resolver la ruta física del archivo antes de generar miniaturas
+                var physicalPath = await settingsService.ResolvePhysicalPathAsync(asset.FullPath);
+                if (!string.IsNullOrEmpty(physicalPath))
                 {
-                    dbContext.AssetThumbnails.AddRange(newThumbnails);
-                    stats.ThumbnailsRegenerated += newThumbnails.Count;
+                    // Generate missing thumbnails
+                    var allThumbnails = await thumbnailService.GenerateThumbnailsAsync(
+                        physicalPath,
+                        asset.Id,
+                        cancellationToken);
+                    
+                    var newThumbnails = allThumbnails
+                        .Where(t => missingSizes.Contains(t.Size))
+                        .ToList();
+                    
+                    if (newThumbnails.Any())
+                    {
+                        dbContext.AssetThumbnails.AddRange(newThumbnails);
+                        stats.ThumbnailsRegenerated += newThumbnails.Count;
+                        Console.WriteLine($"[THUMBNAIL] Regenerated {newThumbnails.Count} thumbnails for unchanged asset {asset.Id}");
+                    }
                 }
             }
         }

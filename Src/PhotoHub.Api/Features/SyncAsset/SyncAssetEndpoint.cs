@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using PhotoHub.API.Shared.Data;
 using PhotoHub.API.Shared.Interfaces;
 using PhotoHub.API.Shared.Services;
 
@@ -17,6 +19,8 @@ public class SyncAssetEndpoint : IEndpoint
     private async Task<IResult> Handle(
         [FromQuery] string path,
         [FromServices] SettingsService settingsService,
+        [FromServices] FileHashService hashService,
+        [FromServices] ApplicationDbContext dbContext,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(path))
@@ -62,9 +66,66 @@ public class SyncAssetEndpoint : IEndpoint
                 });
             }
 
-            // Manejar colisiones de nombres
+            // Calcular checksum del archivo fuente para verificar duplicados
+            Console.WriteLine($"[SYNC] Calculating checksum for source file: {path}");
+            var sourceChecksum = await hashService.CalculateFileHashAsync(path, cancellationToken);
+            Console.WriteLine($"[SYNC] Source checksum: {sourceChecksum}");
+
+            // Verificar si ya existe un archivo con el mismo checksum en el directorio interno
+            var existingAsset = await dbContext.Assets
+                .FirstOrDefaultAsync(a => a.Checksum == sourceChecksum, cancellationToken);
+            
+            if (existingAsset != null)
+            {
+                // Resolver la ruta física del asset existente
+                var existingPhysicalPath = await settingsService.ResolvePhysicalPathAsync(existingAsset.FullPath);
+                
+                if (!string.IsNullOrEmpty(existingPhysicalPath) && File.Exists(existingPhysicalPath))
+                {
+                    Console.WriteLine($"[SYNC] File with same checksum already exists: {existingPhysicalPath}");
+                    return Results.Ok(new { 
+                        message = "El archivo ya existe en el directorio interno (mismo contenido)", 
+                        targetPath = existingPhysicalPath 
+                    });
+                }
+            }
+
+            // Si no está en BD, verificar si el archivo con el nombre ya existe y tiene el mismo checksum
+            // (para evitar copiar el mismo archivo múltiples veces)
             if (File.Exists(targetPath))
             {
+                try
+                {
+                    var existingChecksum = await hashService.CalculateFileHashAsync(targetPath, cancellationToken);
+                    if (existingChecksum == sourceChecksum)
+                    {
+                        Console.WriteLine($"[SYNC] File with same name and checksum already exists: {targetPath}");
+                        return Results.Ok(new { 
+                            message = "El archivo ya existe en el directorio interno", 
+                            targetPath = targetPath 
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[SYNC] Warning: Could not calculate checksum for existing file {targetPath}: {ex.Message}");
+                }
+            }
+
+            // Manejar colisiones de nombres (solo si el archivo existe pero tiene diferente checksum)
+            if (File.Exists(targetPath))
+            {
+                // Verificar si el archivo existente tiene el mismo checksum
+                var existingChecksum = await hashService.CalculateFileHashAsync(targetPath, cancellationToken);
+                if (existingChecksum == sourceChecksum)
+                {
+                    Console.WriteLine($"[SYNC] File with same name and checksum already exists: {targetPath}");
+                    return Results.Ok(new { 
+                        message = "El archivo ya existe en el directorio interno", 
+                        targetPath = targetPath 
+                    });
+                }
+                // Si tiene diferente checksum, crear con nombre único
                 targetPath = Path.Combine(managedLibraryPath, $"{Guid.NewGuid()}_{fileName}");
             }
 

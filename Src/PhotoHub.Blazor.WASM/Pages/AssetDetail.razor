@@ -265,25 +265,37 @@ else
 
     private void UpdateNavbar()
     {
+        // Forzar actualización del estado antes de renderizar el navbar
+        var currentSyncStatus = _asset?.SyncStatus ?? AssetSyncStatus.Pending;
+        
         LayoutService.SetCustomNavbar(
             @<text>
                 <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" OnClick="GoBack" Edge="Edge.Start" />
                 <MudSpacer />
                 
                 <div class="d-flex align-center gap-1" @onclick:stopPropagation="true">
-                    @if (_asset != null && (_asset.Id == 0 || _asset.SyncStatus == AssetSyncStatus.Pending))
+                    @if (_asset != null && currentSyncStatus == AssetSyncStatus.Synced)
+                    {
+                        <MudTooltip Text="Sincronizado e indexado">
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
+                        </MudTooltip>
+                    }
+                    else if (_asset != null && (_asset.Id == 0 || currentSyncStatus == AssetSyncStatus.Pending))
                     {
                         <MudTooltip Text="Sincronizar ahora">
                             <MudIconButton Icon="@Icons.Material.Filled.CloudUpload" 
-                                           Color="Color.Primary" 
+                                           Color="Color.Default" 
                                            OnClick="SyncAsset"
                                            Disabled="@_syncing" />
                         </MudTooltip>
                     }
-                    else if (_asset != null && _asset.SyncStatus == AssetSyncStatus.Copied)
+                    else if (_asset != null && currentSyncStatus == AssetSyncStatus.Copied)
                     {
-                        <MudTooltip Text="Archivo copiado. Ejecuta la indexación para indexarlo">
-                            <MudIcon Icon="@Icons.Material.Filled.CloudDone" Color="Color.Warning" />
+                        <MudTooltip Text="Archivo copiado. Ir a indexación para indexarlo">
+                            <MudIconButton Icon="@Icons.Material.Filled.CloudDone" 
+                                           Color="Color.Warning" 
+                                           OnClick="NavigateToIndex"
+                                           OnClickStopPropagation="true" />
                         </MudTooltip>
                     }
 
@@ -350,7 +362,12 @@ else
             }
             
             // Actualizar el navbar una vez cargado el asset para habilitar botones
-            UpdateNavbar();
+            // Asegurar que se actualice después de cargar el asset
+            if (_asset != null)
+            {
+                UpdateNavbar();
+                StateHasChanged();
+            }
             
             if (_allAssets.Count == 0)
             {
@@ -425,6 +442,11 @@ else
         Navigation.NavigateTo("/");
     }
 
+    private void NavigateToIndex()
+    {
+        Navigation.NavigateTo("/scan");
+    }
+
     private void ToggleInfo()
     {
         _infoOpen = !_infoOpen;
@@ -455,9 +477,32 @@ else
                 if (result.AssetId.HasValue)
                 {
                     Navigation.NavigateTo($"/asset/{result.AssetId.Value}");
+                    return;
                 }
+                
                 // Si no tiene AssetId, el archivo se copió pero aún no está indexado
-                // El usuario puede quedarse en la vista actual o ejecutar la indexación
+                // Actualizar el estado del asset y recargar usando la nueva ruta
+                if (!string.IsNullOrEmpty(result.TargetPath))
+                {
+                    // Recargar el asset con la nueva ruta para obtener el estado actualizado
+                    // El endpoint AssetPendingEndpoint determinará automáticamente que está en Copied
+                    Path = result.TargetPath;
+                    await LoadAsset();
+                    
+                    // Asegurar que el navbar se actualice después de cargar
+                    UpdateNavbar();
+                    StateHasChanged();
+                }
+                else
+                {
+                    // Si no hay TargetPath, actualizar el estado manualmente
+                    if (_asset != null)
+                    {
+                        _asset.SyncStatus = AssetSyncStatus.Copied;
+                    }
+                    UpdateNavbar();
+                    StateHasChanged();
+                }
             }
             else
             {

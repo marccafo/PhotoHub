@@ -64,51 +64,22 @@ public class TimelineEndpoint : IEndpoint
             var existingPaths = assets
                 .Select(a => a.FullPath.Replace('\\', '/').TrimEnd('/'))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-            // 1. Detectar archivos pendientes en el directorio del dispositivo del usuario
-            var userAssetsPath = await settingsService.GetAssetsPathAsync();
-            int pendingCount = 0;
             
-            if (Directory.Exists(userAssetsPath))
-            {
-                Console.WriteLine($"[DEBUG] Scanning user device directory for pending assets: {userAssetsPath}");
-                var userScannedFiles = (await directoryScanner.ScanDirectoryAsync(userAssetsPath, cancellationToken)).ToList();
-                Console.WriteLine($"[DEBUG] Found {userScannedFiles.Count} files in user device");
-                
-                foreach (var file in userScannedFiles)
-                {
-                    var normalizedFilePath = file.FullPath.Replace('\\', '/').TrimEnd('/');
-                    
-                    // Solo agregar si no está en BD (archivos pendientes de sincronizar)
-                    if (!existingPaths.Contains(normalizedFilePath))
-                    {
-                        pendingCount++;
-                        timelineItems.Add(new TimelineResponse
-                        {
-                            Id = 0,
-                            FileName = file.FileName,
-                            FullPath = file.FullPath,
-                            FileSize = file.FileSize,
-                            CreatedDate = file.CreatedDate,
-                            ModifiedDate = file.ModifiedDate,
-                            Extension = file.Extension,
-                            ScannedAt = DateTime.MinValue,
-                            Type = file.AssetType.ToString(),
-                            SyncStatus = AssetSyncStatus.Pending
-                        });
-                    }
-                }
-                Console.WriteLine($"[DEBUG] Identified {pendingCount} pending assets to show in timeline");
-            }
+            // Crear un set de nombres de archivos indexados para detectar duplicados
+            var indexedFileNames = assets
+                .Select(a => a.FileName)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            // 2. Detectar archivos copiados pero no indexados en el directorio interno
+            // 1. Primero detectar archivos copiados pero no indexados en el directorio interno
             var internalAssetsPath = settingsService.GetInternalAssetsPath();
             int copiedCount = 0;
+            var copiedFileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var internalScannedFiles = new List<ScannedFile>();
             
             if (Directory.Exists(internalAssetsPath))
             {
                 Console.WriteLine($"[DEBUG] Scanning internal directory for copied but not indexed assets: {internalAssetsPath}");
-                var internalScannedFiles = (await directoryScanner.ScanDirectoryAsync(internalAssetsPath, cancellationToken)).ToList();
+                internalScannedFiles = (await directoryScanner.ScanDirectoryAsync(internalAssetsPath, cancellationToken)).ToList();
                 Console.WriteLine($"[DEBUG] Found {internalScannedFiles.Count} files in internal directory");
                 
                 // Resolver rutas físicas de assets en BD para comparar
@@ -122,6 +93,11 @@ public class TimelineEndpoint : IEndpoint
                     }
                 }
                 
+                // Crear un set de rutas físicas normalizadas para comparación rápida
+                var existingPhysicalPathsNormalized = existingPhysicalPaths
+                    .Select(p => Path.GetFileName(p))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                
                 foreach (var file in internalScannedFiles)
                 {
                     var normalizedFilePath = Path.GetFullPath(file.FullPath).Replace('\\', '/');
@@ -129,26 +105,125 @@ public class TimelineEndpoint : IEndpoint
                     // Si el archivo está en el directorio interno pero no está en BD, está copiado pero no indexado
                     if (!existingPhysicalPaths.Contains(normalizedFilePath))
                     {
-                        // Virtualizar la ruta para mostrarla en el timeline
-                        var virtualizedPath = await settingsService.VirtualizePathAsync(file.FullPath);
-                        
-                        copiedCount++;
-                        timelineItems.Add(new TimelineResponse
+                        // Verificar si hay un archivo con el mismo nombre ya indexado (puede tener ruta diferente)
+                        var fileName = file.FileName;
+                        if (!existingPhysicalPathsNormalized.Contains(fileName))
                         {
-                            Id = 0,
-                            FileName = file.FileName,
-                            FullPath = virtualizedPath,
-                            FileSize = file.FileSize,
-                            CreatedDate = file.CreatedDate,
-                            ModifiedDate = file.ModifiedDate,
-                            Extension = file.Extension,
-                            ScannedAt = DateTime.MinValue,
-                            Type = file.AssetType.ToString(),
-                            SyncStatus = AssetSyncStatus.Copied
-                        });
+                            // Virtualizar la ruta para mostrarla en el timeline
+                            var virtualizedPath = await settingsService.VirtualizePathAsync(file.FullPath);
+                            
+                            copiedFileNames.Add(fileName);
+                            copiedCount++;
+                            timelineItems.Add(new TimelineResponse
+                            {
+                                Id = 0,
+                                FileName = fileName,
+                                FullPath = virtualizedPath,
+                                FileSize = file.FileSize,
+                                CreatedDate = file.CreatedDate,
+                                ModifiedDate = file.ModifiedDate,
+                                Extension = file.Extension,
+                                ScannedAt = DateTime.MinValue,
+                                Type = file.AssetType.ToString(),
+                                SyncStatus = AssetSyncStatus.Copied
+                            });
+                        }
                     }
                 }
                 Console.WriteLine($"[DEBUG] Identified {copiedCount} copied but not indexed assets to show in timeline");
+            }
+
+            // 2. Detectar archivos pendientes en el directorio del dispositivo del usuario
+            // Solo mostrar como "Pending" si NO están ya en el directorio interno (no copiados)
+            var userAssetsPath = await settingsService.GetAssetsPathAsync();
+            int pendingCount = 0;
+            int skippedInDb = 0;
+            int skippedCopied = 0;
+            
+            if (Directory.Exists(userAssetsPath))
+            {
+                Console.WriteLine($"[DEBUG] Scanning user device directory for pending assets: {userAssetsPath}");
+                var userScannedFiles = (await directoryScanner.ScanDirectoryAsync(userAssetsPath, cancellationToken)).ToList();
+                Console.WriteLine($"[DEBUG] Found {userScannedFiles.Count} files in user device directory");
+                
+                if (userScannedFiles.Count == 0)
+                {
+                    Console.WriteLine($"[WARNING] No files found in user device directory. Checking if directory is accessible...");
+                    var testFiles = Directory.GetFiles(userAssetsPath, "*.*", SearchOption.TopDirectoryOnly);
+                    Console.WriteLine($"[DEBUG] Directory.GetFiles found {testFiles.Length} files (top level only)");
+                    if (testFiles.Length > 0)
+                    {
+                        Console.WriteLine($"[DEBUG] Sample files: {string.Join(", ", testFiles.Take(5).Select(Path.GetFileName))}");
+                    }
+                }
+                
+                foreach (var file in userScannedFiles)
+                {
+                    var normalizedFilePath = file.FullPath.Replace('\\', '/').TrimEnd('/');
+                    var isInDb = existingPaths.Contains(normalizedFilePath);
+                    var isAlreadyCopied = copiedFileNames.Contains(file.FileName);
+                    var isAlreadyIndexed = indexedFileNames.Contains(file.FileName);
+                    
+                    // Log detallado para los primeros archivos y archivos específicos
+                    if (pendingCount < 5 || 
+                        file.Extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase) || 
+                        file.Extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                        file.Extension.Equals(".heic", StringComparison.OrdinalIgnoreCase) || 
+                        file.Extension.Equals(".mov", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Console.WriteLine($"[DEBUG] Processing file: {file.FileName}");
+                        Console.WriteLine($"[DEBUG]   FullPath: {file.FullPath}");
+                        Console.WriteLine($"[DEBUG]   NormalizedPath: {normalizedFilePath}");
+                        Console.WriteLine($"[DEBUG]   Extension: {file.Extension}");
+                        Console.WriteLine($"[DEBUG]   InDB: {isInDb}");
+                        Console.WriteLine($"[DEBUG]   AlreadyCopied: {isAlreadyCopied}");
+                        Console.WriteLine($"[DEBUG]   AlreadyIndexed: {isAlreadyIndexed}");
+                    }
+                    
+                    if (isInDb)
+                    {
+                        skippedInDb++;
+                        continue;
+                    }
+                    
+                    // Si el archivo ya está indexado (por nombre), no mostrarlo como pendiente
+                    if (isAlreadyIndexed)
+                    {
+                        skippedInDb++;
+                        continue;
+                    }
+                    
+                    if (isAlreadyCopied)
+                    {
+                        skippedCopied++;
+                        continue;
+                    }
+                    
+                    // Agregar como "Pending"
+                    pendingCount++;
+                    timelineItems.Add(new TimelineResponse
+                    {
+                        Id = 0,
+                        FileName = file.FileName,
+                        FullPath = file.FullPath,
+                        FileSize = file.FileSize,
+                        CreatedDate = file.CreatedDate,
+                        ModifiedDate = file.ModifiedDate,
+                        Extension = file.Extension,
+                        ScannedAt = DateTime.MinValue,
+                        Type = file.AssetType.ToString(),
+                        SyncStatus = AssetSyncStatus.Pending
+                    });
+                }
+                Console.WriteLine($"[DEBUG] Timeline summary:");
+                Console.WriteLine($"[DEBUG]   Total files scanned from user device: {userScannedFiles.Count}");
+                Console.WriteLine($"[DEBUG]   Added as Pending: {pendingCount}");
+                Console.WriteLine($"[DEBUG]   Skipped (already in DB): {skippedInDb}");
+                Console.WriteLine($"[DEBUG]   Skipped (already copied): {skippedCopied}");
+            }
+            else
+            {
+                Console.WriteLine($"[WARNING] User device directory does not exist: {userAssetsPath}");
             }
 
             // Re-order by most recent date (preferring CreatedDate but handles cases where only ModifiedDate is available)

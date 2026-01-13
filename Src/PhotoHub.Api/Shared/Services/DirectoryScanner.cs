@@ -44,33 +44,99 @@ public class DirectoryScanner
                 {
                     RecurseSubdirectories = true,
                     IgnoreInaccessible = true,
-                    AttributesToSkip = FileAttributes.Hidden | FileAttributes.System
+                    // Solo saltar archivos realmente ocultos del sistema, no archivos con otros atributos
+                    AttributesToSkip = FileAttributes.Hidden | FileAttributes.System,
+                    MatchType = MatchType.Simple
                 };
 
                 var allFiles = Directory.EnumerateFiles(directoryPath, "*.*", enumerationOptions);
+                int totalFilesFound = 0;
+                int allowedFilesFound = 0;
+                int rejectedFiles = 0;
 
                 foreach (var filePath in allFiles)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+                    totalFilesFound++;
 
                     var extension = Path.GetExtension(filePath);
-                    if (AllowedExtensions.Contains(extension))
+                    
+                    // Normalizar extensión: asegurar que tenga el punto y esté en minúsculas para comparación
+                    var normalizedExtension = string.IsNullOrEmpty(extension) 
+                        ? string.Empty 
+                        : extension.ToLowerInvariant();
+                    
+                    // Si la extensión no tiene punto, agregarlo
+                    if (!string.IsNullOrEmpty(normalizedExtension) && !normalizedExtension.StartsWith("."))
                     {
-                        var fileInfo = new FileInfo(filePath);
-                        var assetType = ImageExtensions.Contains(extension) ? AssetType.IMAGE : AssetType.VIDEO;
-                        
-                        files.Add(new ScannedFile
+                        normalizedExtension = "." + normalizedExtension;
+                    }
+                    
+                    // Verificar si está permitida (comparación case-insensitive)
+                    var isAllowed = AllowedExtensions.Contains(normalizedExtension);
+                    
+                    // Log detallado para archivos específicos
+                    if (normalizedExtension.Equals(".jpg", StringComparison.OrdinalIgnoreCase) || 
+                        normalizedExtension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                        normalizedExtension.Equals(".heic", StringComparison.OrdinalIgnoreCase) || 
+                        normalizedExtension.Equals(".mov", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Console.WriteLine($"[DEBUG] File: {Path.GetFileName(filePath)}, Extension: '{extension}' (normalized: '{normalizedExtension}'), IsAllowed: {isAllowed}");
+                    }
+                    
+                    if (isAllowed)
+                    {
+                        try
                         {
-                            FileName = fileInfo.Name,
-                            FullPath = fileInfo.FullName,
-                            FileSize = fileInfo.Length,
-                            CreatedDate = fileInfo.CreationTimeUtc,
-                            ModifiedDate = fileInfo.LastWriteTimeUtc,
-                            Extension = extension,
-                            AssetType = assetType
-                        });
+                            var fileInfo = new FileInfo(filePath);
+                            
+                            // Verificar que el archivo existe y es accesible
+                            if (!fileInfo.Exists)
+                            {
+                                Console.WriteLine($"[WARNING] FileInfo says file doesn't exist: {filePath}");
+                                rejectedFiles++;
+                                continue;
+                            }
+                            
+                            var assetType = ImageExtensions.Contains(normalizedExtension) ? AssetType.IMAGE : AssetType.VIDEO;
+                            
+                            files.Add(new ScannedFile
+                            {
+                                FileName = fileInfo.Name,
+                                FullPath = fileInfo.FullName,
+                                FileSize = fileInfo.Length,
+                                CreatedDate = fileInfo.CreationTimeUtc,
+                                ModifiedDate = fileInfo.LastWriteTimeUtc,
+                                Extension = normalizedExtension, // Usar la extensión normalizada
+                                AssetType = assetType
+                            });
+                            allowedFilesFound++;
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[ERROR] Error processing file {filePath}: {ex.Message}");
+                            rejectedFiles++;
+                        }
+                    }
+                    else
+                    {
+                        rejectedFiles++;
+                        // Log archivos rechazados para debugging
+                        if (normalizedExtension.Equals(".jpg", StringComparison.OrdinalIgnoreCase) || 
+                            normalizedExtension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                            normalizedExtension.Equals(".heic", StringComparison.OrdinalIgnoreCase) || 
+                            normalizedExtension.Equals(".mov", StringComparison.OrdinalIgnoreCase))
+                        {
+                            Console.WriteLine($"[WARNING] File rejected - Extension not in allowed list: {filePath}, Extension: '{extension}' (normalized: '{normalizedExtension}')");
+                            Console.WriteLine($"[WARNING] Allowed extensions include: {string.Join(", ", AllowedExtensions.Take(10))}...");
+                        }
                     }
                 }
+                
+                Console.WriteLine($"[DEBUG] DirectoryScanner summary for {directoryPath}:");
+                Console.WriteLine($"[DEBUG]   Total files found: {totalFilesFound}");
+                Console.WriteLine($"[DEBUG]   Allowed files: {allowedFilesFound}");
+                Console.WriteLine($"[DEBUG]   Rejected files: {rejectedFiles}");
             }
             catch (Exception ex)
             {

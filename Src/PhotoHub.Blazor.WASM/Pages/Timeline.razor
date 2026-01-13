@@ -15,54 +15,72 @@
     <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
 }
 
-@if (_pendingAssetsCount > 0 && !_syncingAll)
-{
-    <MudCard Class="mb-4" Elevation="2">
-        <MudCardContent>
-            <div class="d-flex align-center justify-space-between">
-                <div>
-                    <MudText Typo="Typo.h6">@_pendingAssetsCount foto(s) pendiente(s) de sincronizar</MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Se copiarán al directorio interno para su indexación</MudText>
-                </div>
-                <MudButton Variant="Variant.Filled" 
-                           Color="Color.Primary" 
-                           StartIcon="@Icons.Material.Filled.CloudUpload"
-                           OnClick="SyncAllPendingAssets"
-                           Disabled="@_syncingAll">
-                    Sincronizar Todas
-                </MudButton>
-            </div>
-        </MudCardContent>
-    </MudCard>
-}
-
-@if (_syncingAll)
-{
-    <MudCard Class="mb-4" Elevation="2">
-        <MudCardContent>
-            <div class="d-flex align-center gap-3">
-                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                <div class="flex-grow-1">
-                    <MudText Typo="Typo.body1">@_syncProgressMessage</MudText>
-                    <MudProgressLinear Color="Color.Primary" Value="@_syncProgress" Class="mt-2" />
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">
-                        @_syncCurrent de @_syncTotal sincronizadas (@_syncSuccessful exitosas, @_syncFailed fallidas)
-                    </MudText>
-                </div>
-                <MudButton Variant="Variant.Text" 
-                           Color="Color.Error" 
-                           OnClick="CancelSyncAll"
-                           Size="Size.Small">
-                    Cancelar
-                </MudButton>
-            </div>
-        </MudCardContent>
-    </MudCard>
-}
-
 <div class="timeline-wrapper">
     <div class="timeline-main-container">
         <div class="timeline-content-wrapper">
+            @if (_pendingAssetsCount > 0 && !_syncingAll)
+            {
+                <div class="sync-alert-container">
+                    <MudAlert Severity="Severity.Info" 
+                              Variant="Variant.Filled" 
+                              Class="sync-alert"
+                              Dense="true"
+                              Icon="@Icons.Material.Filled.CloudUpload">
+                        <div class="d-flex align-center justify-space-between gap-3">
+                            <div class="flex-grow-1 min-width-0">
+                                <MudText Typo="Typo.body1" Class="mb-1">
+                                    <strong>@_pendingAssetsCount</strong> @(_pendingAssetsCount == 1 ? "foto pendiente" : "fotos pendientes") de sincronizar
+                                </MudText>
+                                <MudText Typo="Typo.body2" Style="opacity: 0.8;">
+                                    Se copiarán al directorio interno para su indexación
+                                </MudText>
+                            </div>
+                            <MudButton Variant="Variant.Text" 
+                                       Color="Color.Inherit" 
+                                       StartIcon="@Icons.Material.Filled.CloudUpload"
+                                       OnClick="SyncAllPendingAssets"
+                                       Disabled="@_syncingAll"
+                                       Class="flex-shrink-0">
+                                Sincronizar Todas
+                            </MudButton>
+                        </div>
+                    </MudAlert>
+                </div>
+            }
+
+            @if (_syncingAll)
+            {
+                <div class="sync-alert-container">
+                    <MudAlert Severity="Severity.Info" 
+                              Variant="Variant.Filled" 
+                              Class="sync-alert"
+                              Dense="true"
+                              Icon="@Icons.Material.Filled.CloudSync">
+                        <div class="d-flex align-center gap-3">
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="flex-shrink-0" />
+                            <div class="flex-grow-1 min-width-0">
+                                <MudText Typo="Typo.body2" Class="mb-1">@_syncProgressMessage</MudText>
+                                <MudProgressLinear Color="Color.Primary" Value="@_syncProgress" Class="my-2" />
+                                <MudText Typo="Typo.caption" Style="opacity: 0.8;">
+                                    @_syncCurrent de @_syncTotal sincronizadas 
+                                    @if (_syncSuccessful > 0 || _syncFailed > 0)
+                                    {
+                                        <span>(@_syncSuccessful exitosas@(_syncFailed > 0 ? $", {_syncFailed} fallidas" : ""))</span>
+                                    }
+                                </MudText>
+                            </div>
+                            <MudButton Variant="Variant.Text" 
+                                       Color="Color.Inherit" 
+                                       OnClick="CancelSyncAll"
+                                       Size="Size.Small"
+                                       Class="flex-shrink-0">
+                                Cancelar
+                            </MudButton>
+                        </div>
+                    </MudAlert>
+                </div>
+            }
+
             <div class="timeline-container" id="timeline-scroll-container">
                 <div class="timeline-content">
                     @if (_groupedAssets.Any())
@@ -198,6 +216,17 @@
     .timeline-container {
         scrollbar-width: none; /* Firefox */
         -ms-overflow-style: none; /* IE y Edge */
+    }
+
+    .sync-alert-container {
+        padding: 16px 24px;
+        padding-right: 74px; /* Espacio para el sidebar + margen */
+        flex-shrink: 0;
+    }
+
+    .sync-alert {
+        max-width: 100%;
+        margin: 0 auto;
     }
 
     .timeline-content {

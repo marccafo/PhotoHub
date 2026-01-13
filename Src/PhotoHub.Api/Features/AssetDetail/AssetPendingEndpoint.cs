@@ -3,6 +3,9 @@ using PhotoHub.API.Shared.Interfaces;
 using PhotoHub.API.Shared.Models;
 using PhotoHub.API.Shared.Services;
 using PhotoHub.Blazor.Shared.Models;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Formats.Jpeg;
 
 namespace PhotoHub.API.Features.AssetDetail;
 
@@ -19,6 +22,11 @@ public class AssetPendingEndpoint : IEndpoint
             .WithName("GetPendingAssetContent")
             .WithTags("Assets")
             .WithDescription("Gets the original content of a pending asset (image or video)");
+
+        app.MapGet("/api/assets/pending/thumbnail", HandleThumbnail)
+            .WithName("GetPendingAssetThumbnail")
+            .WithTags("Assets")
+            .WithDescription("Gets a thumbnail for a pending asset (image or video)");
     }
 
     private async Task<IResult> HandleDetail(
@@ -111,9 +119,19 @@ public class AssetPendingEndpoint : IEndpoint
             return Results.BadRequest("Path is required");
 
         var physicalPath = await settingsService.ResolvePhysicalPathAsync(path);
-        var assetsPath = await settingsService.GetAssetsPathAsync();
-        if (!IsPathSafe(physicalPath, assetsPath))
+        var userAssetsPath = await settingsService.GetAssetsPathAsync();
+        var internalAssetsPath = settingsService.GetInternalAssetsPath();
+        
+        // Verificar que el path es seguro (está en el directorio del usuario o interno)
+        var normalizedPhysicalPath = Path.GetFullPath(physicalPath);
+        var normalizedUserPath = Path.GetFullPath(userAssetsPath);
+        var normalizedInternalPath = Path.GetFullPath(internalAssetsPath);
+        
+        if (!normalizedPhysicalPath.StartsWith(normalizedUserPath, StringComparison.OrdinalIgnoreCase) &&
+            !normalizedPhysicalPath.StartsWith(normalizedInternalPath, StringComparison.OrdinalIgnoreCase))
+        {
             return Results.Forbid();
+        }
 
         if (!File.Exists(physicalPath))
             return Results.NotFound("File not found");
@@ -123,6 +141,134 @@ public class AssetPendingEndpoint : IEndpoint
         var contentType = GetContentType(extension, type);
 
         return Results.File(physicalPath, contentType, enableRangeProcessing: true);
+    }
+
+    private async Task<IResult> HandleThumbnail(
+        [FromQuery] string path,
+        [FromServices] SettingsService settingsService,
+        [FromQuery] string size = "Medium",
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(path))
+            return Results.BadRequest("Path is required");
+
+        var physicalPath = await settingsService.ResolvePhysicalPathAsync(path);
+        var userAssetsPath = await settingsService.GetAssetsPathAsync();
+        var internalAssetsPath = settingsService.GetInternalAssetsPath();
+        
+        // Verificar que el path es seguro (está en el directorio del usuario o interno)
+        var normalizedPhysicalPath = Path.GetFullPath(physicalPath);
+        var normalizedUserPath = Path.GetFullPath(userAssetsPath);
+        var normalizedInternalPath = Path.GetFullPath(internalAssetsPath);
+        
+        if (!normalizedPhysicalPath.StartsWith(normalizedUserPath, StringComparison.OrdinalIgnoreCase) &&
+            !normalizedPhysicalPath.StartsWith(normalizedInternalPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.Forbid();
+        }
+
+        if (!File.Exists(physicalPath))
+            return Results.NotFound("File not found");
+
+        var extension = Path.GetExtension(physicalPath).ToLowerInvariant();
+        var type = GetAssetType(extension);
+
+        // Parse size
+        if (!Enum.TryParse<ThumbnailSize>(size, true, out var thumbnailSize))
+        {
+            thumbnailSize = ThumbnailSize.Medium;
+        }
+
+        try
+        {
+            byte[] thumbnailBytes;
+            string contentType;
+
+            if (type == AssetType.IMAGE)
+            {
+                // Generar miniatura de imagen
+                var targetSize = thumbnailSize switch
+                {
+                    ThumbnailSize.Small => 220,
+                    ThumbnailSize.Medium => 640,
+                    ThumbnailSize.Large => 1280,
+                    _ => 640
+                };
+
+                using var image = await Image.LoadAsync(physicalPath, cancellationToken);
+                
+                // Aplicar orientación EXIF si existe
+                var orientation = GetImageOrientation(image);
+                if (orientation != 0)
+                {
+                    image.Mutate(x => x.AutoOrient());
+                }
+
+                // Calcular dimensiones manteniendo aspect ratio
+                var (width, height) = CalculateThumbnailSize(image.Width, image.Height, targetSize);
+                
+                image.Mutate(x => x.Resize(new ResizeOptions
+                {
+                    Size = new Size(width, height),
+                    Mode = ResizeMode.Max
+                }));
+
+                // Convertir a JPEG
+                using var ms = new MemoryStream();
+                await image.SaveAsync(ms, new JpegEncoder { Quality = 85 }, cancellationToken);
+                thumbnailBytes = ms.ToArray();
+                contentType = "image/jpeg";
+            }
+            else
+            {
+                // Para videos, usar el primer frame (simplificado - en producción usar FFmpeg)
+                return Results.BadRequest("Video thumbnails for pending assets require FFmpeg and are not yet implemented");
+            }
+
+            var fileName = Path.GetFileName(physicalPath);
+            return Results.File(thumbnailBytes, contentType, $"{fileName}_thumb_{size}.jpg");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ERROR] Error generating thumbnail for pending asset {path}: {ex.Message}");
+            return Results.Problem(
+                detail: ex.Message,
+                statusCode: StatusCodes.Status500InternalServerError
+            );
+        }
+    }
+
+    private int GetImageOrientation(Image image)
+    {
+        // Intentar leer la orientación EXIF
+        try
+        {
+            if (image.Metadata.ExifProfile != null)
+            {
+                var orientationTag = image.Metadata.ExifProfile.Values
+                    .FirstOrDefault(v => v.Tag == SixLabors.ImageSharp.Metadata.Profiles.Exif.ExifTag.Orientation);
+                if (orientationTag != null && orientationTag.GetValue() is ushort orientationValue)
+                {
+                    return orientationValue;
+                }
+            }
+        }
+        catch
+        {
+            // Ignorar errores al leer EXIF
+        }
+        return 0;
+    }
+
+    private (int width, int height) CalculateThumbnailSize(int originalWidth, int originalHeight, int targetSize)
+    {
+        if (originalWidth <= targetSize && originalHeight <= targetSize)
+        {
+            return (originalWidth, originalHeight);
+        }
+
+        var ratio = Math.Min((double)targetSize / originalWidth, (double)targetSize / originalHeight);
+        return ((int)(originalWidth * ratio), (int)(originalHeight * ratio));
     }
 
     private bool IsPathSafe(string path, string assetsPath)
