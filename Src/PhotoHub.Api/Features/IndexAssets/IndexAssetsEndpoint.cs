@@ -115,7 +115,7 @@ public class IndexAssetsEndpoint : IEndpoint
                 {
                     AssetsToCreate = new List<Asset>(),
                     AssetsToUpdate = new List<Asset>(),
-                    AssetsToDelete = new HashSet<string>(),
+                    AssetsToDelete = new HashSet<string>(), // Ahora guardará las rutas virtualizadas de los archivos ENCONTRADOS
                     AllScannedAssets = new HashSet<Asset>(),
                     ProcessedDirectories = new HashSet<string>()
                 };
@@ -125,10 +125,21 @@ public class IndexAssetsEndpoint : IEndpoint
                 foreach (var file in scannedFilesList)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    indexContext.AssetsToDelete.Add(file.FullPath);
-                    await EnsureFolderStructureForFileAsync(dbContext, file.FullPath, indexContext.ProcessedDirectories, cancellationToken);
                     
-                    var changeResult = await VerifyFileChangesAsync(file, existingAssetsByPath, existingAssetsByChecksum, hashService, dbContext, stats, settingsService, cancellationToken);
+                    // Normalizar la ruta del archivo para comparar con la BD
+                    var dbPath = await scopedSettingsService.VirtualizePathAsync(file.FullPath);
+                    indexContext.AssetsToDelete.Add(dbPath); // Añadir a la lista de archivos que SI existen
+                    
+                    var fileDirectory = Path.GetDirectoryName(file.FullPath);
+                    if (!string.IsNullOrEmpty(fileDirectory))
+                    {
+                        var virtualFolder = await scopedSettingsService.VirtualizePathAsync(fileDirectory);
+                        indexContext.ProcessedDirectories.Add(virtualFolder);
+                    }
+                    
+                    await EnsureFolderStructureForFileAsync(scopedDbContext, file.FullPath, new HashSet<string>(), cancellationToken);
+                    
+                    var changeResult = await VerifyFileChangesAsync(file, existingAssetsByPath, existingAssetsByChecksum, scopedHashService, scopedDbContext, stats, scopedSettingsService, cancellationToken);
                     
                     if (!changeResult.ShouldSkip)
                     {
@@ -771,6 +782,8 @@ public class IndexAssetsEndpoint : IEndpoint
                 cancellationToken);
             
             // STEP 5: Cleanup - Remove duplicate assets (same checksum)
+            // Se ejecuta después de salvar cambios previos para que la BD refleje el estado actual
+            await dbContext.SaveChangesAsync(cancellationToken);
             await RemoveDuplicateAssetsAsync(
                 dbContext,
                 stats,
@@ -1062,8 +1075,10 @@ public class IndexAssetsEndpoint : IEndpoint
         CancellationToken cancellationToken)
     {
         // Encontrar assets duplicados por checksum
+        // Usar AsNoTracking para evitar que EF mantenga demasiados objetos en memoria
         var allAssets = await dbContext.Assets
             .Where(a => !string.IsNullOrEmpty(a.Checksum))
+            .AsNoTracking()
             .ToListAsync(cancellationToken);
         
         var duplicateGroups = allAssets
@@ -1074,7 +1089,8 @@ public class IndexAssetsEndpoint : IEndpoint
         if (!duplicateGroups.Any())
             return;
         
-        var duplicatesToRemove = new List<Asset>();
+        var duplicatesToRemoveIds = new List<int>();
+        var assetsToUpdate = new List<Asset>();
         
         foreach (var group in duplicateGroups)
         {
@@ -1087,64 +1103,83 @@ public class IndexAssetsEndpoint : IEndpoint
             var physicalPath = await settingsService.ResolvePhysicalPathAsync(assetToKeep.FullPath);
             if (!File.Exists(physicalPath))
             {
-                // Si el asset a mantener no tiene archivo, mantener el siguiente que sí tenga
-                var assetWithFile = assetsInGroup.FirstOrDefault(a =>
+                // Si el asset a mantener no tiene archivo, intentar encontrar uno en el grupo que sí lo tenga
+                Asset? assetWithFile = null;
+                foreach (var a in assetsInGroup.Skip(1))
                 {
-                    var path = settingsService.ResolvePhysicalPathAsync(a.FullPath).Result;
-                    return File.Exists(path);
-                });
+                    var path = await settingsService.ResolvePhysicalPathAsync(a.FullPath);
+                    if (File.Exists(path))
+                    {
+                        assetWithFile = a;
+                        break;
+                    }
+                }
                 
                 if (assetWithFile != null)
                 {
-                    duplicatesToRemove.Add(assetToKeep);
+                    // El que íbamos a mantener no existe, pero este sí. Intercambiamos.
+                    duplicatesToRemoveIds.Add(assetToKeep.Id);
                     assetToKeep = assetWithFile;
                     duplicates = assetsInGroup.Where(a => a.Id != assetToKeep.Id).ToList();
                 }
+                else
+                {
+                    // Ningún asset del grupo tiene archivo físico... esto es raro.
+                    // Mantendremos el original y dejaremos que RemoveOrphanedAssets lo limpie si es necesario.
+                }
             }
             
-            duplicatesToRemove.AddRange(duplicates);
+            duplicatesToRemoveIds.AddRange(duplicates.Select(d => d.Id));
             
             // Si hay múltiples assets con el mismo checksum pero diferentes rutas, 
             // actualizar el asset a mantener con la ruta más reciente
-            if (duplicates.Any())
+            var mostRecentPath = assetsInGroup
+                .OrderByDescending(a => a.ScannedAt)
+                .ThenByDescending(a => a.ModifiedDate)
+                .First()
+                .FullPath;
+            
+            if (assetToKeep.FullPath != mostRecentPath)
             {
-                var mostRecentPath = assetsInGroup
-                    .OrderByDescending(a => a.ScannedAt)
-                    .ThenByDescending(a => a.ModifiedDate)
-                    .First()
-                    .FullPath;
-                
-                if (assetToKeep.FullPath != mostRecentPath)
+                // Solo actualizar si realmente cambió
+                var dbAssetToKeep = await dbContext.Assets.FindAsync(new object[] { assetToKeep.Id }, cancellationToken);
+                if (dbAssetToKeep != null)
                 {
-                    assetToKeep.FullPath = mostRecentPath;
-                    assetToKeep.FileName = Path.GetFileName(mostRecentPath);
+                    dbAssetToKeep.FullPath = mostRecentPath;
+                    dbAssetToKeep.FileName = Path.GetFileName(mostRecentPath);
+                    assetsToUpdate.Add(dbAssetToKeep);
                 }
             }
         }
         
-        if (duplicatesToRemove.Any())
+        if (duplicatesToRemoveIds.Any())
         {
-            // Eliminar thumbnails y EXIF de los duplicados
-            var duplicateIds = duplicatesToRemove.Select(a => a.Id).ToList();
+            // Eliminar duplicados de la base de datos de forma eficiente
             var duplicateThumbnails = await dbContext.AssetThumbnails
-                .Where(t => duplicateIds.Contains(t.AssetId))
+                .Where(t => duplicatesToRemoveIds.Contains(t.AssetId))
                 .ToListAsync(cancellationToken);
             
             var duplicateExifs = await dbContext.AssetExifs
-                .Where(e => duplicateIds.Contains(e.AssetId))
+                .Where(e => duplicatesToRemoveIds.Contains(e.AssetId))
+                .ToListAsync(cancellationToken);
+            
+            var assetsToRemove = await dbContext.Assets
+                .Where(a => duplicatesToRemoveIds.Contains(a.Id))
                 .ToListAsync(cancellationToken);
             
             dbContext.AssetThumbnails.RemoveRange(duplicateThumbnails);
             dbContext.AssetExifs.RemoveRange(duplicateExifs);
-            dbContext.Assets.RemoveRange(duplicatesToRemove);
+            dbContext.Assets.RemoveRange(assetsToRemove);
             
-            stats.DuplicateAssetsRemoved = duplicatesToRemove.Count;
-            Console.WriteLine($"[SCAN] Eliminados {duplicatesToRemove.Count} assets duplicados");
+            await dbContext.SaveChangesAsync(cancellationToken);
+            
+            stats.DuplicateAssetsRemoved = duplicatesToRemoveIds.Count;
+            Console.WriteLine($"[SCAN] Eliminados {duplicatesToRemoveIds.Count} assets duplicados");
         }
     }
 
     private async Task RemoveOrphanedAssetsAsync(
-        HashSet<string> assetsToDelete,
+        HashSet<string> foundVirtualPaths,
         ApplicationDbContext dbContext,
         IndexStatistics stats,
         CancellationToken cancellationToken)
@@ -1153,7 +1188,8 @@ public class IndexAssetsEndpoint : IEndpoint
             .Select(a => a.FullPath)
             .ToListAsync(cancellationToken);
         
-        var orphanedPaths = allAssetPaths.Except(assetsToDelete).ToList();
+        // Los huérfanos son los que están en la BD pero NO en el sistema de archivos (no encontrados en el scan)
+        var orphanedPaths = allAssetPaths.Except(foundVirtualPaths).ToList();
         if (!orphanedPaths.Any())
             return;
         
@@ -1179,13 +1215,13 @@ public class IndexAssetsEndpoint : IEndpoint
     }
 
     private async Task RemoveOrphanedFoldersAsync(
-        HashSet<string> processedDirectories,
+        HashSet<string> foundVirtualDirectories,
         ApplicationDbContext dbContext,
         IndexStatistics stats,
         CancellationToken cancellationToken)
     {
-        // Normalize processed directories for comparison
-        var normalizedProcessedDirs = processedDirectories
+        // Normalize found directories for comparison
+        var normalizedFoundDirs = foundVirtualDirectories
             .Select(d => d.Replace('\\', '/').TrimEnd('/'))
             .Where(d => !string.IsNullOrEmpty(d))
             .ToHashSet();
@@ -1232,7 +1268,7 @@ public class IndexAssetsEndpoint : IEndpoint
             
             bool hasAssets = folder.Assets.Any();
             bool hasPermissions = folder.Permissions.Any();
-            bool existsInFilesystem = normalizedProcessedDirs.Contains(normalizedPath);
+            bool existsInFilesystem = normalizedFoundDirs.Contains(normalizedPath);
             bool isAncestorOfFolderWithAssets = foldersToKeep.Contains(folder.Id);
             
             // Only delete if folder has no assets, no permissions, doesn't exist in filesystem, 
