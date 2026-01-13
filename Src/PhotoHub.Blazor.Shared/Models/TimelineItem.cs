@@ -15,6 +15,12 @@ public class TimelineItem
     public bool HasExif { get; set; }
     public bool HasThumbnails { get; set; }
     public AssetSyncStatus SyncStatus { get; set; } = AssetSyncStatus.Synced;
+    public int? Width { get; set; }
+    public int? Height { get; set; }
+    
+    public double AspectRatio => Width.HasValue && Height.HasValue && Height.Value > 0 
+        ? (double)Width.Value / Height.Value 
+        : 1.0;
     
     public string ThumbnailUrl => SyncStatus == AssetSyncStatus.Synced 
         ? $"/api/assets/{Id}/thumbnail?size=Medium" 

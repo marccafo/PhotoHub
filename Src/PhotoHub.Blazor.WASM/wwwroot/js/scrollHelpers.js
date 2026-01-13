@@ -79,6 +79,8 @@ window.scrollHelpers = {
         const scrollContainer = this.getScrollContainer();
         
         const handleScroll = () => {
+            if (window._isTimelineDragging) return;
+
             let activeId = "";
             
             for (const id of groupIds) {
@@ -128,6 +130,12 @@ window.scrollHelpers = {
         }
         window._timelineScrollHandler = handleScroll;
         
+        // También escuchar al evento wheel y touchmove en el contenedor directamente para mayor fiabilidad
+        if (scrollContainer !== window) {
+            scrollContainer.addEventListener('wheel', handleScroll, { passive: true });
+            scrollContainer.addEventListener('touchmove', handleScroll, { passive: true });
+        }
+        
         // Ejecutar inmediatamente para actualizar el estado inicial
         handleScroll();
     },
@@ -153,6 +161,96 @@ window.scrollHelpers = {
     setupTimelineHover: function (dotnetHelper, groupIds, groupLabels) {
         window._timelineGroupIds = groupIds;
         window._timelineGroupLabels = groupLabels;
+        this.setupDraggableMarker(dotnetHelper);
+    },
+    setupDraggableMarker: function (dotnetHelper) {
+        const indicator = document.querySelector('.timeline-scroll-indicator');
+        const marker = document.querySelector('.timeline-scroll-marker');
+        if (!indicator || !marker) return;
+
+        let isDragging = false;
+
+        const handleDrag = (e) => {
+            if (!isDragging) return;
+            
+            const rect = indicator.getBoundingClientRect();
+            const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+            const relativeY = clientY - rect.top;
+            const percentage = Math.max(0, Math.min(100, (relativeY / rect.height) * 100));
+            
+            const scrollContainer = this.getScrollContainer();
+            if (scrollContainer) {
+                const scrollHeight = scrollContainer.scrollHeight - scrollContainer.clientHeight;
+                const targetScroll = (percentage / 100) * scrollHeight;
+                
+                if (scrollContainer === window) {
+                    window.scrollTo({ top: targetScroll });
+                } else {
+                    scrollContainer.scrollTop = targetScroll;
+                }
+
+                // Actualizar manualmente el estado en Blazor para feedback instantáneo
+                let activeId = "";
+                if (window._timelineGroupIds) {
+                    for (const id of window._timelineGroupIds) {
+                        const element = document.getElementById(id);
+                        if (element) {
+                            const rect = element.getBoundingClientRect();
+                            if (scrollContainer === window) {
+                                if (rect.top <= 150) activeId = id;
+                            } else {
+                                const containerRect = scrollContainer.getBoundingClientRect();
+                                const relativeTop = rect.top - containerRect.top;
+                                if (relativeTop <= 150) activeId = id;
+                            }
+                        }
+                    }
+                }
+                dotnetHelper.invokeMethodAsync('OnScrollUpdated', activeId, percentage, 0);
+            }
+        };
+
+        const startDragging = (e) => {
+            if (e.type === 'mousedown' && e.button !== 0) return; // Solo botón izquierdo
+            isDragging = true;
+            window._isTimelineDragging = true;
+            document.body.style.userSelect = 'none';
+            document.body.style.cursor = 'grabbing';
+            handleDrag(e);
+        };
+
+        const stopDragging = () => {
+            if (isDragging) {
+                isDragging = false;
+                window._isTimelineDragging = false;
+                document.body.style.userSelect = '';
+                document.body.style.cursor = '';
+            }
+        };
+
+        marker.addEventListener('mousedown', (e) => {
+            e.stopPropagation(); // Evitar que el clic en el marker active el mousedown del indicator
+            startDragging(e);
+        });
+        marker.addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+            startDragging(e);
+        }, { passive: false });
+        
+        // También permitir clic en el track para saltar
+        indicator.addEventListener('mousedown', (e) => {
+            // No permitir si es el marker (él tiene su propio listener con stopPropagation)
+            if (e.target !== marker) {
+                // Prevenir comportamiento por defecto para evitar selección de texto
+                e.preventDefault();
+                startDragging(e);
+            }
+        });
+
+        window.addEventListener('mousemove', handleDrag);
+        window.addEventListener('touchmove', handleDrag, { passive: false });
+        window.addEventListener('mouseup', stopDragging);
+        window.addEventListener('touchend', stopDragging);
     },
     getTimelineHoverPosition: function (dotnetHelper, clientY) {
         const indicator = document.querySelector('.timeline-scroll-indicator');
@@ -160,7 +258,7 @@ window.scrollHelpers = {
         
         const rect = indicator.getBoundingClientRect();
         const relativeY = clientY - rect.top;
-        const percentage = Math.max(0, Math.min(100, (1 - (relativeY / rect.height)) * 100));
+        const percentage = Math.max(0, Math.min(100, (relativeY / rect.height) * 100));
         
         const scrollContainer = this.getScrollContainer();
         if (!scrollContainer) return;
@@ -214,5 +312,115 @@ window.videoHelpers = {
             // Reset to beginning to show the first frame again
             videoElement.currentTime = 0;
         }
+    }
+};
+
+window.masonryHelpers = {
+    initializeMasonry: function () {
+        // Procesar cada grupo de día por separado
+        const dayGroups = document.querySelectorAll('.day-group');
+        dayGroups.forEach(dayGroup => {
+            this.justifyDayGroup(dayGroup);
+        });
+        
+        // Configurar listener para recalcular al cambiar tamaño de ventana
+        if (!window._masonryResizeHandler) {
+            window._masonryResizeHandler = () => {
+                const dayGroups = document.querySelectorAll('.day-group');
+                dayGroups.forEach(dayGroup => {
+                    window.masonryHelpers.justifyDayGroup(dayGroup);
+                });
+            };
+            window.addEventListener('resize', window._masonryResizeHandler, { passive: true });
+        }
+    },
+    justifyDayGroup: function (dayGroup) {
+        const grid = dayGroup.querySelector('.masonry-grid');
+        if (!grid) return;
+        
+        const items = Array.from(grid.querySelectorAll('.masonry-item'));
+        if (items.length === 0) return;
+        
+        const gap = 2; // gap en píxeles
+        const containerWidth = grid.offsetWidth;
+        const itemHeight = items[0].offsetHeight || parseInt(getComputedStyle(items[0]).height) || 180;
+        
+        // Calcular aspect ratios de todos los items
+        const aspectRatios = items.map(item => {
+            let aspectRatio = parseFloat(item.getAttribute('data-aspect-ratio')) || 1.0;
+            const width = parseInt(item.getAttribute('data-width')) || 0;
+            const height = parseInt(item.getAttribute('data-height')) || 0;
+            if (width > 0 && height > 0) {
+                aspectRatio = width / height;
+            }
+            return aspectRatio;
+        });
+        
+        // Distribuir items en líneas que llenen el ancho disponible
+        let i = 0;
+        while (i < items.length) {
+            const line = [];
+            const lineRatios = [];
+            let lineWidth = 0;
+            
+            // Agregar items a la línea hasta que no quepan más
+            while (i < items.length) {
+                const nextItem = items[i];
+                const nextRatio = aspectRatios[i];
+                const nextItemWidth = itemHeight * nextRatio;
+                
+                // Calcular ancho de la línea si agregamos este item
+                const newLineWidth = lineWidth + nextItemWidth + (line.length > 0 ? gap : 0);
+                
+                // Si agregar este item haría que la línea sea demasiado ancha, parar
+                if (newLineWidth > containerWidth && line.length > 0) {
+                    break;
+                }
+                
+                // Agregar el item a la línea
+                line.push(nextItem);
+                lineRatios.push(nextRatio);
+                lineWidth = newLineWidth;
+                i++;
+            }
+            
+            // Justificar la línea para llenar el ancho disponible
+            if (line.length > 0) {
+                this.justifyLine(line, lineRatios, containerWidth, itemHeight, gap);
+            }
+        }
+    },
+    justifyLine: function (items, aspectRatios, containerWidth, itemHeight, gap) {
+        if (items.length === 0) return;
+        
+        // Calcular ancho disponible (descontando los gaps)
+        const availableWidth = containerWidth - (items.length - 1) * gap;
+        
+        // Si solo hay un item, usar ancho natural pero ajustar si es necesario
+        if (items.length === 1) {
+            const width = Math.min(itemHeight * aspectRatios[0], availableWidth);
+            items[0].style.width = width + 'px';
+            return;
+        }
+        
+        // Calcular factor de escala para llenar exactamente el ancho disponible
+        // Queremos que: sum(widths) = availableWidth
+        // widths[i] = itemHeight * aspectRatios[i] * scaleFactor
+        // sum(itemHeight * aspectRatios[i] * scaleFactor) = availableWidth
+        // scaleFactor * itemHeight * sum(aspectRatios) = availableWidth
+        // scaleFactor = availableWidth / (itemHeight * sum(aspectRatios))
+        const totalAspectRatio = aspectRatios.reduce((sum, ar) => sum + ar, 0);
+        const scaleFactor = availableWidth / (totalAspectRatio * itemHeight);
+        
+        // Aplicar anchos escalados para llenar exactamente el ancho disponible
+        items.forEach((item, index) => {
+            const width = itemHeight * aspectRatios[index] * scaleFactor;
+            item.style.width = width + 'px';
+        });
+    },
+    updateMasonryForGroup: function (groupSelector) {
+        const group = document.querySelector(groupSelector);
+        if (!group) return;
+        this.justifyDayGroup(group);
     }
 };

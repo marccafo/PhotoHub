@@ -9,11 +9,16 @@
             position: relative;
             cursor: pointer;
             width: 100%;
-            aspect-ratio: 1 / 1;
+            height: 100%;
             overflow: hidden;
             transition: opacity 0.2s;
             background-color: #333;
             border-radius: 4px;
+        }
+        
+        /* Si no tiene altura definida, usar aspect-ratio 1:1 por defecto */
+        .asset-card-container:not([style*="height"]) {
+            aspect-ratio: 1 / 1;
         }
         .asset-card-container:hover {
             opacity: 1;

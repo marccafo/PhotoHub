@@ -57,7 +57,9 @@ public class TimelineEndpoint : IEndpoint
                 Checksum = asset.Checksum,
                 HasExif = asset.Exif != null,
                 HasThumbnails = asset.Thumbnails.Any(),
-                SyncStatus = AssetSyncStatus.Synced
+                SyncStatus = AssetSyncStatus.Synced,
+                Width = asset.Exif?.Width,
+                Height = asset.Exif?.Height
             }).ToList();
 
             // Normalizar rutas existentes en BD para comparación
@@ -125,7 +127,9 @@ public class TimelineEndpoint : IEndpoint
                                 Extension = file.Extension,
                                 ScannedAt = DateTime.MinValue,
                                 Type = file.AssetType.ToString(),
-                                SyncStatus = AssetSyncStatus.Copied
+                                SyncStatus = AssetSyncStatus.Copied,
+                                Width = null, // Se puede obtener más tarde si es necesario
+                                Height = null
                             });
                         }
                     }

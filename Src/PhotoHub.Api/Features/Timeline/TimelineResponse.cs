@@ -17,5 +17,7 @@ public class TimelineResponse
     public bool HasExif { get; set; }
     public bool HasThumbnails { get; set; }
     public AssetSyncStatus SyncStatus { get; set; }
+    public int? Width { get; set; }
+    public int? Height { get; set; }
 }
 
