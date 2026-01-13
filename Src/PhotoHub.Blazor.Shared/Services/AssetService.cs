@@ -19,6 +19,12 @@ public class AssetService : IAssetService
         return response ?? new List<TimelineItem>();
     }
 
+    public async Task<List<TimelineItem>> GetDeviceAssetsAsync()
+    {
+        var response = await _httpClient.GetFromJsonAsync<List<TimelineItem>>("/api/assets/device");
+        return response ?? new List<TimelineItem>();
+    }
+
     public async Task<TimelineItem?> GetAssetByIdAsync(int id)
     {
         var timeline = await GetTimelineAsync();

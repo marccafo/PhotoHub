@@ -31,6 +31,19 @@
 
     <ItemGroup>
       <Folder Include="Migrations\" />
+      <Folder Include="thumbnails\274\" />
+      <Folder Include="thumbnails\28\" />
+      <Folder Include="thumbnails\981\" />
+      <Folder Include="thumbnails\992\" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Remove="thumbnails\979\medium.jpg" />
+      <None Remove="thumbnails\28\large.jpg" />
+      <None Remove="thumbnails\276\small.jpg" />
+      <None Remove="thumbnails\276\medium.jpg" />
+      <None Remove="thumbnails\275\small.jpg" />
+      <None Remove="thumbnails\274\small.jpg" />
     </ItemGroup>
 
 </Project>

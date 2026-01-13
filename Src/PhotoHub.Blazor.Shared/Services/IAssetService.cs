@@ -5,6 +5,7 @@ namespace PhotoHub.Blazor.Shared.Services;
 public interface IAssetService
 {
     Task<List<TimelineItem>> GetTimelineAsync();
+    Task<List<TimelineItem>> GetDeviceAssetsAsync();
     Task<TimelineItem?> GetAssetByIdAsync(int id);
     Task<AssetDetail?> GetAssetDetailAsync(int id);
     Task<AssetDetail?> GetPendingAssetDetailAsync(string path);

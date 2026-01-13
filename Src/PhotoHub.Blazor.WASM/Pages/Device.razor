@@ -1,0 +1,249 @@
+@page "/device"
+@using PhotoHub.Blazor.Shared.Services
+@using PhotoHub.Blazor.Shared.Models
+@using MudBlazor
+@inject IAssetService AssetService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Mi Dispositivo - PhotoHub</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Mi Dispositivo</MudText>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+}
+
+@if (_pendingAssetsCount > 0 && !_syncingAll)
+{
+    <MudCard Class="mb-4">
+        <MudCardContent>
+            <MudAlert Severity="Severity.Info" 
+                      Variant="Variant.Filled" 
+                      Dense="true"
+                      Icon="@Icons.Material.Filled.CloudUpload">
+                <div class="d-flex align-center justify-space-between gap-3">
+                    <div class="flex-grow-1 min-width-0">
+                        <MudText Typo="Typo.body1" Class="mb-1">
+                            <strong>@_pendingAssetsCount</strong> @(_pendingAssetsCount == 1 ? "foto pendiente" : "fotos pendientes") de sincronizar
+                        </MudText>
+                        <MudText Typo="Typo.body2" Style="opacity: 0.8;">
+                            Se copiarán al directorio interno para su indexación
+                        </MudText>
+                    </div>
+                    <MudButton Variant="Variant.Filled" 
+                               Color="Color.Primary" 
+                               StartIcon="@Icons.Material.Filled.CloudUpload"
+                               OnClick="SyncAllPendingAssets"
+                               Disabled="@_syncingAll"
+                               Class="flex-shrink-0">
+                        Sincronizar Todas
+                    </MudButton>
+                </div>
+            </MudAlert>
+        </MudCardContent>
+    </MudCard>
+}
+
+@if (_syncingAll)
+{
+    <MudCard Class="mb-4">
+        <MudCardContent>
+            <MudAlert Severity="Severity.Info" 
+                      Variant="Variant.Filled" 
+                      Dense="true"
+                      Icon="@Icons.Material.Filled.CloudSync">
+                <div class="d-flex align-center gap-3">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="flex-shrink-0" />
+                    <div class="flex-grow-1 min-width-0">
+                        <MudText Typo="Typo.body2" Class="mb-1">@_syncProgressMessage</MudText>
+                        <MudProgressLinear Color="Color.Primary" Value="@_syncProgress" Class="my-2" />
+                        <MudText Typo="Typo.caption" Style="opacity: 0.8;">
+                            @_syncCurrent de @_syncTotal sincronizadas 
+                            @if (_syncSuccessful > 0 || _syncFailed > 0)
+                            {
+                                <span>(@_syncSuccessful exitosas@(_syncFailed > 0 ? $", {_syncFailed} fallidas" : ""))</span>
+                            }
+                        </MudText>
+                    </div>
+                    <MudButton Variant="Variant.Text" 
+                               Color="Color.Inherit" 
+                               OnClick="CancelSyncAll"
+                               Size="Size.Small"
+                               Class="flex-shrink-0">
+                        Cancelar
+                    </MudButton>
+                </div>
+            </MudAlert>
+        </MudCardContent>
+    </MudCard>
+}
+
+@if (_groupedAssets.Any())
+{
+    @foreach (var group in _groupedAssets)
+    {
+        <div class="mb-6">
+            <MudText Typo="Typo.h6" Class="mb-3 font-weight-bold">@group.Key</MudText>
+            <MudGrid Spacing="1">
+                @foreach (var asset in group.Value)
+                {
+                    <MudItem xs="4" sm="3" md="2" lg="2" xl="1">
+                        <AssetCard Asset="@asset" OnAssetClick="OpenAsset" />
+                    </MudItem>
+                }
+            </MudGrid>
+        </div>
+    }
+}
+else if (!_loading)
+{
+    <MudAlert Severity="Severity.Info">No hay fotos pendientes de sincronizar en tu dispositivo.</MudAlert>
+}
+
+@code {
+    private List<TimelineItem> _assets = new();
+    private Dictionary<string, List<TimelineItem>> _groupedAssets = new();
+    private bool _loading = true;
+    
+    // Sincronización múltiple
+    private int _pendingAssetsCount = 0;
+    private bool _syncingAll = false;
+    private string _syncProgressMessage = "";
+    private double _syncProgress = 0;
+    private int _syncCurrent = 0;
+    private int _syncTotal = 0;
+    private int _syncSuccessful = 0;
+    private int _syncFailed = 0;
+    private CancellationTokenSource? _syncCancellationTokenSource;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDeviceAssets();
+    }
+
+    private async Task LoadDeviceAssets()
+    {
+        try
+        {
+            _loading = true;
+            _assets = await AssetService.GetDeviceAssetsAsync();
+            GroupAssets();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar assets del dispositivo: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void GroupAssets()
+    {
+        _groupedAssets = _assets
+            .OrderByDescending(a => a.ModifiedDate)
+            .GroupBy(a => a.ModifiedDate.ToString("MMMM yyyy", new System.Globalization.CultureInfo("es-ES")))
+            .ToDictionary(g => char.ToUpper(g.Key[0]) + g.Key.Substring(1), g => g.ToList());
+        
+        _pendingAssetsCount = _assets.Count;
+    }
+
+    private void OpenAsset(TimelineItem asset)
+    {
+        var encodedPath = System.Net.WebUtility.UrlEncode(asset.FullPath);
+        Navigation.NavigateTo($"/asset/0?path={encodedPath}");
+    }
+
+    private async Task SyncAllPendingAssets()
+    {
+        var pendingAssets = _assets.ToList();
+        if (!pendingAssets.Any())
+        {
+            Snackbar.Add("No hay fotos pendientes de sincronizar", Severity.Info);
+            return;
+        }
+
+        _syncingAll = true;
+        _syncTotal = pendingAssets.Count;
+        _syncCurrent = 0;
+        _syncSuccessful = 0;
+        _syncFailed = 0;
+        _syncProgress = 0;
+        _syncProgressMessage = "Iniciando sincronización...";
+        _syncCancellationTokenSource = new CancellationTokenSource();
+        
+        StateHasChanged();
+
+        try
+        {
+            var paths = pendingAssets.Select(a => a.FullPath).ToList();
+            
+            await foreach (var update in AssetService.SyncMultipleAssetsAsync(paths, _syncCancellationTokenSource.Token))
+            {
+                _syncCurrent = update.Current;
+                _syncTotal = update.Total;
+                _syncSuccessful = update.Successful;
+                _syncFailed = update.Failed;
+                _syncProgress = update.Percentage;
+                _syncProgressMessage = update.Message;
+                
+                // Actualizar el estado del asset en la lista
+                var asset = _assets.FirstOrDefault(a => a.FullPath == update.CurrentPath);
+                if (asset != null)
+                {
+                    if (update.Message.Contains("Error"))
+                    {
+                        asset.SyncStatus = AssetSyncStatus.Pending;
+                    }
+                    else
+                    {
+                        asset.SyncStatus = AssetSyncStatus.Copied;
+                    }
+                }
+                
+                StateHasChanged();
+                
+                if (update.IsCompleted)
+                {
+                    break;
+                }
+            }
+
+            // Recargar lista para actualizar estados (los sincronizados desaparecerán)
+            await LoadDeviceAssets();
+            
+            Snackbar.Add($"Sincronización completada: {_syncSuccessful} exitosas, {_syncFailed} fallidas", 
+                _syncFailed > 0 ? Severity.Warning : Severity.Success);
+        }
+        catch (OperationCanceledException)
+        {
+            Snackbar.Add("Sincronización cancelada", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error durante la sincronización: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _syncingAll = false;
+            _syncCancellationTokenSource?.Dispose();
+            _syncCancellationTokenSource = null;
+            StateHasChanged();
+        }
+    }
+
+    private void CancelSyncAll()
+    {
+        _syncCancellationTokenSource?.Cancel();
+    }
+
+    public void Dispose()
+    {
+        _syncCancellationTokenSource?.Cancel();
+        _syncCancellationTokenSource?.Dispose();
+    }
+}

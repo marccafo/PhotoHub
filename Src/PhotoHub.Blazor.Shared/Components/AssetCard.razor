@@ -102,16 +102,10 @@
     </div>
 
     <div class="sync-status-icon">
-        @if (Asset.SyncStatus == AssetSyncStatus.Synced)
+        @if (Asset.SyncStatus == AssetSyncStatus.Copied)
         {
-            <MudTooltip Text="Sincronizado e indexado">
-                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" />
-            </MudTooltip>
-        }
-        else if (Asset.SyncStatus == AssetSyncStatus.Copied)
-        {
-            <MudTooltip Text="Copiado. Ejecuta la indexación para indexarlo">
-                <MudIcon Icon="@Icons.Material.Filled.CloudDone" Size="Size.Small" Color="Color.Warning" />
+            <MudTooltip Text="Pendiente de indexar">
+                <MudIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Small" Color="Color.Default" />
             </MudTooltip>
         }
         else if (Asset.SyncStatus == AssetSyncStatus.Pending)

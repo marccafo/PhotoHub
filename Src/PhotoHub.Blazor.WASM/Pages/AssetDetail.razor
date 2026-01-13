@@ -267,6 +267,7 @@ else
     {
         // Forzar actualización del estado antes de renderizar el navbar
         var currentSyncStatus = _asset?.SyncStatus ?? AssetSyncStatus.Pending;
+        var assetId = _asset?.Id ?? 0;
         
         LayoutService.SetCustomNavbar(
             @<text>
@@ -274,13 +275,7 @@ else
                 <MudSpacer />
                 
                 <div class="d-flex align-center gap-1" @onclick:stopPropagation="true">
-                    @if (_asset != null && currentSyncStatus == AssetSyncStatus.Synced)
-                    {
-                        <MudTooltip Text="Sincronizado e indexado">
-                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
-                        </MudTooltip>
-                    }
-                    else if (_asset != null && (_asset.Id == 0 || currentSyncStatus == AssetSyncStatus.Pending))
+                    @if (_asset != null && assetId == 0 && currentSyncStatus == AssetSyncStatus.Pending)
                     {
                         <MudTooltip Text="Sincronizar ahora">
                             <MudIconButton Icon="@Icons.Material.Filled.CloudUpload" 
@@ -289,11 +284,11 @@ else
                                            Disabled="@_syncing" />
                         </MudTooltip>
                     }
-                    else if (_asset != null && currentSyncStatus == AssetSyncStatus.Copied)
+                    else if (_asset != null && (assetId == 0 && currentSyncStatus == AssetSyncStatus.Copied))
                     {
-                        <MudTooltip Text="Archivo copiado. Ir a indexación para indexarlo">
-                            <MudIconButton Icon="@Icons.Material.Filled.CloudDone" 
-                                           Color="Color.Warning" 
+                        <MudTooltip Text="Pendiente de indexar">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Schedule" 
+                                           Color="Color.Default" 
                                            OnClick="NavigateToIndex"
                                            OnClickStopPropagation="true" />
                         </MudTooltip>
@@ -487,9 +482,12 @@ else
                     // Recargar el asset con la nueva ruta para obtener el estado actualizado
                     // El endpoint AssetPendingEndpoint determinará automáticamente que está en Copied
                     Path = result.TargetPath;
+                    AssetId = 0; // Asegurar que se use el path en lugar del ID
                     await LoadAsset();
                     
-                    // Asegurar que el navbar se actualice después de cargar
+                    // Asegurar que el navbar se actualice después de cargar completamente
+                    // Esperar un momento para que el estado se actualice
+                    await Task.Delay(100);
                     UpdateNavbar();
                     StateHasChanged();
                 }
