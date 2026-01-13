@@ -19,6 +19,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<Folder> Folders { get; set; }
     public DbSet<FolderPermission> FolderPermissions { get; set; }
     public DbSet<Setting> Settings { get; set; }
+    public DbSet<Album> Albums { get; set; }
+    public DbSet<AlbumAsset> AlbumAssets { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -258,6 +260,59 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Key).HasMaxLength(100);
             entity.Property(e => e.Value).HasMaxLength(1000);
             entity.Property(e => e.UpdatedAt)
+                .HasColumnType("timestamp without time zone")
+                .HasConversion(
+                    v => v.Kind == DateTimeKind.Utc ? DateTime.SpecifyKind(v, DateTimeKind.Unspecified) : v,
+                    v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+        });
+
+        // Configure Album entity
+        modelBuilder.Entity<Album>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            
+            entity.HasOne(e => e.CoverAsset)
+                .WithMany()
+                .HasForeignKey(e => e.CoverAssetId)
+                .OnDelete(DeleteBehavior.SetNull);
+            
+            entity.HasIndex(e => e.CoverAssetId);
+            
+            entity.Property(e => e.CreatedAt)
+                .HasColumnType("timestamp without time zone")
+                .HasConversion(
+                    v => v.Kind == DateTimeKind.Utc ? DateTime.SpecifyKind(v, DateTimeKind.Unspecified) : v,
+                    v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+            
+            entity.Property(e => e.UpdatedAt)
+                .HasColumnType("timestamp without time zone")
+                .HasConversion(
+                    v => v.Kind == DateTimeKind.Utc ? DateTime.SpecifyKind(v, DateTimeKind.Unspecified) : v,
+                    v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+        });
+
+        // Configure AlbumAsset entity
+        modelBuilder.Entity<AlbumAsset>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            
+            entity.HasOne(e => e.Album)
+                .WithMany(a => a.AlbumAssets)
+                .HasForeignKey(e => e.AlbumId)
+                .OnDelete(DeleteBehavior.Cascade);
+            
+            entity.HasOne(e => e.Asset)
+                .WithMany()
+                .HasForeignKey(e => e.AssetId)
+                .OnDelete(DeleteBehavior.Cascade);
+            
+            entity.HasIndex(e => e.AlbumId);
+            entity.HasIndex(e => e.AssetId);
+            entity.HasIndex(e => new { e.AlbumId, e.AssetId }).IsUnique(); // One asset can only appear once per album
+            
+            entity.Property(e => e.AddedAt)
                 .HasColumnType("timestamp without time zone")
                 .HasConversion(
                     v => v.Kind == DateTimeKind.Utc ? DateTime.SpecifyKind(v, DateTimeKind.Unspecified) : v,

@@ -5,6 +5,7 @@
 @using MudBlazor
 @implements IDisposable
 @inject IAssetService AssetService
+@inject IAlbumService AlbumService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @inject LayoutService LayoutService
@@ -336,7 +337,7 @@ else
                         <MudMenu Icon="@Icons.Material.Outlined.MoreVert" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
                             <MudMenuItem Icon="@Icons.Material.Outlined.Edit">Editar fecha y hora</MudMenuItem>
                             <MudMenuItem Icon="@Icons.Material.Outlined.LocationOn">Editar ubicación</MudMenuItem>
-                            <MudMenuItem Icon="@Icons.Material.Outlined.Add">Añadir a álbum</MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Outlined.Add" OnClick="OpenAddToAlbumDialog">Añadir a álbum</MudMenuItem>
                             <MudMenuItem Icon="@Icons.Material.Outlined.Archive">Archivar</MudMenuItem>
                         </MudMenu>
                     }
@@ -533,4 +534,175 @@ else
         var hasAsset = isPrev ? _prevAsset != null : _nextAsset != null;
         return _toolbarVisible && hasAsset ? baseClass : $"{baseClass} hidden";
     }
+
+    // Add to Album functionality
+    private bool _addToAlbumDialogVisible = false;
+    private List<AlbumItem> _availableAlbums = new();
+    private bool _loadingAlbums = false;
+    private int? _selectedAlbumId = null;
+    private bool _showCreateAlbum = false;
+    private string _newAlbumName = "";
+    private string? _newAlbumDescription = "";
+
+    private async Task OpenAddToAlbumDialog()
+    {
+        if (_asset == null || _asset.Id == 0)
+        {
+            Snackbar.Add("Solo se pueden añadir fotos indexadas a álbumes", Severity.Info);
+            return;
+        }
+
+        _addToAlbumDialogVisible = true;
+        _loadingAlbums = true;
+        _availableAlbums = await AlbumService.GetAlbumsAsync();
+        _loadingAlbums = false;
+    }
+
+    private async Task AddToAlbum()
+    {
+        if (_asset == null || _asset.Id == 0 || !_selectedAlbumId.HasValue)
+            return;
+
+        var success = await AlbumService.AddAssetToAlbumAsync(_selectedAlbumId.Value, _asset.Id);
+        if (success)
+        {
+            Snackbar.Add("Foto añadida al álbum correctamente", Severity.Success);
+            _addToAlbumDialogVisible = false;
+            _selectedAlbumId = null;
+        }
+        else
+        {
+            Snackbar.Add("Error al añadir la foto al álbum", Severity.Error);
+        }
+    }
+
+    private async Task CreateAlbumAndAdd()
+    {
+        if (string.IsNullOrWhiteSpace(_newAlbumName))
+        {
+            Snackbar.Add("El nombre del álbum es obligatorio", Severity.Warning);
+            return;
+        }
+
+        var album = await AlbumService.CreateAlbumAsync(_newAlbumName, _newAlbumDescription);
+        if (album != null && _asset != null && _asset.Id > 0)
+        {
+            var success = await AlbumService.AddAssetToAlbumAsync(album.Id, _asset.Id);
+            if (success)
+            {
+                Snackbar.Add("Álbum creado y foto añadida correctamente", Severity.Success);
+                _addToAlbumDialogVisible = false;
+                _showCreateAlbum = false;
+                _newAlbumName = "";
+                _newAlbumDescription = "";
+                _selectedAlbumId = null;
+            }
+            else
+            {
+                Snackbar.Add("Álbum creado pero error al añadir la foto", Severity.Warning);
+            }
+        }
+        else
+        {
+            Snackbar.Add("Error al crear el álbum", Severity.Error);
+        }
+    }
 }
+
+<MudDialog @bind-Visible="_addToAlbumDialogVisible" MaxWidth="MaxWidth.Medium" FullWidth="true">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Añadir a Álbum</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (!_showCreateAlbum)
+        {
+            @if (_loadingAlbums)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+            }
+            else if (_availableAlbums.Any())
+            {
+                <MudRadioGroup T="int?" @bind-Value="_selectedAlbumId">
+                    @foreach (var album in _availableAlbums)
+                    {
+                        <MudRadio T="int?" Value="@album.Id">
+                            <div class="d-flex align-center gap-2">
+                                @if (!string.IsNullOrEmpty(album.CoverThumbnailUrl))
+                                {
+                                    <img src="@album.CoverThumbnailUrl" 
+                                         style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px;" 
+                                         alt="@album.Name" />
+                                }
+                                else
+                                {
+                                    <div style="width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; background: var(--mud-palette-surface); border-radius: 4px;">
+                                        <MudIcon Icon="@Icons.Material.Filled.Collections" Size="Size.Small" />
+                                    </div>
+                                }
+                                <div>
+                                    <MudText Typo="Typo.body1">@album.Name</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        @album.AssetCount @(album.AssetCount == 1 ? "foto" : "fotos")
+                                    </MudText>
+                                </div>
+                            </div>
+                        </MudRadio>
+                    }
+                </MudRadioGroup>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Class="mb-3">
+                    No tienes ningún álbum. Crea uno nuevo para añadir esta foto.
+                </MudAlert>
+            }
+            
+            <MudDivider Class="my-3" />
+            <MudButton Variant="Variant.Text" 
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="@(() => _showCreateAlbum = true)"
+                       FullWidth="true">
+                Crear nuevo álbum
+            </MudButton>
+        }
+        else
+        {
+            <MudTextField @bind-Value="_newAlbumName" 
+                          Label="Nombre del álbum" 
+                          Variant="Variant.Outlined" 
+                          FullWidth="true"
+                          Class="mb-3" />
+            <MudTextField @bind-Value="_newAlbumDescription" 
+                          Label="Descripción (opcional)" 
+                          Variant="Variant.Outlined" 
+                          FullWidth="true"
+                          Lines="3" />
+            <MudButton Variant="Variant.Text" 
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="@(() => _showCreateAlbum = false)"
+                       Class="mt-2">
+                Volver a seleccionar álbum
+            </MudButton>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => { _addToAlbumDialogVisible = false; _showCreateAlbum = false; _selectedAlbumId = null; })">
+            Cancelar
+        </MudButton>
+        @if (_showCreateAlbum)
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="CreateAlbumAndAdd">
+                Crear y Añadir
+            </MudButton>
+        }
+        else
+        {
+            <MudButton Color="Color.Primary" 
+                       Variant="Variant.Filled" 
+                       OnClick="AddToAlbum"
+                       Disabled="@(!_selectedAlbumId.HasValue)">
+                Añadir
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>

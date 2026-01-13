@@ -137,6 +137,29 @@ namespace PhotoHub.Api.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "Albums",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Description = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
+                    CoverAssetId = table.Column<int>(type: "integer", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Albums", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Albums_Assets_CoverAssetId",
+                        column: x => x.CoverAssetId,
+                        principalTable: "Assets",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "AssetExifs",
                 columns: table => new
                 {
@@ -244,6 +267,55 @@ namespace PhotoHub.Api.Migrations
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
+
+            migrationBuilder.CreateTable(
+                name: "AlbumAssets",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    AlbumId = table.Column<int>(type: "integer", nullable: false),
+                    AssetId = table.Column<int>(type: "integer", nullable: false),
+                    Order = table.Column<int>(type: "integer", nullable: false),
+                    AddedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_AlbumAssets", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_AlbumAssets_Albums_AlbumId",
+                        column: x => x.AlbumId,
+                        principalTable: "Albums",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_AlbumAssets_Assets_AssetId",
+                        column: x => x.AssetId,
+                        principalTable: "Assets",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AlbumAssets_AlbumId",
+                table: "AlbumAssets",
+                column: "AlbumId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AlbumAssets_AlbumId_AssetId",
+                table: "AlbumAssets",
+                columns: new[] { "AlbumId", "AssetId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AlbumAssets_AssetId",
+                table: "AlbumAssets",
+                column: "AssetId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Albums_CoverAssetId",
+                table: "Albums",
+                column: "CoverAssetId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_AssetExifs_AssetId",
@@ -353,6 +425,9 @@ namespace PhotoHub.Api.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
+                name: "AlbumAssets");
+
+            migrationBuilder.DropTable(
                 name: "AssetExifs");
 
             migrationBuilder.DropTable(
@@ -369,6 +444,9 @@ namespace PhotoHub.Api.Migrations
 
             migrationBuilder.DropTable(
                 name: "Settings");
+
+            migrationBuilder.DropTable(
+                name: "Albums");
 
             migrationBuilder.DropTable(
                 name: "Assets");

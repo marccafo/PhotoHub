@@ -25,6 +25,7 @@ builder.Services.AddScoped<IAssetService, AssetService>();
 builder.Services.AddScoped<IIndexService, IndexService>();
 builder.Services.AddScoped<IFolderService, FolderService>();
 builder.Services.AddScoped<IMapService, MapService>();
+builder.Services.AddScoped<IAlbumService, AlbumService>();
 builder.Services.AddScoped<ISettingsService, PhotoHub.Blazor.Shared.Services.SettingsService>();
 
 await builder.Build().RunAsync();

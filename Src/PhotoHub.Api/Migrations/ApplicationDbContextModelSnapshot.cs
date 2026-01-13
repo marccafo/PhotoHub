@@ -22,6 +22,71 @@ namespace PhotoHub.Api.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("PhotoHub.API.Shared.Models.Album", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("CoverAssetId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CoverAssetId");
+
+                    b.ToTable("Albums");
+                });
+
+            modelBuilder.Entity("PhotoHub.API.Shared.Models.AlbumAsset", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("AddedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("AlbumId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("AssetId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AlbumId");
+
+                    b.HasIndex("AssetId");
+
+                    b.HasIndex("AlbumId", "AssetId")
+                        .IsUnique();
+
+                    b.ToTable("AlbumAssets");
+                });
+
             modelBuilder.Entity("PhotoHub.API.Shared.Models.Asset", b =>
                 {
                     b.Property<int>("Id")
@@ -408,6 +473,35 @@ namespace PhotoHub.Api.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("PhotoHub.API.Shared.Models.Album", b =>
+                {
+                    b.HasOne("PhotoHub.API.Shared.Models.Asset", "CoverAsset")
+                        .WithMany()
+                        .HasForeignKey("CoverAssetId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("CoverAsset");
+                });
+
+            modelBuilder.Entity("PhotoHub.API.Shared.Models.AlbumAsset", b =>
+                {
+                    b.HasOne("PhotoHub.API.Shared.Models.Album", "Album")
+                        .WithMany("AlbumAssets")
+                        .HasForeignKey("AlbumId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PhotoHub.API.Shared.Models.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Album");
+
+                    b.Navigation("Asset");
+                });
+
             modelBuilder.Entity("PhotoHub.API.Shared.Models.Asset", b =>
                 {
                     b.HasOne("PhotoHub.API.Shared.Models.Folder", "Folder")
@@ -503,6 +597,11 @@ namespace PhotoHub.Api.Migrations
                     b.Navigation("GrantedByUser");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("PhotoHub.API.Shared.Models.Album", b =>
+                {
+                    b.Navigation("AlbumAssets");
                 });
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.Asset", b =>

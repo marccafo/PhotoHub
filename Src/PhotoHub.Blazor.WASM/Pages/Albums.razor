@@ -1,0 +1,371 @@
+@page "/albums"
+@page "/albums/{AlbumId:int}"
+@using PhotoHub.Blazor.Shared.Services
+@using PhotoHub.Blazor.Shared.Models
+@using MudBlazor
+@using Microsoft.AspNetCore.Components.Web
+@inject IAlbumService AlbumService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>Álbumes - PhotoHub</PageTitle>
+
+@if (_selectedAlbum == null)
+{
+    <div class="d-flex justify-space-between align-center mb-4">
+        <MudText Typo="Typo.h4">Álbumes</MudText>
+        <MudButton Variant="Variant.Filled" 
+                   Color="Color.Primary" 
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenCreateDialog">
+            Crear Álbum
+        </MudButton>
+    </div>
+    
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+    }
+    else if (_albums.Any())
+    {
+        <MudGrid>
+            @foreach (var album in _albums)
+            {
+                <MudItem xs="12" sm="6" md="4" lg="3">
+                    <MudCard Class="album-card" @onclick="@(() => OpenAlbum(album.Id))" Style="cursor: pointer;">
+                        <MudCardContent Style="padding: 0;">
+                            <div style="position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: hidden;">
+                                @if (!string.IsNullOrEmpty(album.CoverThumbnailUrl))
+                                {
+                                    <img src="@album.CoverThumbnailUrl" 
+                                         style="width: 100%; height: 100%; object-fit: cover;" 
+                                         alt="@album.Name" />
+                                }
+                                else
+                                {
+                                    <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--mud-palette-primary) 0%, var(--mud-palette-primary-dark) 100%);">
+                                        <MudIcon Icon="@Icons.Material.Filled.Collections" 
+                                                 Size="Size.Large" 
+                                                 Color="Color.Default" />
+                                    </div>
+                                }
+                                <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 16px; background: linear-gradient(transparent, rgba(0,0,0,0.8));">
+                                    <MudText Typo="Typo.h6" Style="color: white; font-weight: 600;">@album.Name</MudText>
+                                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.9);">
+                                        @album.AssetCount @(album.AssetCount == 1 ? "foto" : "fotos")
+                                    </MudText>
+                                </div>
+                            </div>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Info">No hay álbumes. Crea uno para comenzar.</MudAlert>
+    }
+}
+else
+{
+    <MudBreadcrumbs Items="@_breadcrumbs" Class="mb-4" />
+    
+    <div class="d-flex justify-space-between align-center mb-4">
+        <div>
+            <MudText Typo="Typo.h5">@_selectedAlbum.Name</MudText>
+            @if (!string.IsNullOrEmpty(_selectedAlbum.Description))
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    @_selectedAlbum.Description
+                </MudText>
+            }
+        </div>
+        <div>
+            <MudIconButton Icon="@Icons.Material.Outlined.Edit" 
+                           OnClick="OpenEditDialog" />
+            <MudIconButton Icon="@Icons.Material.Outlined.Delete" 
+                           Color="Color.Error"
+                           OnClick="OpenDeleteDialog" />
+        </div>
+    </div>
+    
+    @if (_loadingAssets)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+    }
+    else if (_albumAssets.Any())
+    {
+        <MudGrid>
+            @foreach (var asset in _albumAssets)
+            {
+                <MudItem xs="4" sm="3" md="2" lg="2" xl="1">
+                    <AssetCard Asset="@asset" OnAssetClick="OpenAsset" />
+                </MudItem>
+            }
+        </MudGrid>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Info">Este álbum está vacío. Añade fotos desde el detalle de cualquier foto.</MudAlert>
+    }
+}
+
+<MudDialog @bind-Visible="_createDialogVisible" 
+          Options="@(new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Crear Álbum</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="_newAlbumName" 
+                      Label="Nombre del álbum" 
+                      Variant="Variant.Outlined" 
+                      FullWidth="true"
+                      Class="mb-3" />
+        <MudTextField @bind-Value="_newAlbumDescription" 
+                      Label="Descripción (opcional)" 
+                      Variant="Variant.Outlined" 
+                      FullWidth="true"
+                      Lines="3" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseCreateDialog">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="CreateAlbum">Crear</MudButton>
+    </DialogActions>
+</MudDialog>
+
+<MudDialog @bind-Visible="_editDialogVisible" Options="@(new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Editar Álbum</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="_editAlbumName" 
+                      Label="Nombre del álbum" 
+                      Variant="Variant.Outlined" 
+                      FullWidth="true"
+                      Class="mb-3" />
+        <MudTextField @bind-Value="_editAlbumDescription" 
+                      Label="Descripción (opcional)" 
+                      Variant="Variant.Outlined" 
+                      FullWidth="true"
+                      Lines="3" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseEditDialog">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="UpdateAlbum">Guardar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+<MudDialog @bind-Visible="_deleteDialogVisible" Options="@(new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Eliminar Álbum</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText>¿Estás seguro de que quieres eliminar el álbum "@_selectedAlbum?.Name"? Esta acción no se puede deshacer.</MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseDeleteDialog">Cancelar</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="DeleteAlbum">Eliminar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter] public int AlbumId { get; set; }
+
+    private List<AlbumItem> _albums = new();
+    private AlbumItem? _selectedAlbum;
+    private List<TimelineItem> _albumAssets = new();
+    private bool _loading = true;
+    private bool _loadingAssets = false;
+
+    // Dialogs
+    private bool _createDialogVisible = false;
+    private bool _editDialogVisible = false;
+    private bool _deleteDialogVisible = false;
+    private string _newAlbumName = "";
+    private string? _newAlbumDescription = "";
+    private string _editAlbumName = "";
+    private string? _editAlbumDescription = "";
+
+    private List<BreadcrumbItem> _breadcrumbs = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAlbums();
+        
+        if (AlbumId > 0)
+        {
+            await LoadAlbum(AlbumId);
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (AlbumId > 0)
+        {
+            await LoadAlbum(AlbumId);
+        }
+        else
+        {
+            _selectedAlbum = null;
+            _albumAssets = new();
+        }
+    }
+
+    private async Task LoadAlbums()
+    {
+        try
+        {
+            _loading = true;
+            _albums = await AlbumService.GetAlbumsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar álbumes: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadAlbum(int albumId)
+    {
+        try
+        {
+            _loadingAssets = true;
+            _selectedAlbum = await AlbumService.GetAlbumByIdAsync(albumId);
+            
+            if (_selectedAlbum != null)
+            {
+                _albumAssets = await AlbumService.GetAlbumAssetsAsync(albumId);
+                _breadcrumbs = new List<BreadcrumbItem>
+                {
+                    new BreadcrumbItem("Álbumes", href: "/albums"),
+                    new BreadcrumbItem(_selectedAlbum.Name, href: null, disabled: true)
+                };
+            }
+            else
+            {
+                Snackbar.Add("Álbum no encontrado", Severity.Warning);
+                Navigation.NavigateTo("/albums");
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar álbum: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingAssets = false;
+        }
+    }
+
+    private void OpenAlbum(int albumId)
+    {
+        Navigation.NavigateTo($"/albums/{albumId}");
+    }
+
+    private void OpenAsset(TimelineItem asset)
+    {
+        Navigation.NavigateTo($"/asset/{asset.Id}");
+    }
+
+    private void OpenCreateDialog()
+    {
+        _newAlbumName = "";
+        _newAlbumDescription = "";
+        _createDialogVisible = true;
+    }
+
+    private void CloseCreateDialog()
+    {
+        _createDialogVisible = false;
+    }
+
+    private async Task CreateAlbum()
+    {
+        if (string.IsNullOrWhiteSpace(_newAlbumName))
+        {
+            Snackbar.Add("El nombre del álbum es obligatorio", Severity.Warning);
+            return;
+        }
+
+        var album = await AlbumService.CreateAlbumAsync(_newAlbumName, _newAlbumDescription);
+        if (album != null)
+        {
+            Snackbar.Add("Álbum creado correctamente", Severity.Success);
+            _createDialogVisible = false;
+            await LoadAlbums();
+        }
+        else
+        {
+            Snackbar.Add("Error al crear el álbum", Severity.Error);
+        }
+    }
+
+    private void OpenEditDialog()
+    {
+        if (_selectedAlbum != null)
+        {
+            _editAlbumName = _selectedAlbum.Name;
+            _editAlbumDescription = _selectedAlbum.Description;
+            _editDialogVisible = true;
+        }
+    }
+
+    private void CloseEditDialog()
+    {
+        _editDialogVisible = false;
+    }
+
+    private async Task UpdateAlbum()
+    {
+        if (_selectedAlbum == null || string.IsNullOrWhiteSpace(_editAlbumName))
+        {
+            Snackbar.Add("El nombre del álbum es obligatorio", Severity.Warning);
+            return;
+        }
+
+        var success = await AlbumService.UpdateAlbumAsync(_selectedAlbum.Id, _editAlbumName, _editAlbumDescription);
+        if (success)
+        {
+            Snackbar.Add("Álbum actualizado correctamente", Severity.Success);
+            _editDialogVisible = false;
+            await LoadAlbum(_selectedAlbum.Id);
+            await LoadAlbums();
+        }
+        else
+        {
+            Snackbar.Add("Error al actualizar el álbum", Severity.Error);
+        }
+    }
+
+    private void OpenDeleteDialog()
+    {
+        _deleteDialogVisible = true;
+    }
+
+    private void CloseDeleteDialog()
+    {
+        _deleteDialogVisible = false;
+    }
+
+    private async Task DeleteAlbum()
+    {
+        if (_selectedAlbum == null)
+            return;
+
+        var success = await AlbumService.DeleteAlbumAsync(_selectedAlbum.Id);
+        if (success)
+        {
+            Snackbar.Add("Álbum eliminado correctamente", Severity.Success);
+            _deleteDialogVisible = false;
+            Navigation.NavigateTo("/albums");
+        }
+        else
+        {
+            Snackbar.Add("Error al eliminar el álbum", Severity.Error);
+        }
+    }
+}
