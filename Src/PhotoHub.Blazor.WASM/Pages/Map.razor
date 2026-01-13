@@ -13,7 +13,7 @@
 
 <PageTitle>Mapa - PhotoHub</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.False" Class="pa-0" Style="height: calc(100vh - 64px); position: relative;">
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-0 map-fullscreen" Style="height: calc(100vh - 64px - 48px); position: relative; margin: -24px; width: calc(100% + 48px);">
     @if (_loading)
     {
         <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000;">
