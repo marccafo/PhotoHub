@@ -21,6 +21,7 @@ builder.Services.AddMudServices();
 
 // Agregar servicios personalizados
 builder.Services.AddScoped<LayoutService>();
+builder.Services.AddScoped<ThemeService>();
 builder.Services.AddScoped<PhotoHub.Blazor.Shared.Services.IAuthService, PhotoHub.Blazor.WASM.Services.AuthService>();
 builder.Services.AddScoped<PhotoHub.Blazor.WASM.Services.AuthService>(sp => 
     (PhotoHub.Blazor.WASM.Services.AuthService)sp.GetRequiredService<PhotoHub.Blazor.Shared.Services.IAuthService>());

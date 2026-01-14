@@ -1,5 +1,8 @@
 ﻿@using PhotoHub.Blazor.WASM.Services
+@using PhotoHub.Blazor.Shared.Services
 @inject LayoutService LayoutService
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
 
 <Router AppAssembly="@typeof(App).Assembly" OnNavigateAsync="OnNavigateAsync">
     <Found Context="routeData">
@@ -23,12 +26,23 @@
 @code {
     private bool _initialized;
 
-    private async Task OnNavigateAsync()
+    private async Task OnNavigateAsync(Microsoft.AspNetCore.Components.Routing.NavigationContext context)
     {
         if (!_initialized)
         {
             await LayoutService.InitializeAsync();
             _initialized = true;
+        }
+
+        var path = context.Path.Trim('/').ToLowerInvariant();
+        if (path.StartsWith("login") || path.StartsWith("register"))
+        {
+            return;
+        }
+
+        if (!await AuthService.IsAuthenticatedAsync())
+        {
+            Navigation.NavigateTo("/login", forceLoad: true);
         }
     }
 }

@@ -1,4 +1,5 @@
 @page "/register"
+@layout LoginLayout
 @using PhotoHub.Blazor.Shared.Services
 @using MudBlazor
 @inject HttpClient HttpClient
@@ -8,8 +9,9 @@
 
 <PageTitle>Registro - PhotoHub</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
-    <MudPaper Elevation="3" Class="pa-8">
+<div style="min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+    <MudContainer MaxWidth="MaxWidth.Small">
+        <MudPaper Elevation="3" Class="pa-8">
         <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-6">
             Crear Cuenta
         </MudText>
@@ -83,8 +85,9 @@
             ¿Ya tienes cuenta? 
             <MudLink Href="/login" Typo="Typo.body2">Inicia sesión aquí</MudLink>
         </MudText>
-    </MudPaper>
-</MudContainer>
+        </MudPaper>
+    </MudContainer>
+</div>
 
 @code {
     private MudForm? _form;

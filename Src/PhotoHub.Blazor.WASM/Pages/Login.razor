@@ -1,4 +1,5 @@
 @page "/login"
+@layout LoginLayout
 @using PhotoHub.Blazor.Shared.Services
 @using MudBlazor
 @inject IAuthService AuthService
@@ -7,8 +8,9 @@
 
 <PageTitle>Iniciar Sesión - PhotoHub</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
-    <MudPaper Elevation="3" Class="pa-8">
+<div style="min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+    <MudContainer MaxWidth="MaxWidth.Small">
+        <MudPaper Elevation="3" Class="pa-8">
         <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-6">
             PhotoHub
         </MudText>
@@ -53,8 +55,9 @@
             ¿No tienes cuenta? 
             <MudLink Href="/register" Typo="Typo.body2">Regístrate aquí</MudLink>
         </MudText>
-    </MudPaper>
-</MudContainer>
+        </MudPaper>
+    </MudContainer>
+</div>
 
 @code {
     private MudForm? _form;
