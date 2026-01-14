@@ -604,16 +604,23 @@ else
         if (_asset == null || _asset.Id == 0 || !_selectedAlbumId.HasValue)
             return;
 
-        var success = await AlbumService.AddAssetToAlbumAsync(_selectedAlbumId.Value, _asset.Id);
-        if (success)
+        try
         {
-            Snackbar.Add("Foto añadida al álbum correctamente", Severity.Success);
-            _addToAlbumDialogVisible = false;
-            _selectedAlbumId = null;
+            var success = await AlbumService.AddAssetToAlbumAsync(_selectedAlbumId.Value, _asset.Id);
+            if (success)
+            {
+                Snackbar.Add("Foto añadida al álbum correctamente", Severity.Success);
+                _addToAlbumDialogVisible = false;
+                _selectedAlbumId = null;
+            }
+            else
+            {
+                Snackbar.Add("Error al añadir la foto al álbum", Severity.Error);
+            }
         }
-        else
+        catch (UnauthorizedAccessException)
         {
-            Snackbar.Add("Error al añadir la foto al álbum", Severity.Error);
+            Snackbar.Add("No tienes permisos suficientes para añadir fotos a este álbum.", Severity.Error);
         }
     }
 
@@ -628,19 +635,26 @@ else
         var album = await AlbumService.CreateAlbumAsync(_newAlbumName, _newAlbumDescription);
         if (album != null && _asset != null && _asset.Id > 0)
         {
-            var success = await AlbumService.AddAssetToAlbumAsync(album.Id, _asset.Id);
-            if (success)
+            try
             {
-                Snackbar.Add("Álbum creado y foto añadida correctamente", Severity.Success);
-                _addToAlbumDialogVisible = false;
-                _showCreateAlbum = false;
-                _newAlbumName = "";
-                _newAlbumDescription = "";
-                _selectedAlbumId = null;
+                var success = await AlbumService.AddAssetToAlbumAsync(album.Id, _asset.Id);
+                if (success)
+                {
+                    Snackbar.Add("Álbum creado y foto añadida correctamente", Severity.Success);
+                    _addToAlbumDialogVisible = false;
+                    _showCreateAlbum = false;
+                    _newAlbumName = "";
+                    _newAlbumDescription = "";
+                    _selectedAlbumId = null;
+                }
+                else
+                {
+                    Snackbar.Add("Álbum creado pero error al añadir la foto", Severity.Warning);
+                }
             }
-            else
+            catch (UnauthorizedAccessException)
             {
-                Snackbar.Add("Álbum creado pero error al añadir la foto", Severity.Warning);
+                Snackbar.Add("No tienes permisos suficientes para añadir fotos a este álbum.", Severity.Error);
             }
         }
         else

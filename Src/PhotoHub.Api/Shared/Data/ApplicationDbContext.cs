@@ -21,6 +21,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<Setting> Settings { get; set; }
     public DbSet<Album> Albums { get; set; }
     public DbSet<AlbumAsset> AlbumAssets { get; set; }
+    public DbSet<AlbumPermission> AlbumPermissions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -32,6 +33,10 @@ public class ApplicationDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Username).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.PasswordHash).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.FirstName).HasMaxLength(100);
+            entity.Property(e => e.LastName).HasMaxLength(100);
+            entity.Property(e => e.Role).HasMaxLength(50).HasDefaultValue("User");
             entity.HasIndex(e => e.Username).IsUnique();
             entity.HasIndex(e => e.Email).IsUnique();
             entity.Property(e => e.CreatedAt)
@@ -39,6 +44,15 @@ public class ApplicationDbContext : DbContext
                 .HasConversion(
                     v => v.Kind == DateTimeKind.Utc ? DateTime.SpecifyKind(v, DateTimeKind.Unspecified) : v,
                     v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+            entity.Property(e => e.LastLoginAt)
+                .HasColumnType("timestamp without time zone")
+                .HasConversion(
+                    v => v.HasValue && v.Value.Kind == DateTimeKind.Utc 
+                        ? DateTime.SpecifyKind(v.Value, DateTimeKind.Unspecified) 
+                        : v,
+                    v => v.HasValue 
+                        ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) 
+                        : null);
         });
 
         // Configure Folder entity
@@ -278,7 +292,13 @@ public class ApplicationDbContext : DbContext
                 .HasForeignKey(e => e.CoverAssetId)
                 .OnDelete(DeleteBehavior.SetNull);
             
+            entity.HasOne(e => e.Owner)
+                .WithMany(u => u.OwnedAlbums)
+                .HasForeignKey(e => e.OwnerId)
+                .OnDelete(DeleteBehavior.Restrict);
+            
             entity.HasIndex(e => e.CoverAssetId);
+            entity.HasIndex(e => e.OwnerId);
             
             entity.Property(e => e.CreatedAt)
                 .HasColumnType("timestamp without time zone")
@@ -313,6 +333,37 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => new { e.AlbumId, e.AssetId }).IsUnique(); // One asset can only appear once per album
             
             entity.Property(e => e.AddedAt)
+                .HasColumnType("timestamp without time zone")
+                .HasConversion(
+                    v => v.Kind == DateTimeKind.Utc ? DateTime.SpecifyKind(v, DateTimeKind.Unspecified) : v,
+                    v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+        });
+
+        // Configure AlbumPermission entity
+        modelBuilder.Entity<AlbumPermission>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            
+            entity.HasOne(e => e.Album)
+                .WithMany(a => a.Permissions)
+                .HasForeignKey(e => e.AlbumId)
+                .OnDelete(DeleteBehavior.Cascade);
+            
+            entity.HasOne(e => e.User)
+                .WithMany(u => u.AlbumPermissions)
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            
+            entity.HasOne(e => e.GrantedByUser)
+                .WithMany()
+                .HasForeignKey(e => e.GrantedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+            
+            entity.HasIndex(e => e.AlbumId);
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => new { e.AlbumId, e.UserId }).IsUnique(); // One permission per user-album combination
+            
+            entity.Property(e => e.GrantedAt)
                 .HasColumnType("timestamp without time zone")
                 .HasConversion(
                     v => v.Kind == DateTimeKind.Utc ? DateTime.SpecifyKind(v, DateTimeKind.Unspecified) : v,

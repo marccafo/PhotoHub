@@ -1,0 +1,242 @@
+@page "/admin/users"
+@using PhotoHub.Blazor.Shared.Services
+@using MudBlazor
+@inject IUserService UserService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Gestión de Usuarios - PhotoHub</PageTitle>
+
+@if (!_isAuthorized)
+{
+    <MudContainer Class="mt-8">
+        <MudText Typo="Typo.h5">Acceso Denegado</MudText>
+        <MudText Typo="Typo.body1">Solo los administradores pueden acceder a esta página.</MudText>
+        <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary" Class="mt-4">
+            Volver al inicio
+        </MudButton>
+    </MudContainer>
+}
+else
+{
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Gestión de Usuarios</MudText>
+    
+    <MudButton Variant="Variant.Filled" 
+               Color="Color.Primary" 
+               StartIcon="@Icons.Material.Filled.Add" 
+               OnClick="OpenCreateDialog"
+               Class="mb-4">
+        Crear Usuario
+    </MudButton>
+    
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+    
+    <MudTable Items="@_users" Hover="true" Striped="true" Dense="true" Loading="@_loading" Class="mt-4">
+        <HeaderContent>
+            <MudTh>ID</MudTh>
+            <MudTh>Usuario</MudTh>
+            <MudTh>Email</MudTh>
+            <MudTh>Nombre</MudTh>
+            <MudTh>Rol</MudTh>
+            <MudTh>Estado</MudTh>
+            <MudTh>Último Login</MudTh>
+            <MudTh>Acciones</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="ID">@context.Id</MudTd>
+            <MudTd DataLabel="Usuario">@context.Username</MudTd>
+            <MudTd DataLabel="Email">@context.Email</MudTd>
+            <MudTd DataLabel="Nombre">@GetFullName(context)</MudTd>
+            <MudTd DataLabel="Rol">
+                <MudChip T="string" Color="@(context.Role == "Admin" ? Color.Error : Color.Primary)" Size="Size.Small">
+                    @context.Role
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Estado">
+                <MudChip T="string" Color="@(context.IsActive ? Color.Success : Color.Error)" Size="Size.Small">
+                    @(context.IsActive ? "Activo" : "Inactivo")
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Último Login">
+                @if (context.LastLoginAt.HasValue)
+                {
+                    @context.LastLoginAt.Value.ToString("dd/MM/yyyy HH:mm")
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Nunca</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Acciones">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" 
+                               OnClick="@(() => OpenEditDialog(context))" 
+                               Color="Color.Primary"
+                               Size="Size.Small" />
+                <MudIconButton Icon="@Icons.Material.Filled.Lock" 
+                               OnClick="@(() => OpenResetPasswordDialog(context))" 
+                               Color="Color.Warning"
+                               Size="Size.Small" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                               OnClick="@(() => DeleteUser(context.Id))" 
+                               Color="Color.Error"
+                               Size="Size.Small" />
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudContainer>
+}
+
+@code {
+    private List<UserDto> _users = new();
+    private bool _loading = true;
+    private bool _isAuthorized = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Verificar autenticación y rol
+        if (!await AuthService.IsAuthenticatedAsync())
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        var currentUser = await AuthService.GetCurrentUserAsync();
+        if (currentUser == null || currentUser.Role != "Admin")
+        {
+            _isAuthorized = false;
+            return;
+        }
+
+        _isAuthorized = true;
+        await LoadUsers();
+    }
+
+    private async Task LoadUsers()
+    {
+        try
+        {
+            _loading = true;
+            _users = await UserService.GetUsersAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar usuarios: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private string GetFullName(UserDto user)
+    {
+        if (!string.IsNullOrEmpty(user.FirstName) && !string.IsNullOrEmpty(user.LastName))
+            return $"{user.FirstName} {user.LastName}";
+        if (!string.IsNullOrEmpty(user.FirstName))
+            return user.FirstName;
+        if (!string.IsNullOrEmpty(user.LastName))
+            return user.LastName;
+        return "-";
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var parameters = new DialogParameters
+        {
+            ["User"] = (UserDto?)null,
+            ["IsEdit"] = false
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<UserDialog>("Crear Usuario", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadUsers();
+        }
+    }
+
+    private async Task OpenEditDialog(UserDto user)
+    {
+        var parameters = new DialogParameters
+        {
+            ["User"] = user,
+            ["IsEdit"] = true
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<UserDialog>("Editar Usuario", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadUsers();
+        }
+    }
+
+    private async Task OpenResetPasswordDialog(UserDto user)
+    {
+        var parameters = new DialogParameters
+        {
+            ["User"] = user
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<ResetPasswordDialog>("Restablecer Contraseña", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            Snackbar.Add("Contraseña restablecida correctamente", Severity.Success);
+        }
+    }
+
+    private async Task DeleteUser(int id)
+    {
+        var user = _users.FirstOrDefault(u => u.Id == id);
+        if (user == null) return;
+
+        bool? result = await DialogService.ShowMessageBox(
+            "Confirmar eliminación",
+            $"¿Está seguro de que desea eliminar al usuario '{user.Username}'?",
+            yesText: "Eliminar",
+            cancelText: "Cancelar");
+
+        if (result == true)
+        {
+            try
+            {
+                await UserService.DeleteUserAsync(id);
+                Snackbar.Add("Usuario eliminado correctamente", Severity.Success);
+                await LoadUsers();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error al eliminar usuario: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+}

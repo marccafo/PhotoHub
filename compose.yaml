@@ -46,6 +46,11 @@
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=${POSTGRES_DB:-photohub};Username=${POSTGRES_USER:-photohub_user};Password=${POSTGRES_PASSWORD:-photohub_password}
       - ASSETS_PATH=${ASSETS_PATH:-C:\PhotoHubAssets\NAS\Assets}
+      - AdminUser__Username=${ADMIN_USERNAME:-admin}
+      - AdminUser__Email=${ADMIN_EMAIL:-admin@photohub.local}
+      - AdminUser__Password=${ADMIN_PASSWORD:-admin123}
+      - AdminUser__FirstName=${ADMIN_FIRSTNAME:-Administrador}
+      - AdminUser__LastName=${ADMIN_LASTNAME:-Sistema}
     depends_on:
       postgres:
         condition: service_healthy

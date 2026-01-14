@@ -3,6 +3,7 @@
 @inject IAlbumService AlbumService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
+@inject IDialogService DialogService
 
 <PageTitle>Álbumes - PhotoHub</PageTitle>
 
@@ -78,11 +79,29 @@ else
             }
         </div>
         <div>
-            <MudIconButton Icon="@Icons.Material.Outlined.Edit" 
-                           OnClick="OpenEditDialog" />
-            <MudIconButton Icon="@Icons.Material.Outlined.Delete" 
-                           Color="Color.Error"
-                           OnClick="OpenDeleteDialog" />
+            @if (_selectedAlbum?.CanManagePermissions == true || _selectedAlbum?.IsOwner == true)
+            {
+                <MudIconButton Icon="@Icons.Material.Outlined.Share" 
+                               OnClick="@(() => Navigation.NavigateTo($"/albums/{AlbumId}/permissions"))"
+                               Title="Gestionar permisos" />
+            }
+            @if (_selectedAlbum?.CanEdit == true || _selectedAlbum?.IsOwner == true)
+            {
+                <MudIconButton Icon="@Icons.Material.Outlined.Edit" 
+                               OnClick="OpenEditDialog" />
+            }
+            @if (_selectedAlbum?.CanDelete == true || _selectedAlbum?.IsOwner == true)
+            {
+                <MudIconButton Icon="@Icons.Material.Outlined.Delete" 
+                               Color="Color.Error"
+                               OnClick="OpenDeleteDialog" />
+            }
+            @if (_selectedAlbum?.IsOwner != true)
+            {
+                <MudButton Color="Color.Error" Variant="Variant.Text" OnClick="LeaveAlbum">
+                    Salir del álbum
+                </MudButton>
+            }
         </div>
     </div>
     
@@ -247,6 +266,11 @@ else
                 Navigation.NavigateTo("/albums");
             }
         }
+        catch (UnauthorizedAccessException)
+        {
+            Snackbar.Add("No tienes permisos suficientes para acceder a este álbum.", Severity.Error);
+            Navigation.NavigateTo("/albums");
+        }
         catch (Exception ex)
         {
             Snackbar.Add($"Error al cargar álbum: {ex.Message}", Severity.Error);
@@ -323,17 +347,24 @@ else
             return;
         }
 
-        var success = await AlbumService.UpdateAlbumAsync(_selectedAlbum.Id, _editAlbumName, _editAlbumDescription);
-        if (success)
+        try
         {
-            Snackbar.Add("Álbum actualizado correctamente", Severity.Success);
-            _editDialogVisible = false;
-            await LoadAlbum(_selectedAlbum.Id);
-            await LoadAlbums();
+            var success = await AlbumService.UpdateAlbumAsync(_selectedAlbum.Id, _editAlbumName, _editAlbumDescription);
+            if (success)
+            {
+                Snackbar.Add("Álbum actualizado correctamente", Severity.Success);
+                _editDialogVisible = false;
+                await LoadAlbum(_selectedAlbum.Id);
+                await LoadAlbums();
+            }
+            else
+            {
+                Snackbar.Add("Error al actualizar el álbum", Severity.Error);
+            }
         }
-        else
+        catch (UnauthorizedAccessException)
         {
-            Snackbar.Add("Error al actualizar el álbum", Severity.Error);
+            Snackbar.Add("No tienes permisos suficientes para editar este álbum.", Severity.Error);
         }
     }
 
@@ -352,16 +383,57 @@ else
         if (_selectedAlbum == null)
             return;
 
-        var success = await AlbumService.DeleteAlbumAsync(_selectedAlbum.Id);
-        if (success)
+        try
         {
-            Snackbar.Add("Álbum eliminado correctamente", Severity.Success);
-            _deleteDialogVisible = false;
-            Navigation.NavigateTo("/albums");
+            var success = await AlbumService.DeleteAlbumAsync(_selectedAlbum.Id);
+            if (success)
+            {
+                Snackbar.Add("Álbum eliminado correctamente", Severity.Success);
+                _deleteDialogVisible = false;
+                Navigation.NavigateTo("/albums");
+            }
+            else
+            {
+                Snackbar.Add("Error al eliminar el álbum", Severity.Error);
+            }
         }
-        else
+        catch (UnauthorizedAccessException)
         {
-            Snackbar.Add("Error al eliminar el álbum", Severity.Error);
+            Snackbar.Add("No tienes permisos suficientes para eliminar este álbum.", Severity.Error);
+        }
+    }
+
+    private async Task LeaveAlbum()
+    {
+        if (_selectedAlbum == null)
+            return;
+
+        bool? confirm = await DialogService.ShowMessageBox(
+            "Salir del álbum",
+            $"¿Quieres dejar de tener acceso al álbum \"{_selectedAlbum.Name}\"?",
+            yesText: "Salir",
+            cancelText: "Cancelar");
+
+        if (confirm != true)
+            return;
+
+        try
+        {
+            var success = await AlbumService.LeaveAlbumAsync(_selectedAlbum.Id);
+            if (success)
+            {
+                Snackbar.Add("Has dejado de tener acceso al álbum.", Severity.Success);
+                Navigation.NavigateTo("/albums");
+                await LoadAlbums();
+            }
+            else
+            {
+                Snackbar.Add("Error al salir del álbum", Severity.Error);
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Snackbar.Add("No tienes permisos suficientes para salir de este álbum.", Severity.Error);
         }
     }
 }

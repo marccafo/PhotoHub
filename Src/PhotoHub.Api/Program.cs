@@ -1,3 +1,6 @@
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 using PhotoHub.Api;
 using Scalar.AspNetCore;
 using Microsoft.Extensions.FileProviders;
@@ -9,6 +12,28 @@ var builder = WebApplication.CreateBuilder(args);
 //builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
 
+// Configurar JWT Authentication
+var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured");
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "PhotoHub";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "PhotoHub";
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+        };
+    });
+
+builder.Services.AddAuthorization();
+
 builder.AddPostgres();
 
 builder.AddApplicationServices();
@@ -16,6 +41,7 @@ builder.AddApplicationServices();
 var app = builder.Build();
 
 app.ExecuteMigrations();
+await app.InitializeAdminUserAsync();
 await app.EnsureFFmpegAsync();
 
 // Configure the HTTP request pipeline.
@@ -27,6 +53,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// IMPORTANTE: Authentication y Authorization deben ir antes de UseBlazorFrameworkFiles
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.UseBlazorFrameworkFiles();
 app.UseStaticFiles();

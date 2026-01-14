@@ -55,7 +55,14 @@ namespace PhotoHub.Api.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Username = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     Email = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false)
+                    PasswordHash = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
+                    FirstName = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    LastName = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
+                    IsEmailVerified = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
+                    LastLoginAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
+                    Role = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false, defaultValue: "User")
                 },
                 constraints: table =>
                 {
@@ -146,7 +153,8 @@ namespace PhotoHub.Api.Migrations
                     Description = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
-                    CoverAssetId = table.Column<int>(type: "integer", nullable: true)
+                    CoverAssetId = table.Column<int>(type: "integer", nullable: true),
+                    OwnerId = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -157,6 +165,12 @@ namespace PhotoHub.Api.Migrations
                         principalTable: "Assets",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_Albums_Users_OwnerId",
+                        column: x => x.OwnerId,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -296,6 +310,44 @@ namespace PhotoHub.Api.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
+            migrationBuilder.CreateTable(
+                name: "AlbumPermissions",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    AlbumId = table.Column<int>(type: "integer", nullable: false),
+                    UserId = table.Column<int>(type: "integer", nullable: false),
+                    CanView = table.Column<bool>(type: "boolean", nullable: false),
+                    CanEdit = table.Column<bool>(type: "boolean", nullable: false),
+                    CanDelete = table.Column<bool>(type: "boolean", nullable: false),
+                    CanManagePermissions = table.Column<bool>(type: "boolean", nullable: false),
+                    GrantedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
+                    GrantedByUserId = table.Column<int>(type: "integer", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_AlbumPermissions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_AlbumPermissions_Albums_AlbumId",
+                        column: x => x.AlbumId,
+                        principalTable: "Albums",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_AlbumPermissions_Users_GrantedByUserId",
+                        column: x => x.GrantedByUserId,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_AlbumPermissions_Users_UserId",
+                        column: x => x.UserId,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
             migrationBuilder.CreateIndex(
                 name: "IX_AlbumAssets_AlbumId",
                 table: "AlbumAssets",
@@ -313,9 +365,35 @@ namespace PhotoHub.Api.Migrations
                 column: "AssetId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_AlbumPermissions_AlbumId",
+                table: "AlbumPermissions",
+                column: "AlbumId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AlbumPermissions_AlbumId_UserId",
+                table: "AlbumPermissions",
+                columns: new[] { "AlbumId", "UserId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AlbumPermissions_GrantedByUserId",
+                table: "AlbumPermissions",
+                column: "GrantedByUserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AlbumPermissions_UserId",
+                table: "AlbumPermissions",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Albums_CoverAssetId",
                 table: "Albums",
                 column: "CoverAssetId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Albums_OwnerId",
+                table: "Albums",
+                column: "OwnerId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_AssetExifs_AssetId",
@@ -426,6 +504,9 @@ namespace PhotoHub.Api.Migrations
         {
             migrationBuilder.DropTable(
                 name: "AlbumAssets");
+
+            migrationBuilder.DropTable(
+                name: "AlbumPermissions");
 
             migrationBuilder.DropTable(
                 name: "AssetExifs");

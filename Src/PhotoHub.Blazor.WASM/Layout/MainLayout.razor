@@ -1,8 +1,10 @@
 ﻿@inherits LayoutComponentBase
 @using PhotoHub.Blazor.WASM.Services
+@using PhotoHub.Blazor.Shared.Services
 @implements IDisposable
 @inject NavigationManager Navigation
 @inject LayoutService LayoutService
+@inject IAuthService AuthService
 
 <MudThemeProvider IsDarkMode="LayoutService.IsDarkMode" Theme="_theme" />
 <MudPopoverProvider />
@@ -46,7 +48,25 @@
                 <MudTooltip Text="Configuración">
                     <MudIconButton Icon="@Icons.Material.Filled.Settings" Color="Color.Inherit" OnClick="@(() => Navigation.NavigateTo("/settings"))" />
                 </MudTooltip>
-                <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Class="ml-2" Style="width: 32px; height: 32px;">U</MudAvatar>
+                <AuthorizeView Roles="Admin">
+                    <Authorized>
+                        <MudTooltip Text="Administración">
+                            <MudIconButton Icon="@Icons.Material.Filled.AdminPanelSettings" Color="Color.Inherit" OnClick="@(() => Navigation.NavigateTo("/admin/users"))" />
+                        </MudTooltip>
+                    </Authorized>
+                </AuthorizeView>
+                <AuthorizeView>
+                    <Authorized>
+                        <MudMenu Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                            <MudMenuItem OnClick="Logout">Cerrar Sesión</MudMenuItem>
+                        </MudMenu>
+                    </Authorized>
+                    <NotAuthorized>
+                        <MudButton Href="/login" Variant="Variant.Text" Color="Color.Inherit" Size="Size.Small">
+                            Iniciar Sesión
+                        </MudButton>
+                    </NotAuthorized>
+                </AuthorizeView>
             </div>
         }
         else
@@ -155,6 +175,12 @@
     protected override void OnInitialized()
     {
         LayoutService.OnMajorUpdate += StateHasChanged;
+    }
+
+    private async Task Logout()
+    {
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/login");
     }
 
     public void Dispose()

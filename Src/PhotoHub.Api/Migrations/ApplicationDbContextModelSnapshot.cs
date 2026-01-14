@@ -17,7 +17,7 @@ namespace PhotoHub.Api.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.1")
+                .HasAnnotation("ProductVersion", "10.0.2")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -45,12 +45,17 @@ namespace PhotoHub.Api.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<int>("OwnerId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp without time zone");
 
                     b.HasKey("Id");
 
                     b.HasIndex("CoverAssetId");
+
+                    b.HasIndex("OwnerId");
 
                     b.ToTable("Albums");
                 });
@@ -85,6 +90,52 @@ namespace PhotoHub.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("AlbumAssets");
+                });
+
+            modelBuilder.Entity("PhotoHub.API.Shared.Models.AlbumPermission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AlbumId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("CanDelete")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanEdit")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanManagePermissions")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanView")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("GrantedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("GrantedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AlbumId");
+
+                    b.HasIndex("GrantedByUserId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("AlbumId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("AlbumPermissions");
                 });
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.Asset", b =>
@@ -457,6 +508,35 @@ namespace PhotoHub.Api.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<string>("FirstName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsEmailVerified")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastLoginAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("LastName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("User");
+
                     b.Property<string>("Username")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -480,7 +560,15 @@ namespace PhotoHub.Api.Migrations
                         .HasForeignKey("CoverAssetId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("PhotoHub.API.Shared.Models.User", "Owner")
+                        .WithMany("OwnedAlbums")
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("CoverAsset");
+
+                    b.Navigation("Owner");
                 });
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.AlbumAsset", b =>
@@ -500,6 +588,32 @@ namespace PhotoHub.Api.Migrations
                     b.Navigation("Album");
 
                     b.Navigation("Asset");
+                });
+
+            modelBuilder.Entity("PhotoHub.API.Shared.Models.AlbumPermission", b =>
+                {
+                    b.HasOne("PhotoHub.API.Shared.Models.Album", "Album")
+                        .WithMany("Permissions")
+                        .HasForeignKey("AlbumId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PhotoHub.API.Shared.Models.User", "GrantedByUser")
+                        .WithMany()
+                        .HasForeignKey("GrantedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("PhotoHub.API.Shared.Models.User", "User")
+                        .WithMany("AlbumPermissions")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Album");
+
+                    b.Navigation("GrantedByUser");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.Asset", b =>
@@ -602,6 +716,8 @@ namespace PhotoHub.Api.Migrations
             modelBuilder.Entity("PhotoHub.API.Shared.Models.Album", b =>
                 {
                     b.Navigation("AlbumAssets");
+
+                    b.Navigation("Permissions");
                 });
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.Asset", b =>
@@ -626,9 +742,13 @@ namespace PhotoHub.Api.Migrations
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.User", b =>
                 {
+                    b.Navigation("AlbumPermissions");
+
                     b.Navigation("Assets");
 
                     b.Navigation("FolderPermissions");
+
+                    b.Navigation("OwnedAlbums");
                 });
 #pragma warning restore 612, 618
         }

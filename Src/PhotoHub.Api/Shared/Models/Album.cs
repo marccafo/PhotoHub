@@ -20,6 +20,11 @@ public class Album
     public int? CoverAssetId { get; set; }
     public Asset? CoverAsset { get; set; }
     
+    // Propietario del álbum
+    public int OwnerId { get; set; }
+    public User Owner { get; set; } = null!;
+    
     // Navigation properties
     public ICollection<AlbumAsset> AlbumAssets { get; set; } = new List<AlbumAsset>();
+    public ICollection<AlbumPermission> Permissions { get; set; } = new List<AlbumPermission>();
 }

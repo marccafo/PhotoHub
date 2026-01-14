@@ -21,11 +21,31 @@ builder.Services.AddMudServices();
 
 // Agregar servicios personalizados
 builder.Services.AddScoped<LayoutService>();
+builder.Services.AddScoped<PhotoHub.Blazor.Shared.Services.IAuthService, PhotoHub.Blazor.WASM.Services.AuthService>();
+builder.Services.AddScoped<PhotoHub.Blazor.WASM.Services.AuthService>(sp => 
+    (PhotoHub.Blazor.WASM.Services.AuthService)sp.GetRequiredService<PhotoHub.Blazor.Shared.Services.IAuthService>());
 builder.Services.AddScoped<IAssetService, AssetService>();
 builder.Services.AddScoped<IIndexService, IndexService>();
 builder.Services.AddScoped<IFolderService, FolderService>();
 builder.Services.AddScoped<IMapService, MapService>();
-builder.Services.AddScoped<IAlbumService, AlbumService>();
+builder.Services.AddScoped<IAlbumService>(sp =>
+{
+    var httpClient = sp.GetRequiredService<HttpClient>();
+    var authService = sp.GetRequiredService<PhotoHub.Blazor.WASM.Services.AuthService>();
+    return new AlbumService(httpClient, async () => await authService.GetTokenAsync());
+});
 builder.Services.AddScoped<ISettingsService, PhotoHub.Blazor.Shared.Services.SettingsService>();
+builder.Services.AddScoped<IUserService>(sp =>
+{
+    var httpClient = sp.GetRequiredService<HttpClient>();
+    var authService = sp.GetRequiredService<PhotoHub.Blazor.WASM.Services.AuthService>();
+    return new UserService(httpClient, async () => await authService.GetTokenAsync());
+});
+builder.Services.AddScoped<IAlbumPermissionService>(sp =>
+{
+    var httpClient = sp.GetRequiredService<HttpClient>();
+    var authService = sp.GetRequiredService<PhotoHub.Blazor.WASM.Services.AuthService>();
+    return new AlbumPermissionService(httpClient, async () => await authService.GetTokenAsync());
+});
 
 await builder.Build().RunAsync();

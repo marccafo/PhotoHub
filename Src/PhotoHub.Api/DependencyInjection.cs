@@ -19,6 +19,12 @@ public static class DependencyInjection
         builder.Services.AddScoped<SettingsService>();
         builder.Services.AddScoped<IMlJobService, MlJobService>();
         builder.Services.AddHostedService<MlJobProcessorService>();
+        
+        // Registrar AuthService
+        builder.Services.AddScoped<IAuthService, AuthService>();
+        
+        // Registrar UserInitializationService
+        builder.Services.AddScoped<UserInitializationService>();
 
         // Configure FFmpeg
         ConfigureFFmpeg(builder.Configuration);
@@ -131,6 +137,23 @@ public static class DependencyInjection
             catch (Exception ex)
             {
                 Console.WriteLine($"Error applying migrations: {ex.Message}");
+                // No lanzar excepción para permitir que la app continúe
+            }
+        }
+    }
+
+    public static async Task InitializeAdminUserAsync(this WebApplication app)
+    {
+        using (var scope = app.Services.CreateScope())
+        {
+            try
+            {
+                var initializationService = scope.ServiceProvider.GetRequiredService<UserInitializationService>();
+                await initializationService.InitializeAdminUserAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ERROR] Error initializing admin user: {ex.Message}");
                 // No lanzar excepción para permitir que la app continúe
             }
         }

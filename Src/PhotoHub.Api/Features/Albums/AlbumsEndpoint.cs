@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PhotoHub.API.Shared.Data;
@@ -11,64 +13,104 @@ public class AlbumsEndpoint : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/albums", GetAllAlbums)
-            .WithName("GetAllAlbums")
+        var group = app.MapGroup("/api/albums")
             .WithTags("Albums")
-            .WithDescription("Gets all albums");
+            .RequireAuthorization();
 
-        app.MapGet("/api/albums/{albumId}", GetAlbumById)
+        group.MapGet("", GetAllAlbums)
+            .WithName("GetAllAlbums")
+            .WithDescription("Gets all albums accessible by the current user");
+
+        group.MapGet("{albumId:int}", GetAlbumById)
             .WithName("GetAlbumById")
-            .WithTags("Albums")
             .WithDescription("Gets an album by ID");
 
-        app.MapGet("/api/albums/{albumId}/assets", GetAlbumAssets)
+        group.MapGet("{albumId:int}/assets", GetAlbumAssets)
             .WithName("GetAlbumAssets")
-            .WithTags("Albums")
             .WithDescription("Gets all assets in an album");
 
-        app.MapPost("/api/albums", CreateAlbum)
+        group.MapPost("", CreateAlbum)
             .WithName("CreateAlbum")
-            .WithTags("Albums")
             .WithDescription("Creates a new album");
 
-        app.MapPut("/api/albums/{albumId}", UpdateAlbum)
+        group.MapPut("{albumId:int}", UpdateAlbum)
             .WithName("UpdateAlbum")
-            .WithTags("Albums")
             .WithDescription("Updates an album");
 
-        app.MapDelete("/api/albums/{albumId}", DeleteAlbum)
+        group.MapDelete("{albumId:int}", DeleteAlbum)
             .WithName("DeleteAlbum")
-            .WithTags("Albums")
             .WithDescription("Deletes an album");
 
-        app.MapPost("/api/albums/{albumId}/assets", AddAssetToAlbum)
+        group.MapPost("{albumId:int}/leave", LeaveAlbum)
+            .WithName("LeaveAlbum")
+            .WithDescription("Removes the current user from a shared album");
+
+        group.MapPost("{albumId:int}/assets", AddAssetToAlbum)
             .WithName("AddAssetToAlbum")
-            .WithTags("Albums")
             .WithDescription("Adds an asset to an album");
 
-        app.MapDelete("/api/albums/{albumId}/assets/{assetId}", RemoveAssetFromAlbum)
+        group.MapDelete("{albumId:int}/assets/{assetId:int}", RemoveAssetFromAlbum)
             .WithName("RemoveAssetFromAlbum")
-            .WithTags("Albums")
             .WithDescription("Removes an asset from an album");
 
-        app.MapPut("/api/albums/{albumId}/cover", SetAlbumCover)
+        group.MapPut("{albumId:int}/cover", SetAlbumCover)
             .WithName("SetAlbumCover")
-            .WithTags("Albums")
             .WithDescription("Sets the cover image for an album");
+    }
+
+    private static async Task<(bool hasAccess, bool canEdit, bool canDelete, bool canManagePermissions)> CheckAlbumPermissionsAsync(
+        ApplicationDbContext dbContext,
+        int albumId,
+        int userId,
+        CancellationToken cancellationToken)
+    {
+        var album = await dbContext.Albums
+            .Include(a => a.Permissions)
+            .FirstOrDefaultAsync(a => a.Id == albumId, cancellationToken);
+
+        if (album == null)
+        {
+            return (false, false, false, false);
+        }
+
+        // Si es el propietario, tiene todos los permisos
+        if (album.OwnerId == userId)
+        {
+            return (true, true, true, true);
+        }
+
+        // Buscar permisos del usuario
+        var permission = album.Permissions.FirstOrDefault(p => p.UserId == userId);
+        if (permission == null)
+        {
+            return (false, false, false, false);
+        }
+
+        return (permission.CanView, permission.CanEdit, permission.CanDelete, permission.CanManagePermissions);
     }
 
     private async Task<IResult> GetAllAlbums(
         [FromServices] ApplicationDbContext dbContext,
+        ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         try
         {
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            // Obtener álbumes donde el usuario es propietario o tiene permisos
             var albums = await dbContext.Albums
                 .Include(a => a.AlbumAssets)
                     .ThenInclude(aa => aa.Asset)
                         .ThenInclude(asset => asset.Thumbnails)
                 .Include(a => a.CoverAsset)
                     .ThenInclude(ca => ca!.Thumbnails)
+                .Include(a => a.Permissions)
+                .Where(a => a.OwnerId == userId || a.Permissions.Any(p => p.UserId == userId && p.CanView))
                 .OrderByDescending(a => a.UpdatedAt)
                 .ToListAsync(cancellationToken);
 
@@ -80,6 +122,11 @@ public class AlbumsEndpoint : IEndpoint
                 CreatedAt = a.CreatedAt,
                 UpdatedAt = a.UpdatedAt,
                 AssetCount = a.AlbumAssets.Count,
+                IsOwner = a.OwnerId == userId,
+                CanView = a.OwnerId == userId || a.Permissions.Any(p => p.UserId == userId && p.CanView),
+                CanEdit = a.OwnerId == userId || a.Permissions.Any(p => p.UserId == userId && p.CanEdit),
+                CanDelete = a.OwnerId == userId || a.Permissions.Any(p => p.UserId == userId && p.CanDelete),
+                CanManagePermissions = a.OwnerId == userId || a.Permissions.Any(p => p.UserId == userId && p.CanManagePermissions),
                 CoverThumbnailUrl = a.CoverAsset?.Thumbnails
                     .FirstOrDefault(t => t.Size == ThumbnailSize.Medium) != null
                     ? $"/api/assets/{a.CoverAssetId}/thumbnail?size=Medium"
@@ -105,21 +152,36 @@ public class AlbumsEndpoint : IEndpoint
     private async Task<IResult> GetAlbumById(
         [FromServices] ApplicationDbContext dbContext,
         [FromRoute] int albumId,
+        ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         try
         {
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
             var album = await dbContext.Albums
                 .Include(a => a.AlbumAssets)
                     .ThenInclude(aa => aa.Asset)
                         .ThenInclude(asset => asset.Thumbnails)
                 .Include(a => a.CoverAsset)
                     .ThenInclude(ca => ca!.Thumbnails)
+                .Include(a => a.Permissions)
                 .FirstOrDefaultAsync(a => a.Id == albumId, cancellationToken);
 
             if (album == null)
             {
                 return Results.NotFound(new { error = $"Album with ID {albumId} not found" });
+            }
+
+            // Verificar permisos
+            var (hasAccess, _, _, _) = await CheckAlbumPermissionsAsync(dbContext, albumId, userId, cancellationToken);
+            if (!hasAccess)
+            {
+                return Results.Forbid();
             }
 
             string? coverUrl = null;
@@ -144,6 +206,11 @@ public class AlbumsEndpoint : IEndpoint
                 CreatedAt = album.CreatedAt,
                 UpdatedAt = album.UpdatedAt,
                 AssetCount = album.AlbumAssets.Count,
+                IsOwner = album.OwnerId == userId,
+                CanView = album.OwnerId == userId || album.Permissions.Any(p => p.UserId == userId && p.CanView),
+                CanEdit = album.OwnerId == userId || album.Permissions.Any(p => p.UserId == userId && p.CanEdit),
+                CanDelete = album.OwnerId == userId || album.Permissions.Any(p => p.UserId == userId && p.CanDelete),
+                CanManagePermissions = album.OwnerId == userId || album.Permissions.Any(p => p.UserId == userId && p.CanManagePermissions),
                 CoverThumbnailUrl = coverUrl
             };
 
@@ -164,16 +231,22 @@ public class AlbumsEndpoint : IEndpoint
     private async Task<IResult> GetAlbumAssets(
         [FromServices] ApplicationDbContext dbContext,
         [FromRoute] int albumId,
+        ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         try
         {
-            var album = await dbContext.Albums
-                .FirstOrDefaultAsync(a => a.Id == albumId, cancellationToken);
-
-            if (album == null)
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
             {
-                return Results.NotFound(new { error = $"Album with ID {albumId} not found" });
+                return Results.Unauthorized();
+            }
+
+            // Verificar permisos
+            var (hasAccess, _, _, _) = await CheckAlbumPermissionsAsync(dbContext, albumId, userId, cancellationToken);
+            if (!hasAccess)
+            {
+                return Results.Forbid();
             }
 
             var albumAssets = await dbContext.AlbumAssets
@@ -220,10 +293,17 @@ public class AlbumsEndpoint : IEndpoint
     private async Task<IResult> CreateAlbum(
         [FromServices] ApplicationDbContext dbContext,
         [FromBody] CreateAlbumRequest? request,
+        ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         try
         {
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
             if (request == null || string.IsNullOrWhiteSpace(request.Name))
             {
                 return Results.BadRequest(new { error = "Album name is required" });
@@ -233,6 +313,7 @@ public class AlbumsEndpoint : IEndpoint
             {
                 Name = request.Name.Trim(),
                 Description = request.Description?.Trim(),
+                OwnerId = userId,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -247,7 +328,12 @@ public class AlbumsEndpoint : IEndpoint
                 Description = album.Description,
                 CreatedAt = album.CreatedAt,
                 UpdatedAt = album.UpdatedAt,
-                AssetCount = 0
+                AssetCount = 0,
+                IsOwner = true,
+                CanView = true,
+                CanEdit = true,
+                CanDelete = true,
+                CanManagePermissions = true
             };
 
             return Results.Created($"/api/albums/{album.Id}", response);
@@ -268,11 +354,26 @@ public class AlbumsEndpoint : IEndpoint
         [FromServices] ApplicationDbContext dbContext,
         [FromRoute] int albumId,
         [FromBody] UpdateAlbumRequest? request,
+        ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         try
         {
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            // Verificar permisos de edición
+            var (hasAccess, canEdit, _, _) = await CheckAlbumPermissionsAsync(dbContext, albumId, userId, cancellationToken);
+            if (!hasAccess || !canEdit)
+            {
+                return Results.Forbid();
+            }
+
             var album = await dbContext.Albums
+                .Include(a => a.Permissions)
                 .FirstOrDefaultAsync(a => a.Id == albumId, cancellationToken);
 
             if (album == null)
@@ -298,7 +399,12 @@ public class AlbumsEndpoint : IEndpoint
                 Description = album.Description,
                 CreatedAt = album.CreatedAt,
                 UpdatedAt = album.UpdatedAt,
-                AssetCount = await dbContext.AlbumAssets.CountAsync(aa => aa.AlbumId == albumId, cancellationToken)
+                AssetCount = await dbContext.AlbumAssets.CountAsync(aa => aa.AlbumId == albumId, cancellationToken),
+                IsOwner = album.OwnerId == userId,
+                CanView = album.OwnerId == userId || album.Permissions.Any(p => p.UserId == userId && p.CanView),
+                CanEdit = album.OwnerId == userId || album.Permissions.Any(p => p.UserId == userId && p.CanEdit),
+                CanDelete = album.OwnerId == userId || album.Permissions.Any(p => p.UserId == userId && p.CanDelete),
+                CanManagePermissions = album.OwnerId == userId || album.Permissions.Any(p => p.UserId == userId && p.CanManagePermissions)
             };
 
             return Results.Ok(response);
@@ -318,10 +424,24 @@ public class AlbumsEndpoint : IEndpoint
     private async Task<IResult> DeleteAlbum(
         [FromServices] ApplicationDbContext dbContext,
         [FromRoute] int albumId,
+        ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         try
         {
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            // Verificar permisos de eliminación
+            var (hasAccess, _, canDelete, _) = await CheckAlbumPermissionsAsync(dbContext, albumId, userId, cancellationToken);
+            if (!hasAccess || !canDelete)
+            {
+                return Results.Forbid();
+            }
+
             var album = await dbContext.Albums
                 .FirstOrDefaultAsync(a => a.Id == albumId, cancellationToken);
 
@@ -347,14 +467,80 @@ public class AlbumsEndpoint : IEndpoint
         }
     }
 
-    private async Task<IResult> AddAssetToAlbum(
+    private async Task<IResult> LeaveAlbum(
         [FromServices] ApplicationDbContext dbContext,
         [FromRoute] int albumId,
-        [FromBody] AddAssetRequest? request,
+        ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         try
         {
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var album = await dbContext.Albums
+                .FirstOrDefaultAsync(a => a.Id == albumId, cancellationToken);
+
+            if (album == null)
+            {
+                return Results.NotFound(new { error = $"Album with ID {albumId} not found" });
+            }
+
+            if (album.OwnerId == userId)
+            {
+                return Results.BadRequest(new { error = "Owner cannot leave their own album" });
+            }
+
+            var permission = await dbContext.AlbumPermissions
+                .FirstOrDefaultAsync(p => p.AlbumId == albumId && p.UserId == userId, cancellationToken);
+
+            if (permission == null)
+            {
+                return Results.NotFound(new { error = "Permission not found for current user" });
+            }
+
+            dbContext.AlbumPermissions.Remove(permission);
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            return Results.NoContent();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ERROR] LeaveAlbum: {ex.Message}");
+            Console.WriteLine(ex.StackTrace);
+
+            return Results.Problem(
+                detail: ex.Message,
+                statusCode: StatusCodes.Status500InternalServerError
+            );
+        }
+    }
+
+    private async Task<IResult> AddAssetToAlbum(
+        [FromServices] ApplicationDbContext dbContext,
+        [FromRoute] int albumId,
+        [FromBody] AddAssetRequest? request,
+        ClaimsPrincipal user,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            // Verificar permisos de edición
+            var (hasAccess, canEdit, _, _) = await CheckAlbumPermissionsAsync(dbContext, albumId, userId, cancellationToken);
+            if (!hasAccess || !canEdit)
+            {
+                return Results.Forbid();
+            }
+
             if (request == null)
             {
                 return Results.BadRequest(new { error = "Request body is required" });
@@ -431,10 +617,24 @@ public class AlbumsEndpoint : IEndpoint
         [FromServices] ApplicationDbContext dbContext,
         [FromRoute] int albumId,
         [FromRoute] int assetId,
+        ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         try
         {
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            // Verificar permisos de edición
+            var (hasAccess, canEdit, _, _) = await CheckAlbumPermissionsAsync(dbContext, albumId, userId, cancellationToken);
+            if (!hasAccess || !canEdit)
+            {
+                return Results.Forbid();
+            }
+
             var albumAsset = await dbContext.AlbumAssets
                 .FirstOrDefaultAsync(aa => aa.AlbumId == albumId && aa.AssetId == assetId, cancellationToken);
 
@@ -477,10 +677,24 @@ public class AlbumsEndpoint : IEndpoint
         [FromServices] ApplicationDbContext dbContext,
         [FromRoute] int albumId,
         [FromBody] SetCoverRequest? request,
+        ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         try
         {
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            // Verificar permisos de edición
+            var (hasAccess, canEdit, _, _) = await CheckAlbumPermissionsAsync(dbContext, albumId, userId, cancellationToken);
+            if (!hasAccess || !canEdit)
+            {
+                return Results.Forbid();
+            }
+
             if (request == null)
             {
                 return Results.BadRequest(new { error = "Request body is required" });
@@ -531,6 +745,11 @@ public class AlbumResponse
     public DateTime UpdatedAt { get; set; }
     public int AssetCount { get; set; }
     public string? CoverThumbnailUrl { get; set; }
+    public bool IsOwner { get; set; }
+    public bool CanView { get; set; }
+    public bool CanEdit { get; set; }
+    public bool CanDelete { get; set; }
+    public bool CanManagePermissions { get; set; }
 }
 
 public class CreateAlbumRequest

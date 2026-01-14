@@ -1,0 +1,164 @@
+@using PhotoHub.Blazor.Shared.Services
+@using MudBlazor
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="@_isValid" @bind-Errors="@_errors">
+            <MudTextField @bind-Value="_username" 
+                         Label="Nombre de usuario" 
+                         Required="true"
+                         RequiredError="El nombre de usuario es obligatorio"
+                         Variant="Variant.Outlined"
+                         Disabled="@_isEdit"
+                         Class="mb-3" />
+            
+            <MudTextField @bind-Value="_email" 
+                         Label="Email" 
+                         Required="true"
+                         RequiredError="El email es obligatorio"
+                         Variant="Variant.Outlined"
+                         Class="mb-3" />
+            
+            @if (!_isEdit)
+            {
+                <MudTextField @bind-Value="_password" 
+                             Label="Contraseña" 
+                             InputType="InputType.Password"
+                             Required="true"
+                             RequiredError="La contraseña es obligatoria"
+                             Variant="Variant.Outlined"
+                             Class="mb-3"
+                             HelperText="Mínimo 8 caracteres, debe incluir mayúsculas, minúsculas, números y caracteres especiales" />
+            }
+            
+            <MudTextField @bind-Value="_firstName" 
+                         Label="Nombre" 
+                         Variant="Variant.Outlined"
+                         Class="mb-3" />
+            
+            <MudTextField @bind-Value="_lastName" 
+                         Label="Apellidos" 
+                         Variant="Variant.Outlined"
+                         Class="mb-3" />
+            
+            <MudSelect @bind-Value="_role" 
+                     Label="Rol" 
+                     Variant="Variant.Outlined"
+                     Class="mb-3">
+                <MudSelectItem Value="@("User")">Usuario</MudSelectItem>
+                <MudSelectItem Value="@("Admin")">Administrador</MudSelectItem>
+            </MudSelect>
+            
+            <MudSwitch @bind-Value="_isActive" 
+                      Label="Usuario activo" 
+                      Color="Color.Success"
+                      Class="mb-3" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" 
+                  Variant="Variant.Filled" 
+                  OnClick="Save"
+                  Disabled="@(!_isValid || _saving)">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ml-2" />
+            }
+            Guardar
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public UserDto? User { get; set; }
+    [Parameter] public bool IsEdit { get; set; }
+    [Inject] public IUserService UserService { get; set; } = null!;
+    [Inject] public ISnackbar Snackbar { get; set; } = null!;
+
+    private MudForm? _form;
+    private bool _isValid;
+    private string[] _errors = Array.Empty<string>();
+    private bool _saving = false;
+    private bool _isEdit;
+
+    private string _username = string.Empty;
+    private string _email = string.Empty;
+    private string _password = string.Empty;
+    private string? _firstName;
+    private string? _lastName;
+    private string _role = "User";
+    private bool _isActive = true;
+
+    protected override void OnParametersSet()
+    {
+        _isEdit = IsEdit && User != null;
+        
+        if (_isEdit && User != null)
+        {
+            _username = User.Username;
+            _email = User.Email;
+            _firstName = User.FirstName;
+            _lastName = User.LastName;
+            _role = User.Role;
+            _isActive = User.IsActive;
+        }
+    }
+
+    private async Task Save()
+    {
+        await _form!.Validate();
+        if (!_isValid) return;
+
+        try
+        {
+            _saving = true;
+
+            if (_isEdit && User != null)
+            {
+                var updateRequest = new UpdateUserRequest
+                {
+                    Username = _username,
+                    Email = _email,
+                    FirstName = _firstName,
+                    LastName = _lastName,
+                    Role = _role,
+                    IsActive = _isActive
+                };
+                await UserService.UpdateUserAsync(User.Id, updateRequest);
+                Snackbar.Add("Usuario actualizado correctamente", Severity.Success);
+            }
+            else
+            {
+                var createRequest = new CreateUserRequest
+                {
+                    Username = _username,
+                    Email = _email,
+                    Password = _password,
+                    FirstName = _firstName,
+                    LastName = _lastName,
+                    Role = _role,
+                    IsActive = _isActive
+                };
+                await UserService.CreateUserAsync(createRequest);
+                Snackbar.Add("Usuario creado correctamente", Severity.Success);
+            }
+
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+}
