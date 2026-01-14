@@ -146,8 +146,7 @@ public class ExifExtractorService
         else if (directory is GpsDirectory gpsDir)
         {
             // GPS coordinates
-            var location = gpsDir.GetGeoLocation();
-            if (location != null)
+            if (gpsDir.TryGetGeoLocation(out var location))
             {
                 exif.Latitude = location.Latitude;
                 exif.Longitude = location.Longitude;

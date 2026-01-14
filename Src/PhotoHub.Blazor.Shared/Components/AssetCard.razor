@@ -115,11 +115,12 @@
         else if (Asset.SyncStatus == AssetSyncStatus.Pending)
         {
             <MudTooltip Text="Sincronizar ahora">
-                <MudIconButton Icon="@Icons.Material.Filled.CloudUpload" 
-                               Size="Size.Small" 
-                               Color="Color.Default" 
-                               OnClick="SyncNow" 
-                               OnClickStopPropagation="true" />
+                <span @onclick:stopPropagation="true">
+                    <MudIconButton Icon="@Icons.Material.Filled.CloudUpload" 
+                                   Size="Size.Small" 
+                                   Color="Color.Default" 
+                                   OnClick="SyncNow" />
+                </span>
             </MudTooltip>
         }
         else if (Asset.SyncStatus == AssetSyncStatus.Syncing)

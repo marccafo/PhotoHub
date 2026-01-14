@@ -57,7 +57,7 @@ public class ThumbnailEndpoint : IEndpoint
                 .FirstOrDefaultAsync(t => t.AssetId == assetId && t.Size == thumbnailSize, cancellationToken);
 
             // If thumbnail doesn't exist in DB or file doesn't exist, generate it on-demand
-            if (thumbnail == null || (thumbnail != null && !File.Exists(thumbnail.FilePath)))
+            if (thumbnail == null || !File.Exists(thumbnail.FilePath))
             {
                 Console.WriteLine($"[THUMBNAIL] Generating thumbnail on-demand for asset {assetId}, size {size}");
                 

@@ -89,12 +89,13 @@ else if (_asset != null)
         </style>
 
         <div class="asset-detail-content" @onclick="ToggleToolbar">
-            <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" 
-                           Class="@GetNavButtonClass(true)" 
-                           Size="Size.Large"
-                           OnClick="NavigatePrev"
-                           OnClickStopPropagation="true"
-                           Disabled="@(_prevAsset == null)" />
+            <span @onclick:stopPropagation="true">
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" 
+                               Class="@GetNavButtonClass(true)" 
+                               Size="Size.Large"
+                               OnClick="NavigatePrev"
+                               Disabled="@(_prevAsset == null)" />
+            </span>
 
             @if (_asset.Type == "VIDEO")
             {
@@ -113,12 +114,13 @@ else if (_asset != null)
                 <MudIcon Icon="@GetAssetIcon(_asset.Type)" Size="Size.Large" Color="Color.Default" Style="width: 128px; height: 128px;" />
             }
 
-            <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" 
-                           Class="@GetNavButtonClass(false)" 
-                           Size="Size.Large"
-                           OnClick="NavigateNext"
-                           OnClickStopPropagation="true"
-                           Disabled="@(_nextAsset == null)" />
+            <span @onclick:stopPropagation="true">
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" 
+                               Class="@GetNavButtonClass(false)" 
+                               Size="Size.Large"
+                               OnClick="NavigateNext"
+                               Disabled="@(_nextAsset == null)" />
+            </span>
         </div>
 
         <div class="asset-info-drawer @(_infoOpen ? "" : "closed")">
@@ -288,10 +290,11 @@ else
                     else if (_asset != null && (assetId == 0 && currentSyncStatus == AssetSyncStatus.Copied))
                     {
                         <MudTooltip Text="Pendiente de indexar">
-                            <MudIconButton Icon="@Icons.Material.Outlined.Schedule" 
-                                           Color="Color.Default" 
-                                           OnClick="NavigateToIndex"
-                                           OnClickStopPropagation="true" />
+                            <span @onclick:stopPropagation="true">
+                                <MudIconButton Icon="@Icons.Material.Outlined.Schedule" 
+                                               Color="Color.Default" 
+                                               OnClick="NavigateToIndex" />
+                            </span>
                         </MudTooltip>
                     }
 
@@ -606,7 +609,7 @@ else
     }
 }
 
-<MudDialog @bind-Visible="_addToAlbumDialogVisible" MaxWidth="MaxWidth.Medium" FullWidth="true">
+<MudDialog @bind-Visible="_addToAlbumDialogVisible" Options="new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true }">
     <TitleContent>
         <MudText Typo="Typo.h6">Añadir a Álbum</MudText>
     </TitleContent>

@@ -10,7 +10,7 @@
 
 <MudGrid>
     <MudItem xs="12">
-        <MudCard Height="100%">
+        <MudCard Style="height:100%">
             <MudCardHeader>
                 <CardHeaderContent>
                     <MudText Typo="Typo.h6">Indexar Directorio Interno</MudText>
@@ -64,25 +64,25 @@
             {
                 <MudGrid Class="mt-4">
                     <MudItem xs="12" sm="6" md="3">
-                        <MudPaper Elevation="1" Padding="4" Class="text-center pa-4">
+                        <MudPaper Elevation="1" Class="text-center pa-4">
                             <MudText Typo="Typo.h4" Color="Color.Primary">@_statistics.TotalFilesFound</MudText>
                             <MudText Typo="Typo.body2">Archivos Encontrados</MudText>
                         </MudPaper>
                     </MudItem>
                     <MudItem xs="12" sm="6" md="3">
-                        <MudPaper Elevation="1" Padding="4" Class="text-center pa-4">
+                        <MudPaper Elevation="1" Class="text-center pa-4">
                             <MudText Typo="Typo.h4" Color="Color.Success">@_statistics.NewFiles</MudText>
                             <MudText Typo="Typo.body2">Nuevos Archivos</MudText>
                         </MudPaper>
                     </MudItem>
                     <MudItem xs="12" sm="6" md="3">
-                        <MudPaper Elevation="1" Padding="4" Class="text-center pa-4">
+                        <MudPaper Elevation="1" Class="text-center pa-4">
                             <MudText Typo="Typo.h4" Color="Color.Info">@_statistics.UpdatedFiles</MudText>
                             <MudText Typo="Typo.body2">Archivos Actualizados</MudText>
                         </MudPaper>
                     </MudItem>
                     <MudItem xs="12" sm="6" md="3">
-                        <MudPaper Elevation="1" Padding="4" Class="text-center pa-4">
+                        <MudPaper Elevation="1" Class="text-center pa-4">
                             <MudText Typo="Typo.h4" Color="Color.Warning">@(_statistics.ThumbnailsGenerated + _statistics.ThumbnailsRegenerated)</MudText>
                             <MudText Typo="Typo.body2">Miniaturas</MudText>
                         </MudPaper>

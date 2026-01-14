@@ -10,18 +10,18 @@
     <ItemGroup>
         <PackageReference Include="ErrorOr" Version="2.0.1" />
         <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="14.10.1" />
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.1" />
-        <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.1" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.1">
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />
+        <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.2" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.2">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
-        <PackageReference Include="Scalar.AspNetCore" Version="2.11.10" />
-        <PackageReference Include="SixLabors.ImageSharp" Version="3.1.5" />
-        <PackageReference Include="MetadataExtractor" Version="2.8.1" />
-        <PackageReference Include="Xabe.FFmpeg" Version="5.2.6" />
-        <PackageReference Include="Xabe.FFmpeg.Downloader" Version="5.2.6" />
+        <PackageReference Include="Scalar.AspNetCore" Version="2.12.6" />
+        <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+        <PackageReference Include="MetadataExtractor" Version="2.9.0" />
+        <PackageReference Include="Xabe.FFmpeg" Version="6.0.2" />
+        <PackageReference Include="Xabe.FFmpeg.Downloader" Version="6.0.2" />
     </ItemGroup>
 
     <ItemGroup>
@@ -45,5 +45,4 @@
       <None Remove="thumbnails\275\small.jpg" />
       <None Remove="thumbnails\274\small.jpg" />
     </ItemGroup>
-
 </Project>
