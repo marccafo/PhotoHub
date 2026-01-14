@@ -1,10 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using PhotoHub.API.Shared.Data;
 using PhotoHub.API.Shared.Models;
-using PhotoHub.API.Shared.Services;
 
 namespace PhotoHub.API.Shared.Services;
 

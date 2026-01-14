@@ -1,5 +1,3 @@
-using PhotoHub.API.Features.Timeline;
-
 namespace PhotoHub.API.Features.Folders;
 
 public class FolderResponse

@@ -1,5 +1,4 @@
 using System.Net.Http.Json;
-using System.Runtime.CompilerServices;
 using PhotoHub.Blazor.Shared.Models;
 
 namespace PhotoHub.Blazor.Shared.Services;

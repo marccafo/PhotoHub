@@ -2,7 +2,6 @@ using PhotoHub.API.Shared.Models;
 using MetadataExtractor;
 using MetadataExtractor.Formats.Exif;
 using MetadataExtractor.Formats.Iptc;
-using MetadataExtractor.Formats.Xmp;
 using Xabe.FFmpeg;
 
 namespace PhotoHub.API.Shared.Services;

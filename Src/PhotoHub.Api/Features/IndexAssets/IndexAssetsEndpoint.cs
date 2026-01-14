@@ -32,7 +32,7 @@ public class IndexAssetsEndpoint : IEndpoint
 
         app.MapGet("/api/assets/index", Handle)
         .CodeSample(
-                codeSample: "curl -X GET \"http://localhost:5000/api/assets/scan\" -H \"Accept: application/json\"",
+                codeSample: "curl -X GET \"http://localhost:5000/api/assets/index\" -H \"Accept: application/json\"",
                 label: "cURL Example")
         .WithName("IndexAssets")
         .WithTags("Assets")

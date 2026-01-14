@@ -1,10 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using PhotoHub.API.Features.Timeline;
 using PhotoHub.API.Shared.Interfaces;
-using PhotoHub.API.Shared.Models;
 using PhotoHub.API.Shared.Services;
 using PhotoHub.Blazor.Shared.Models;
-using Scalar.AspNetCore;
 
 namespace PhotoHub.API.Features.Device;
 

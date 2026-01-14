@@ -1,8 +1,5 @@
 @page "/asset/{AssetId:int}"
-@using PhotoHub.Blazor.Shared.Services
-@using PhotoHub.Blazor.Shared.Models
 @using PhotoHub.Blazor.WASM.Services
-@using MudBlazor
 @implements IDisposable
 @inject IAssetService AssetService
 @inject IAlbumService AlbumService
@@ -443,7 +440,7 @@ else
 
     private void NavigateToIndex()
     {
-        Navigation.NavigateTo("/scan");
+        Navigation.NavigateTo("/index");
     }
 
     private void ToggleInfo()

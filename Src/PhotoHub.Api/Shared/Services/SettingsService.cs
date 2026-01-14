@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using PhotoHub.API.Shared.Data;
 using PhotoHub.API.Shared.Models;
 

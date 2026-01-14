@@ -1,6 +1,4 @@
 using PhotoHub.Api;
-using PhotoHub.API.Features.IndexAssets;
-using PhotoHub.API.Features.Timeline;
 using Scalar.AspNetCore;
 using Microsoft.Extensions.FileProviders;
 

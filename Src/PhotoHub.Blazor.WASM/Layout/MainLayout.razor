@@ -1,5 +1,4 @@
 ﻿@inherits LayoutComponentBase
-@using MudBlazor
 @using PhotoHub.Blazor.WASM.Services
 @implements IDisposable
 @inject NavigationManager Navigation
@@ -42,7 +41,7 @@
                                    OnClick="@LayoutService.ToggleDarkModeAsync" />
                 </MudTooltip>
                 <MudTooltip Text="Subir">
-                    <MudIconButton Icon="@Icons.Material.Filled.CloudUpload" Color="Color.Inherit" OnClick="@(() => Navigation.NavigateTo("/scan"))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.CloudUpload" Color="Color.Inherit" OnClick="@(() => Navigation.NavigateTo("/index"))" />
                 </MudTooltip>
                 <MudTooltip Text="Configuración">
                     <MudIconButton Icon="@Icons.Material.Filled.Settings" Color="Color.Inherit" OnClick="@(() => Navigation.NavigateTo("/settings"))" />

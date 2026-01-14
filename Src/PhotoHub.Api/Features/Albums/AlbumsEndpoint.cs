@@ -4,8 +4,6 @@ using PhotoHub.API.Shared.Data;
 using PhotoHub.API.Shared.Interfaces;
 using PhotoHub.API.Shared.Models;
 using PhotoHub.API.Features.Timeline;
-using Scalar.AspNetCore;
-using PhotoHub.Blazor.Shared.Models;
 
 namespace PhotoHub.API.Features.Albums;
 

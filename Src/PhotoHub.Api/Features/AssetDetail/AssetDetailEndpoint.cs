@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PhotoHub.API.Shared.Data;
 using PhotoHub.API.Shared.Interfaces;
-using PhotoHub.API.Shared.Models;
 using Scalar.AspNetCore;
 
 namespace PhotoHub.API.Features.AssetDetail;

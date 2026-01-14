@@ -1,5 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace PhotoHub.API.Shared.Models;
 
 public enum AssetTagType
