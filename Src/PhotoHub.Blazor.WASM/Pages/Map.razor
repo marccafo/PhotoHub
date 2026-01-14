@@ -193,7 +193,11 @@
                 Console.WriteLine("[MAP] No clusters found");
                 _clusters = newClusters;
                 await UpdateMapMarkers(false);
-                Snackbar.Add("No se encontraron fotografías con coordenadas GPS en esta área", Severity.Info);
+                // Solo mostrar el mensaje si no estamos en carga inicial
+                if (!loadAll)
+                {
+                    Snackbar.Add("No se encontraron fotografías con coordenadas GPS en esta área", Severity.Info);
+                }
                 return;
             }
 
@@ -223,17 +227,27 @@
         {
             Console.WriteLine($"[MAP] Updating map markers - {_clusters.Count} clusters");
             
-            // Eliminar marcadores anteriores
-            if (_markers.Any())
+            // Eliminar TODOS los marcadores anteriores antes de agregar nuevos
+            // Esto es crítico para evitar duplicados cuando se hace zoom o se mueve el mapa
+            Console.WriteLine("[MAP] Calling removeAllMarkers JS");
+            try
             {
-                Console.WriteLine($"[MAP] Removing {_markers.Count} old markers");
-                await JS.InvokeVoidAsync("mapHelpers.removeAllMarkers", _markers);
+                await JS.InvokeVoidAsync("mapHelpers.removeAllMarkers");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[MAP] Error removing markers: {ex.Message}");
+            }
+            finally
+            {
                 _markers.Clear();
             }
-
+            
             if (!_clusters.Any())
             {
                 Console.WriteLine("[MAP] No clusters to display");
+                // Forzar actualización de la UI incluso cuando no hay clusters
+                StateHasChanged();
                 return;
             }
 
@@ -268,6 +282,9 @@
             }
 
             Console.WriteLine($"[MAP] Successfully added {successCount} markers out of {clustersToRender.Count}");
+
+            // Forzar actualización de la UI
+            StateHasChanged();
 
             // Si hay clusters y se solicita, ajustar el mapa para mostrarlos todos
             if (fitBounds && clustersToRender.Any() && successCount > 0)
@@ -306,8 +323,12 @@
         _currentMaxLng = maxLng;
         _currentZoom = zoom;
 
-        // Recargamos siempre al mover o hacer zoom para obtener nuevos clusters
-        await LoadClusters();
+        // Si los límites son muy amplios (ej. el mapa completo o casi completo),
+        // pedimos todos los clusters sin filtrar por coordenadas para evitar problemas de precisión
+        // o recortes inesperados en los extremos del mapa.
+        bool isWideView = Math.Abs(maxLng - minLng) > 340 || Math.Abs(maxLat - minLat) > 160;
+
+        await LoadClusters(isWideView);
     }
 
     [JSInvokable]

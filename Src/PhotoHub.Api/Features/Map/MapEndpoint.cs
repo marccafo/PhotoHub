@@ -43,14 +43,21 @@ public class MapAssetsEndpoint : IEndpoint
                            a.Exif.Latitude.HasValue && 
                            a.Exif.Longitude.HasValue);
 
-            // Filtrar por bounds si se proporcionan
+            // Filtrar por bounds si se proporcionan y no es una vista global
             if (minLat.HasValue && minLng.HasValue && maxLat.HasValue && maxLng.HasValue)
             {
-                query = query.Where(a => 
-                    a.Exif!.Latitude >= minLat.Value &&
-                    a.Exif.Latitude <= maxLat.Value &&
-                    a.Exif.Longitude >= minLng.Value &&
-                    a.Exif.Longitude <= maxLng.Value);
+                // Si la vista es global o casi global, evitamos filtrar por coordenadas
+                // para prevenir problemas con la línea de cambio de fecha y asegurar que todo sea visible.
+                bool isGlobalView = Math.Abs(maxLng.Value - minLng.Value) > 350;
+                
+                if (!isGlobalView)
+                {
+                    query = query.Where(a => 
+                        a.Exif!.Latitude >= minLat.Value &&
+                        a.Exif.Latitude <= maxLat.Value &&
+                        a.Exif.Longitude >= minLng.Value &&
+                        a.Exif.Longitude <= maxLng.Value);
+                }
             }
 
             var assetsWithThumbnails = await query
@@ -67,11 +74,45 @@ public class MapAssetsEndpoint : IEndpoint
             }).ToList();
 
             // Agrupar assets en clusters basados en zoom level
-            var clusterDistance = GetClusterDistance(zoom ?? 10);
+            var currentZoom = zoom ?? 10;
+            var clusterDistance = GetClusterDistance(currentZoom);
             
             // Si el zoom es alto, reducimos el área de búsqueda de clustering para evitar que assets lejanos 
             // "roben" assets que deberían estar en clusters separados y visibles al hacer zoom.
             var clusters = CreateClusters(assets, clusterDistance);
+            
+            // Validación inicial: asegurar que no haya assets duplicados antes de procesar
+            clusters = ValidateNoDuplicateAssets(clusters);
+            
+            // Eliminar duplicados ANTES de separar para evitar crear más duplicados
+            clusters = DeduplicateClusters(clusters);
+            
+            // Separar clusters que se superponen visualmente
+            clusters = SeparateOverlappingClusters(clusters, currentZoom, clusterDistance);
+            
+            // Eliminar duplicados DESPUÉS de separar (por si la separación creó algún problema)
+            clusters = DeduplicateClusters(clusters);
+            
+            // Validación final: asegurar que no haya assets duplicados
+            clusters = ValidateNoDuplicateAssets(clusters);
+            
+            // Validación final agresiva: asegurar que no haya assets duplicados
+            var totalAssets = clusters.Sum(c => c.Count);
+            var uniqueAssets = clusters.SelectMany(c => c.AssetIds).Distinct().Count();
+            if (totalAssets != uniqueAssets)
+            {
+                // Hay duplicados, forzar limpieza agresiva
+                clusters = ForceDeduplicate(clusters);
+                
+                // Verificar nuevamente después de la limpieza
+                totalAssets = clusters.Sum(c => c.Count);
+                uniqueAssets = clusters.SelectMany(c => c.AssetIds).Distinct().Count();
+                if (totalAssets != uniqueAssets)
+                {
+                    // Si aún hay duplicados después de la limpieza, usar método más agresivo
+                    clusters = AggressiveDeduplicate(clusters);
+                }
+            }
 
             // Obtener información de thumbnails para los primeros assets
             var firstAssetIds = clusters.Select(c => c.AssetIds.FirstOrDefault()).Where(id => id > 0).ToList();
@@ -133,10 +174,16 @@ public class MapAssetsEndpoint : IEndpoint
         List<AssetLocation> assets, 
         double clusterDistance)
     {
+        if (!assets.Any())
+            return new List<MapCluster>();
+
         var clusters = new List<MapCluster>();
         var processed = new HashSet<int>();
 
-        foreach (var asset in assets)
+        // Ordenar assets por ID para hacer el algoritmo determinístico
+        var sortedAssets = assets.OrderBy(a => a.Id).ToList();
+
+        foreach (var asset in sortedAssets)
         {
             if (processed.Contains(asset.Id))
                 continue;
@@ -152,36 +199,73 @@ public class MapAssetsEndpoint : IEndpoint
                 HasThumbnail = asset.HasThumbnails
             };
 
-            // Buscar assets cercanos para agrupar
-            foreach (var otherAsset in assets)
+            processed.Add(asset.Id);
+
+            // Usar un enfoque iterativo: agregar assets cercanos al cluster actual
+            // y luego buscar assets cercanos a cualquier asset del cluster
+            var clusterAssets = new List<AssetLocation> { asset };
+            bool foundNewAssets = true;
+            int maxIterations = 10; // Limitar iteraciones para evitar bucles infinitos
+            int iteration = 0;
+
+            while (foundNewAssets && iteration < maxIterations)
             {
-                if (processed.Contains(otherAsset.Id) || asset.Id == otherAsset.Id)
-                    continue;
+                foundNewAssets = false;
+                iteration++;
 
-                var distance = CalculateDistance(
-                    asset.Latitude, asset.Longitude,
-                    otherAsset.Latitude, otherAsset.Longitude);
+                var newAssets = new List<AssetLocation>();
 
-                if (distance <= clusterDistance)
+                // Para cada asset en el cluster actual, buscar assets cercanos
+                foreach (var clusterAsset in clusterAssets)
+                {
+                    var nearbyAssets = sortedAssets
+                        .Where(a => !processed.Contains(a.Id) && a.Id != clusterAsset.Id)
+                        .Select(a => new
+                        {
+                            Asset = a,
+                            Distance = CalculateDistance(
+                                clusterAsset.Latitude, clusterAsset.Longitude,
+                                a.Latitude, a.Longitude)
+                        })
+                        .Where(x => x.Distance <= clusterDistance)
+                        .OrderBy(x => x.Distance)
+                        .ThenBy(x => x.Asset.Id)
+                        .Select(x => x.Asset)
+                        .ToList();
+
+                    foreach (var nearby in nearbyAssets)
+                    {
+                        if (!newAssets.Any(a => a.Id == nearby.Id) && !clusterAssets.Any(a => a.Id == nearby.Id))
+                        {
+                            newAssets.Add(nearby);
+                            foundNewAssets = true;
+                        }
+                    }
+                }
+
+                // Agregar nuevos assets al cluster
+                foreach (var newAsset in newAssets)
                 {
                     cluster.Count++;
-                    cluster.AssetIds.Add(otherAsset.Id);
-                    processed.Add(otherAsset.Id);
+                    cluster.AssetIds.Add(newAsset.Id);
+                    processed.Add(newAsset.Id);
+                    clusterAssets.Add(newAsset);
 
                     // Actualizar centro del cluster (promedio ponderado)
                     var totalCount = cluster.Count;
-                    cluster.Latitude = (cluster.Latitude * (totalCount - 1) + otherAsset.Latitude) / totalCount;
-                    cluster.Longitude = (cluster.Longitude * (totalCount - 1) + otherAsset.Longitude) / totalCount;
+                    cluster.Latitude = (cluster.Latitude * (totalCount - 1) + newAsset.Latitude) / totalCount;
+                    cluster.Longitude = (cluster.Longitude * (totalCount - 1) + newAsset.Longitude) / totalCount;
 
                     // Actualizar fechas
-                    if (otherAsset.CreatedDate < cluster.EarliestDate)
-                        cluster.EarliestDate = otherAsset.CreatedDate;
-                    if (otherAsset.CreatedDate > cluster.LatestDate)
-                        cluster.LatestDate = otherAsset.CreatedDate;
+                    if (newAsset.CreatedDate < cluster.EarliestDate)
+                        cluster.EarliestDate = newAsset.CreatedDate;
+                    if (newAsset.CreatedDate > cluster.LatestDate)
+                        cluster.LatestDate = newAsset.CreatedDate;
                 }
             }
 
-            processed.Add(asset.Id);
+            // Ordenar AssetIds para consistencia
+            cluster.AssetIds = cluster.AssetIds.OrderBy(id => id).ToList();
             clusters.Add(cluster);
         }
 
@@ -204,6 +288,435 @@ public class MapAssetsEndpoint : IEndpoint
     private double ToRadians(double degrees)
     {
         return degrees * Math.PI / 180.0;
+    }
+
+    /// <summary>
+    /// Calcula la distancia en kilómetros que corresponde a un número de píxeles en el mapa según el nivel de zoom.
+    /// </summary>
+    private double PixelsToKilometers(int pixels, int zoom, double latitude)
+    {
+        // Aproximación: en el ecuador, 1 grado de longitud ≈ 111.32 km
+        // La escala del mapa depende del zoom: scale = 256 * 2^zoom metros por 256 píxeles
+        // 1 píxel = (256 * 2^zoom) / 256 metros = 2^zoom metros
+        
+        // Ajustar por latitud (cos(lat) para longitud)
+        var metersPerPixel = (156543.03392 * Math.Cos(ToRadians(latitude))) / Math.Pow(2, zoom);
+        var kilometersPerPixel = metersPerPixel / 1000.0;
+        
+        return kilometersPerPixel * pixels;
+    }
+
+    /// <summary>
+    /// Obtiene el radio visual de un círculo en píxeles según el número de assets.
+    /// </summary>
+    private int GetCircleRadiusPixels(int count)
+    {
+        // El tamaño del círculo es: Math.max(40, Math.min(80, 35 + count * 2))
+        // Radio mínimo = 40px, radio máximo = 80px
+        return Math.Max(40, Math.Min(80, 35 + count * 2));
+    }
+
+    /// <summary>
+    /// Separa clusters que se superponen visualmente ajustando sus posiciones.
+    /// </summary>
+    private List<MapCluster> SeparateOverlappingClusters(List<MapCluster> clusters, int zoom, double clusterDistance)
+    {
+        if (clusters.Count <= 1)
+            return clusters;
+
+        var separated = new List<MapCluster>(clusters);
+        var maxIterations = 50;
+        var iteration = 0;
+        var hasOverlaps = true;
+
+        while (hasOverlaps && iteration < maxIterations)
+        {
+            hasOverlaps = false;
+            iteration++;
+
+            for (int i = 0; i < separated.Count; i++)
+            {
+                var cluster1 = separated[i];
+                var radius1Pixels = GetCircleRadiusPixels(cluster1.Count);
+                var radius1Km = PixelsToKilometers(radius1Pixels, zoom, cluster1.Latitude);
+
+                for (int j = i + 1; j < separated.Count; j++)
+                {
+                    var cluster2 = separated[j];
+                    var radius2Pixels = GetCircleRadiusPixels(cluster2.Count);
+                    var radius2Km = PixelsToKilometers(radius2Pixels, zoom, cluster2.Latitude);
+
+                    // Distancia mínima necesaria para evitar superposición (suma de radios + pequeño margen)
+                    var minRequiredDistance = radius1Km + radius2Km + (Math.Min(radius1Km, radius2Km) * 0.1); // 10% de margen
+                    
+                    var actualDistance = CalculateDistance(
+                        cluster1.Latitude, cluster1.Longitude,
+                        cluster2.Latitude, cluster2.Longitude);
+
+                    if (actualDistance < minRequiredDistance)
+                    {
+                        hasOverlaps = true;
+                        
+                        // Calcular dirección de separación
+                        var bearing = CalculateBearing(
+                            cluster1.Latitude, cluster1.Longitude,
+                            cluster2.Latitude, cluster2.Longitude);
+
+                        // Calcular cuánto necesitamos separar
+                        var separationNeeded = minRequiredDistance - actualDistance;
+                        // Limitar la separación máxima para evitar mover clusters demasiado lejos
+                        var maxSeparationKm = Math.Min(separationNeeded / 2.0, clusterDistance * 0.5);
+                        var separationKm = Math.Min(separationNeeded / 2.0, maxSeparationKm);
+
+                        // Mover cluster1 alejándolo de cluster2
+                        var newPos1 = MovePoint(cluster1.Latitude, cluster1.Longitude, 
+                            bearing + 180, separationKm);
+                        separated[i] = new MapCluster
+                        {
+                            Latitude = newPos1.Lat,
+                            Longitude = newPos1.Lon,
+                            Count = cluster1.Count,
+                            AssetIds = cluster1.AssetIds,
+                            EarliestDate = cluster1.EarliestDate,
+                            LatestDate = cluster1.LatestDate,
+                            HasThumbnail = cluster1.HasThumbnail
+                        };
+
+                        // Mover cluster2 alejándolo de cluster1
+                        var newPos2 = MovePoint(cluster2.Latitude, cluster2.Longitude, 
+                            bearing, separationKm);
+                        separated[j] = new MapCluster
+                        {
+                            Latitude = newPos2.Lat,
+                            Longitude = newPos2.Lon,
+                            Count = cluster2.Count,
+                            AssetIds = cluster2.AssetIds,
+                            EarliestDate = cluster2.EarliestDate,
+                            LatestDate = cluster2.LatestDate,
+                            HasThumbnail = cluster2.HasThumbnail
+                        };
+                    }
+                }
+            }
+        }
+
+        return separated;
+    }
+
+    /// <summary>
+    /// Calcula el bearing (dirección) entre dos puntos en grados.
+    /// </summary>
+    private double CalculateBearing(double lat1, double lon1, double lat2, double lon2)
+    {
+        var dLon = ToRadians(lon2 - lon1);
+        var lat1Rad = ToRadians(lat1);
+        var lat2Rad = ToRadians(lat2);
+
+        var y = Math.Sin(dLon) * Math.Cos(lat2Rad);
+        var x = Math.Cos(lat1Rad) * Math.Sin(lat2Rad) - 
+                Math.Sin(lat1Rad) * Math.Cos(lat2Rad) * Math.Cos(dLon);
+
+        var bearing = Math.Atan2(y, x);
+        return (ToDegrees(bearing) + 360) % 360;
+    }
+
+    private double ToDegrees(double radians)
+    {
+        return radians * 180.0 / Math.PI;
+    }
+
+    /// <summary>
+    /// Mueve un punto una distancia específica en una dirección específica.
+    /// </summary>
+    private (double Lat, double Lon) MovePoint(double lat, double lon, double bearing, double distanceKm)
+    {
+        const double R = 6371.0; // Radio de la Tierra en km
+        var bearingRad = ToRadians(bearing);
+        var latRad = ToRadians(lat);
+        var lonRad = ToRadians(lon);
+
+        var newLatRad = Math.Asin(
+            Math.Sin(latRad) * Math.Cos(distanceKm / R) +
+            Math.Cos(latRad) * Math.Sin(distanceKm / R) * Math.Cos(bearingRad));
+
+        var newLonRad = lonRad + Math.Atan2(
+            Math.Sin(bearingRad) * Math.Sin(distanceKm / R) * Math.Cos(latRad),
+            Math.Cos(distanceKm / R) - Math.Sin(latRad) * Math.Sin(newLatRad));
+
+        return (ToDegrees(newLatRad), ToDegrees(newLonRad));
+    }
+
+    /// <summary>
+    /// Elimina clusters duplicados que contengan los mismos assets.
+    /// Garantiza que cada asset aparezca solo en un cluster, priorizando clusters más grandes.
+    /// </summary>
+    private List<MapCluster> DeduplicateClusters(List<MapCluster> clusters)
+    {
+        if (clusters.Count <= 1)
+            return clusters;
+
+        // Primero, eliminar clusters con exactamente los mismos AssetIds
+        var clustersByAssetSet = new Dictionary<string, MapCluster>();
+        foreach (var cluster in clusters)
+        {
+            var assetKey = string.Join(",", cluster.AssetIds.OrderBy(id => id));
+            if (!clustersByAssetSet.ContainsKey(assetKey))
+            {
+                clustersByAssetSet[assetKey] = cluster;
+            }
+            else
+            {
+                // Si hay duplicado exacto, mantener el primero (ya está ordenado)
+                var existing = clustersByAssetSet[assetKey];
+                if (cluster.Count > existing.Count)
+                {
+                    clustersByAssetSet[assetKey] = cluster;
+                }
+            }
+        }
+
+        var deduplicated = clustersByAssetSet.Values.ToList();
+
+        // Ahora eliminar clusters que tienen assets solapados
+        // Ordenar por tamaño (más grandes primero) para priorizar clusters más completos
+        var sortedClusters = deduplicated.OrderByDescending(c => c.Count).ToList();
+        var finalClusters = new List<MapCluster>();
+        var usedAssetIds = new HashSet<int>();
+
+        foreach (var cluster in sortedClusters)
+        {
+            var clusterAssetIds = new HashSet<int>(cluster.AssetIds);
+            
+            // Verificar si este cluster tiene assets que ya están en otro cluster
+            var hasOverlap = clusterAssetIds.Any(id => usedAssetIds.Contains(id));
+            
+            if (!hasOverlap)
+            {
+                // No hay solapamiento, agregar este cluster
+                finalClusters.Add(cluster);
+                foreach (var assetId in clusterAssetIds)
+                {
+                    usedAssetIds.Add(assetId);
+                }
+            }
+            // Si hay solapamiento, simplemente descartar este cluster
+            // porque ya tenemos uno más grande que contiene algunos de sus assets
+        }
+
+        return finalClusters;
+    }
+
+    /// <summary>
+    /// Validación final para asegurar que ningún asset aparezca en múltiples clusters.
+    /// Si se encuentra un asset duplicado, se mantiene solo en el cluster más grande.
+    /// </summary>
+    private List<MapCluster> ValidateNoDuplicateAssets(List<MapCluster> clusters)
+    {
+        if (clusters.Count <= 1)
+            return clusters;
+
+        var assetToCluster = new Dictionary<int, MapCluster>();
+        var clustersToRemove = new HashSet<MapCluster>();
+
+        // Primera pasada: identificar duplicados
+        foreach (var cluster in clusters)
+        {
+            foreach (var assetId in cluster.AssetIds)
+            {
+                if (assetToCluster.ContainsKey(assetId))
+                {
+                    // Asset duplicado encontrado
+                    var existingCluster = assetToCluster[assetId];
+                    // Mantener el cluster más grande
+                    if (cluster.Count > existingCluster.Count)
+                    {
+                        clustersToRemove.Add(existingCluster);
+                        assetToCluster[assetId] = cluster;
+                    }
+                    else
+                    {
+                        clustersToRemove.Add(cluster);
+                    }
+                }
+                else
+                {
+                    assetToCluster[assetId] = cluster;
+                }
+            }
+        }
+
+        // Segunda pasada: limpiar clusters que tienen assets duplicados
+        var validClusters = new List<MapCluster>();
+        var usedAssets = new HashSet<int>();
+
+        foreach (var cluster in clusters.OrderByDescending(c => c.Count))
+        {
+            if (clustersToRemove.Contains(cluster))
+                continue;
+
+            var clusterAssets = cluster.AssetIds.ToList();
+            var hasDuplicates = clusterAssets.Any(id => usedAssets.Contains(id));
+
+            if (!hasDuplicates)
+            {
+                validClusters.Add(cluster);
+                foreach (var assetId in clusterAssets)
+                {
+                    usedAssets.Add(assetId);
+                }
+            }
+        }
+
+        return validClusters;
+    }
+
+    /// <summary>
+    /// Fuerza la deduplicación eliminando cualquier asset duplicado, manteniendo solo el cluster más grande para cada asset.
+    /// </summary>
+    private List<MapCluster> ForceDeduplicate(List<MapCluster> clusters)
+    {
+        if (clusters.Count <= 1)
+            return clusters;
+
+        // Crear un diccionario que mapea cada asset ID al mejor cluster que lo contiene
+        var assetToBestCluster = new Dictionary<int, MapCluster>();
+        
+        foreach (var cluster in clusters.OrderByDescending(c => c.Count))
+        {
+            foreach (var assetId in cluster.AssetIds)
+            {
+                if (!assetToBestCluster.ContainsKey(assetId))
+                {
+                    assetToBestCluster[assetId] = cluster;
+                }
+                else
+                {
+                    // Si este cluster es más grande, reemplazar
+                    var existingCluster = assetToBestCluster[assetId];
+                    if (cluster.Count > existingCluster.Count)
+                    {
+                        assetToBestCluster[assetId] = cluster;
+                    }
+                }
+            }
+        }
+
+        // Obtener los clusters únicos (sin duplicados)
+        var uniqueClusters = assetToBestCluster.Values
+            .GroupBy(c => string.Join(",", c.AssetIds.OrderBy(id => id)))
+            .Select(g => g.First())
+            .ToList();
+
+        // Reconstruir clusters asegurando que cada asset aparezca solo una vez
+        var finalClusters = new List<MapCluster>();
+        var usedAssets = new HashSet<int>();
+
+        foreach (var cluster in uniqueClusters.OrderByDescending(c => c.Count))
+        {
+            // Filtrar assets que ya están en otros clusters
+            var availableAssets = cluster.AssetIds.Where(id => !usedAssets.Contains(id)).ToList();
+            
+            if (availableAssets.Any())
+            {
+                // Crear un nuevo cluster solo con los assets disponibles
+                var newCluster = new MapCluster
+                {
+                    AssetIds = availableAssets,
+                    Count = availableAssets.Count,
+                    Latitude = cluster.Latitude,
+                    Longitude = cluster.Longitude,
+                    EarliestDate = cluster.EarliestDate,
+                    LatestDate = cluster.LatestDate,
+                    HasThumbnail = cluster.HasThumbnail
+                };
+
+                finalClusters.Add(newCluster);
+                foreach (var assetId in availableAssets)
+                {
+                    usedAssets.Add(assetId);
+                }
+            }
+        }
+
+        return finalClusters;
+    }
+
+    /// <summary>
+    /// Deduplicación agresiva: asigna cada asset al cluster más cercano y elimina duplicados.
+    /// </summary>
+    private List<MapCluster> AggressiveDeduplicate(List<MapCluster> clusters)
+    {
+        if (clusters.Count <= 1)
+            return clusters;
+
+        // Obtener todos los assets únicos
+        var allAssetIds = clusters.SelectMany(c => c.AssetIds).Distinct().ToList();
+        
+        // Para cada asset, encontrar el mejor cluster (más grande)
+        var assetToCluster = new Dictionary<int, MapCluster>();
+        
+        foreach (var assetId in allAssetIds)
+        {
+            var clustersWithAsset = clusters
+                .Where(c => c.AssetIds.Contains(assetId))
+                .OrderByDescending(c => c.Count)
+                .ThenBy(c => c.AssetIds.Count)
+                .ToList();
+            
+            if (clustersWithAsset.Any())
+            {
+                assetToCluster[assetId] = clustersWithAsset.First();
+            }
+        }
+
+        // Agrupar assets por cluster
+        var clusterGroups = assetToCluster
+            .GroupBy(kvp => kvp.Value, new ClusterEqualityComparer())
+            .ToList();
+
+        // Crear nuevos clusters sin duplicados
+        var finalClusters = new List<MapCluster>();
+        foreach (var group in clusterGroups)
+        {
+            var originalCluster = group.Key;
+            var assetIds = group.Select(kvp => kvp.Key).OrderBy(id => id).ToList();
+            
+            var newCluster = new MapCluster
+            {
+                AssetIds = assetIds,
+                Count = assetIds.Count,
+                Latitude = originalCluster.Latitude,
+                Longitude = originalCluster.Longitude,
+                EarliestDate = originalCluster.EarliestDate,
+                LatestDate = originalCluster.LatestDate,
+                HasThumbnail = originalCluster.HasThumbnail
+            };
+            
+            finalClusters.Add(newCluster);
+        }
+
+        return finalClusters;
+    }
+
+    private class ClusterEqualityComparer : IEqualityComparer<MapCluster>
+    {
+        public bool Equals(MapCluster? x, MapCluster? y)
+        {
+            if (x == null || y == null) return false;
+            if (ReferenceEquals(x, y)) return true;
+            
+            var xIds = new HashSet<int>(x.AssetIds.OrderBy(id => id));
+            var yIds = new HashSet<int>(y.AssetIds.OrderBy(id => id));
+            
+            return xIds.SetEquals(yIds);
+        }
+
+        public int GetHashCode(MapCluster obj)
+        {
+            if (obj == null) return 0;
+            var sortedIds = obj.AssetIds.OrderBy(id => id).ToList();
+            return string.Join(",", sortedIds).GetHashCode();
+        }
     }
 
     private class AssetLocation

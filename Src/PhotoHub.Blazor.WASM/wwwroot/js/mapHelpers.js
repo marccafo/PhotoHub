@@ -1,6 +1,7 @@
 window.mapHelpers = {
     _mapInstance: null,
     _currentStyle: 'dark',
+    _markerLayerGroup: null,
     
     initMap: function (elementId, centerLat, centerLng, zoom, style) {
         if (typeof L === 'undefined') {
@@ -135,7 +136,11 @@ window.mapHelpers = {
             
             fullscreenControl.addTo(map);
             
+            // Crear un LayerGroup para manejar todos los marcadores
+            const markerLayerGroup = L.layerGroup().addTo(map);
+            
             window.mapHelpers._mapInstance = map;
+            window.mapHelpers._markerLayerGroup = markerLayerGroup;
             window.mapHelpers._currentStyle = style || 'dark';
             console.log('Map initialized successfully with style:', style);
             return map;
@@ -153,12 +158,17 @@ window.mapHelpers = {
         const map = window.mapHelpers._mapInstance;
         if (!map) return;
         
-        // Remover todas las capas de tiles existentes
+        // Remover todas las capas de tiles existentes (pero mantener el LayerGroup de marcadores)
         map.eachLayer(function(layer) {
             if (layer instanceof L.TileLayer) {
                 map.removeLayer(layer);
             }
         });
+        
+        // Asegurar que el LayerGroup de marcadores esté en el mapa
+        if (window.mapHelpers._markerLayerGroup && !map.hasLayer(window.mapHelpers._markerLayerGroup)) {
+            window.mapHelpers._markerLayerGroup.addTo(map);
+        }
         
         // Agregar nueva capa con el estilo seleccionado
         let tileUrl, attribution;
@@ -278,7 +288,14 @@ window.mapHelpers = {
         const marker = L.marker([lat, lng], { 
             icon: icon,
             interactive: true
-        }).addTo(map);
+        });
+        
+        // Agregar al LayerGroup en lugar de directamente al mapa
+        if (window.mapHelpers._markerLayerGroup) {
+            marker.addTo(window.mapHelpers._markerLayerGroup);
+        } else {
+            marker.addTo(map);
+        }
         
         // Usar una closure para capturar el clusterId actual
         const currentId = clusterId;
@@ -357,15 +374,25 @@ window.mapHelpers = {
     },
     
     removeAllMarkers: function (markers) {
-        if (!markers) return;
-        markers.forEach(m => {
-            if (m && m.marker) {
-                try {
-                    m.marker.off('click');
-                    m.marker.remove();
-                } catch (e) {
-                    console.error('Error removing marker:', e);
-                }
+        console.log('[JS-MAP] removeAllMarkers called');
+        const map = window.mapHelpers._mapInstance;
+        if (!map) return;
+        
+        if (window.mapHelpers._markerLayerGroup) {
+            try {
+                // Eliminar todos los marcadores del LayerGroup
+                window.mapHelpers._markerLayerGroup.clearLayers();
+                console.log('[JS-MAP] Cleared all markers from layer group');
+            } catch (e) {
+                console.error('[JS-MAP] Error clearing marker layer group:', e);
+            }
+        }
+        
+        // También nos aseguramos de que no haya marcadores sueltos en el mapa 
+        // que no estén en el layer group por alguna razón
+        map.eachLayer(function(layer) {
+            if (layer instanceof L.Marker && layer.options && layer.options.className === 'map-cluster-icon') {
+                map.removeLayer(layer);
             }
         });
     }
