@@ -366,8 +366,24 @@
     
     private async Task ScrollToDate(string dateString)
     {
+        Console.WriteLine($"[TIMELINE] ScrollToDate requested for: {dateString}");
         if (DateTime.TryParse(dateString, out var targetDate))
         {
+            // Si el timeline aún no está cargado, esperar un poco
+            int attempts = 0;
+            while (!_groupedAssets.Any() && attempts < 20) // Aumentar intentos
+            {
+                Console.WriteLine($"[TIMELINE] Waiting for assets to load... attempt {attempts}");
+                await Task.Delay(500);
+                attempts++;
+            }
+
+            if (!_groupedAssets.Any())
+            {
+                Console.WriteLine("[TIMELINE] No assets found after waiting.");
+                return;
+            }
+
             // Buscar el grupo que contiene esta fecha (por día)
             var targetGroup = _groupedAssets.Keys.FirstOrDefault(g => 
             {
@@ -377,8 +393,14 @@
             
             if (!string.IsNullOrEmpty(targetGroup))
             {
-                await Task.Delay(500); // Esperar a que el DOM esté completamente renderizado
+                Console.WriteLine($"[TIMELINE] Target group found: {targetGroup}. Scrolling...");
+                // Esperar un poco más para asegurar que el DOM esté listo y el masonry inicializado
+                await Task.Delay(1500); // Un poco más de tiempo para estar seguros
                 await ScrollToGroup(targetGroup);
+            }
+            else
+            {
+                Console.WriteLine($"[TIMELINE] Target group NOT found for date: {targetDate.Date}");
             }
         }
     }

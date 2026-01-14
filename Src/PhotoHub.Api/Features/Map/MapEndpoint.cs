@@ -68,6 +68,9 @@ public class MapAssetsEndpoint : IEndpoint
 
             // Agrupar assets en clusters basados en zoom level
             var clusterDistance = GetClusterDistance(zoom ?? 10);
+            
+            // Si el zoom es alto, reducimos el área de búsqueda de clustering para evitar que assets lejanos 
+            // "roben" assets que deberían estar en clusters separados y visibles al hacer zoom.
             var clusters = CreateClusters(assets, clusterDistance);
 
             // Obtener información de thumbnails para los primeros assets
@@ -80,8 +83,12 @@ public class MapAssetsEndpoint : IEndpoint
             var response = clusters.Select(c =>
             {
                 var firstAssetId = c.AssetIds.FirstOrDefault();
+                // Generar un ID basado en las propiedades del cluster para que sea estable si los datos no cambian
+                var clusterId = $"{c.Latitude:F6}_{c.Longitude:F6}_{c.Count}_{c.EarliestDate:yyyyMMddHHmmss}";
+                
                 return new MapClusterResponse
                 {
+                    Id = clusterId,
                     Latitude = c.Latitude,
                     Longitude = c.Longitude,
                     Count = c.Count,
@@ -110,14 +117,16 @@ public class MapAssetsEndpoint : IEndpoint
         // Zoom más alto = menor distancia = más clusters
         // Zoom más bajo = mayor distancia = menos clusters
         if (zoom <= 3)
-            return 50.0; // 50 km
+            return 100.0; 
         if (zoom <= 6)
-            return 10.0; // 10 km
+            return 20.0;
         if (zoom <= 10)
-            return 5.0; // 5 km
+            return 5.0; 
         if (zoom <= 13)
-            return 1.0; // 1 km
-        return 0.5; // 500 m para zoom alto
+            return 0.5; // 500m
+        if (zoom <= 15)
+            return 0.1; // 100m
+        return 0.02; // 20m para zoom muy alto
     }
 
     private List<MapCluster> CreateClusters(

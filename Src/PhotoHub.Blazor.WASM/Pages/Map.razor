@@ -145,7 +145,7 @@
                 _currentZoom = await JS.InvokeAsync<int>("mapHelpers.getZoom");
 
                 // Cargar clusters iniciales - sin filtrar por bounds inicialmente para ver todos los assets
-                await LoadClusters(true);
+                await LoadClusters(true, true);
             }
             catch (Exception ex)
             {
@@ -156,24 +156,27 @@
         }
     }
 
-    private async Task LoadClusters(bool loadAll = false)
+    private async Task LoadClusters(bool loadAll = false, bool fitBounds = false)
     {
         try
         {
             _loading = true;
+            // No hacemos StateHasChanged aquí si ya estamos en un proceso de renderizado 
+            // pero lo necesitamos para mostrar el spinner.
             StateHasChanged();
 
-            Console.WriteLine($"Loading clusters - loadAll: {loadAll}, zoom: {_currentZoom}");
+            Console.WriteLine($"[MAP] Loading clusters - loadAll: {loadAll}, zoom: {_currentZoom}");
             
+            List<MapCluster> newClusters;
             if (loadAll)
             {
                 // Cargar todos los clusters sin filtrar por bounds
-                _clusters = await MapService.GetMapClustersAsync(_currentZoom);
+                newClusters = await MapService.GetMapClustersAsync(_currentZoom);
             }
             else
             {
-                Console.WriteLine($"Loading with bounds: minLat={_currentMinLat}, minLng={_currentMinLng}, maxLat={_currentMaxLat}, maxLng={_currentMaxLng}");
-                _clusters = await MapService.GetMapClustersAsync(
+                Console.WriteLine($"[MAP] Loading with bounds: minLat={_currentMinLat}, minLng={_currentMinLng}, maxLat={_currentMaxLat}, maxLng={_currentMaxLng}");
+                newClusters = await MapService.GetMapClustersAsync(
                     _currentZoom,
                     _currentMinLat,
                     _currentMinLng,
@@ -182,23 +185,29 @@
                 );
             }
 
-            Console.WriteLine($"Loaded {_clusters.Count} clusters");
-
-            if (_clusters.Any())
+            Console.WriteLine($"[MAP] Loaded {newClusters.Count} clusters");
+            
+            // Si no hay clusters, limpiar los marcadores y salir
+            if (!newClusters.Any())
             {
-                Console.WriteLine($"First cluster: Lat={_clusters[0].Latitude}, Lng={_clusters[0].Longitude}, Count={_clusters[0].Count}, ThumbnailUrl={_clusters[0].ThumbnailUrl}");
-                await UpdateMapMarkers();
-                Snackbar.Add($"Se encontraron {_clusters.Count} ubicaciones con {_clusters.Sum(c => c.Count)} fotografías", Severity.Success);
-            }
-            else
-            {
-                Console.WriteLine("No clusters found");
+                Console.WriteLine("[MAP] No clusters found");
+                _clusters = newClusters;
+                await UpdateMapMarkers(false);
                 Snackbar.Add("No se encontraron fotografías con coordenadas GPS en esta área", Severity.Info);
+                return;
             }
+
+            // IMPORTANTE: Primero actualizamos la lista interna de clusters
+            _clusters = newClusters;
+
+            // Luego actualizamos los marcadores en el mapa
+            await UpdateMapMarkers(fitBounds);
+            
+            Snackbar.Add($"Se encontraron {_clusters.Count} ubicaciones con {_clusters.Sum(c => c.Count)} fotografías", Severity.Success);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading clusters: {ex}");
+            Console.WriteLine($"[MAP] Error loading clusters: {ex}");
             Snackbar.Add($"Error al cargar clusters: {ex.Message}", Severity.Error);
         }
         finally
@@ -208,73 +217,65 @@
         }
     }
 
-    private async Task UpdateMapMarkers()
+    private async Task UpdateMapMarkers(bool fitBounds = false)
     {
         try
         {
-            Console.WriteLine($"Updating map markers - {_clusters.Count} clusters");
+            Console.WriteLine($"[MAP] Updating map markers - {_clusters.Count} clusters");
             
             // Eliminar marcadores anteriores
             if (_markers.Any())
             {
-                Console.WriteLine($"Removing {_markers.Count} old markers");
+                Console.WriteLine($"[MAP] Removing {_markers.Count} old markers");
                 await JS.InvokeVoidAsync("mapHelpers.removeAllMarkers", _markers);
                 _markers.Clear();
             }
 
             if (!_clusters.Any())
             {
-                Console.WriteLine("No clusters to display");
+                Console.WriteLine("[MAP] No clusters to display");
                 return;
             }
 
             // Agregar nuevos marcadores
             int successCount = 0;
-            for (int i = 0; i < _clusters.Count; i++)
+            // Guardamos una copia local de los clusters para esta actualización de marcadores
+            var clustersToRender = _clusters.ToList();
+            
+            for (int i = 0; i < clustersToRender.Count; i++)
             {
-                var cluster = _clusters[i];
+                var cluster = clustersToRender[i];
                 try
                 {
-                    Console.WriteLine($"Adding marker {i}: Lat={cluster.Latitude}, Lng={cluster.Longitude}, Count={cluster.Count}, Thumbnail={cluster.ThumbnailUrl}");
-                    
                     var marker = await JS.InvokeAsync<object>("mapHelpers.addClusterMarker",
                         cluster.Latitude,
                         cluster.Longitude,
                         cluster.Count,
                         cluster.ThumbnailUrl ?? string.Empty,
                         _objRef,
-                        i
+                        cluster.Id
                     );
                     if (marker != null)
                     {
                         _markers.Add(marker);
                         successCount++;
-                        Console.WriteLine($"Marker {i} added successfully");
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Marker {i} returned null");
                     }
                 }
                 catch (Exception ex)
                 {
-                    // Continuar con los siguientes marcadores si uno falla
-                    Console.WriteLine($"Error al agregar marcador {i}: {ex.Message}");
-                    Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                    Console.WriteLine($"[MAP] Error al agregar marcador {i}: {ex.Message}");
                 }
             }
 
-            Console.WriteLine($"Successfully added {successCount} markers out of {_clusters.Count}");
+            Console.WriteLine($"[MAP] Successfully added {successCount} markers out of {clustersToRender.Count}");
 
-            // Si hay clusters, ajustar el mapa para mostrarlos todos
-            if (_clusters.Any() && successCount > 0)
+            // Si hay clusters y se solicita, ajustar el mapa para mostrarlos todos
+            if (fitBounds && clustersToRender.Any() && successCount > 0)
             {
-                var minLat = _clusters.Min(c => c.Latitude);
-                var minLng = _clusters.Min(c => c.Longitude);
-                var maxLat = _clusters.Max(c => c.Latitude);
-                var maxLng = _clusters.Max(c => c.Longitude);
-                
-                Console.WriteLine($"Fitting bounds: minLat={minLat}, minLng={minLng}, maxLat={maxLat}, maxLng={maxLng}");
+                var minLat = clustersToRender.Min(c => c.Latitude);
+                var minLng = clustersToRender.Min(c => c.Longitude);
+                var maxLat = clustersToRender.Max(c => c.Latitude);
+                var maxLng = clustersToRender.Max(c => c.Longitude);
                 
                 // Agregar un poco de padding
                 var latPadding = Math.Max((maxLat - minLat) * 0.1, 0.01);
@@ -289,7 +290,7 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error updating markers: {ex}");
+            Console.WriteLine($"[MAP] Error updating markers: {ex}");
             Snackbar.Add($"Error al actualizar marcadores: {ex.Message}", Severity.Error);
         }
     }
@@ -297,41 +298,63 @@
     [JSInvokable]
     public async Task OnMapMoveEnd(double minLat, double minLng, double maxLat, double maxLng, int zoom)
     {
-        // Actualizar bounds y zoom solo si han cambiado significativamente
-        var boundsChanged = Math.Abs(_currentMinLat - minLat) > 0.1 ||
-                           Math.Abs(_currentMinLng - minLng) > 0.1 ||
-                           Math.Abs(_currentMaxLat - maxLat) > 0.1 ||
-                           Math.Abs(_currentMaxLng - maxLng) > 0.1;
+        Console.WriteLine($"[MAP] OnMapMoveEnd called: zoom={zoom}");
+        
+        _currentMinLat = minLat;
+        _currentMinLng = minLng;
+        _currentMaxLat = maxLat;
+        _currentMaxLng = maxLng;
+        _currentZoom = zoom;
 
-        var zoomChanged = _currentZoom != zoom;
-
-        if (boundsChanged || zoomChanged)
-        {
-            _currentMinLat = minLat;
-            _currentMinLng = minLng;
-            _currentMaxLat = maxLat;
-            _currentMaxLng = maxLng;
-            _currentZoom = zoom;
-
-            await LoadClusters();
-        }
+        // Recargamos siempre al mover o hacer zoom para obtener nuevos clusters
+        await LoadClusters();
     }
 
     [JSInvokable]
-    public void OnClusterClick(int clusterIndex)
+    public async Task OnClusterClick(string clusterId)
     {
-        if (clusterIndex < 0 || clusterIndex >= _clusters.Count)
-            return;
+        Console.WriteLine($"[MAP] OnClusterClick received in C#: {clusterId}");
+        
+        // No bloqueamos el click si estamos cargando, pero informamos
+        if (_loading)
+        {
+            Console.WriteLine($"[MAP] INFO: OnClusterClick received while _loading=true. ClusterId: {clusterId}");
+        }
 
-        var cluster = _clusters[clusterIndex];
+        var cluster = _clusters.FirstOrDefault(c => c.Id == clusterId);
+        if (cluster == null)
+        {
+            Console.WriteLine($"[MAP] ERROR: Cluster with ID {clusterId} not found in current view.");
+            Console.WriteLine($"[MAP] Total clusters in state: {_clusters.Count}");
+            
+            // Reintentar una vez si _loading era true, por si se acaba de terminar de cargar
+            if (_loading)
+            {
+                Console.WriteLine("[MAP] Retrying cluster lookup in 100ms...");
+                await Task.Delay(100);
+                cluster = _clusters.FirstOrDefault(c => c.Id == clusterId);
+            }
+
+            if (cluster == null) return;
+        }
+
+        Console.WriteLine($"[MAP] Cluster data: {cluster}");
         
-        // Navegar al timeline con la fecha del cluster
-        // Usamos la fecha más temprana para ir al inicio del grupo
-        var date = cluster.EarliestDate;
-        var dateString = date.ToString("yyyy-MM-dd");
-        
-        // Navegar al timeline - la página Timeline manejará el parámetro date
-        Navigation.NavigateTo($"/?date={dateString}");
+        // Siempre navegar al primer asset del cluster para ver esa foto en concreto
+        // Si el cluster tiene múltiples assets, mostramos el primero
+        if (cluster.FirstAssetId.HasValue)
+        {
+            Console.WriteLine($"Opening asset {cluster.FirstAssetId.Value} from cluster with {cluster.Count} assets.");
+            Navigation.NavigateTo($"/asset/{cluster.FirstAssetId.Value}");
+        }
+        else
+        {
+            // Fallback: si no hay FirstAssetId, navegar al timeline con la fecha
+            var date = cluster.EarliestDate;
+            var dateString = date.ToString("yyyy-MM-dd");
+            Console.WriteLine($"No FirstAssetId found. Navigating to timeline at date: {dateString}");
+            Navigation.NavigateTo($"/?date={dateString}");
+        }
     }
 
 

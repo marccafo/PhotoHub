@@ -180,31 +180,19 @@ window.mapHelpers = {
         window.mapHelpers._currentStyle = style;
     },
     
-    addClusterMarker: function (lat, lng, count, thumbnailUrl, dotNetRef, clusterIndex) {
-        console.log(`addClusterMarker called: lat=${lat}, lng=${lng}, count=${count}, thumbnailUrl=${thumbnailUrl}, clusterIndex=${clusterIndex}`);
-        
+    addClusterMarker: function (lat, lng, count, thumbnailUrl, dotNetRef, clusterId) {
         const map = window.mapHelpers._mapInstance;
-        if (!map) {
-            console.error('Map instance not found');
-            return null;
-        }
-        
-        if (typeof L === 'undefined') {
-            console.error('Leaflet not loaded');
-            return null;
-        }
+        if (!map) return null;
         
         // Círculos más pequeños: mínimo 40px, máximo 80px
         const radius = Math.max(40, Math.min(80, 35 + count * 2));
         const size = radius * 2;
         
-        console.log(`Creating marker with radius=${radius}, size=${size}`);
-        
         // Crear el contenido del marcador con la miniatura - diseño flat
         let htmlContent = '';
         if (thumbnailUrl && thumbnailUrl.trim() !== '') {
             htmlContent = `
-                <div style="
+                <div class="map-marker-container" style="
                     width: ${size}px;
                     height: ${size}px;
                     border-radius: 50%;
@@ -221,7 +209,7 @@ window.mapHelpers = {
                              object-fit: cover;
                              border-radius: 50%;
                          "
-                         onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'width: ${size}px; height: ${size}px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 14px; background: #1976d2; border-radius: 50%; border: 2px solid #1976d2; position: relative;\\'><div style=\\'position: absolute; top: -8px; right: -8px; background: #ff5722; color: white; font-weight: bold; font-size: 12px; padding: 3px 7px; border-radius: 12px; min-width: 22px; text-align: center; border: 2px solid white; line-height: 1.2; z-index: 1000; box-shadow: 0 1px 3px rgba(0,0,0,0.2);\\'>${count}</div></div>';"
+                         onerror="this.style.display='none';"
                     />
                     <div style="
                         position: absolute;
@@ -245,7 +233,7 @@ window.mapHelpers = {
         } else {
             // Si no hay miniatura, mostrar solo el número en un círculo flat con badge
             htmlContent = `
-                <div style="
+                <div class="map-marker-container" style="
                     width: ${size}px;
                     height: ${size}px;
                     border-radius: 50%;
@@ -287,15 +275,37 @@ window.mapHelpers = {
             iconAnchor: [size / 2, size / 2]
         });
         
-        const marker = L.marker([lat, lng], { icon: icon }).addTo(map);
+        const marker = L.marker([lat, lng], { 
+            icon: icon,
+            interactive: true
+        }).addTo(map);
         
-        marker.on('click', function() {
+        // Usar una closure para capturar el clusterId actual
+        const currentId = clusterId;
+        marker.on('click', function(e) {
+            console.log('[JS-MAP] Marker Leaflet event clicked, clusterId:', currentId);
+            console.log('[JS-MAP] Current map zoom:', map.getZoom());
+            
+            // Usar stopPropagation de Leaflet para evitar que el click llegue al mapa
+            if (e.originalEvent) {
+                if (e.originalEvent.stopPropagation) e.originalEvent.stopPropagation();
+                if (e.originalEvent.preventDefault) e.originalEvent.preventDefault();
+            }
+            
             if (dotNetRef) {
-                dotNetRef.invokeMethodAsync('OnClusterClick', clusterIndex).catch(err => console.error('Error calling OnClusterClick:', err));
+                console.log('[JS-MAP] Invoking OnClusterClick in Blazor for ID:', currentId);
+                
+                // Añadir un pequeño retraso para asegurar que si hay una recarga en curso,
+                // Blazor tenga tiempo de actualizar su estado de _loading.
+                setTimeout(() => {
+                    dotNetRef.invokeMethodAsync('OnClusterClick', currentId)
+                        .then(() => console.log('[JS-MAP] OnClusterClick invoked successfully'))
+                        .catch(err => console.error('[JS-MAP] Error calling OnClusterClick:', err));
+                }, 50);
+            } else {
+                console.error('[JS-MAP] dotNetRef is null, cannot call OnClusterClick');
             }
         });
-        
-        console.log(`Marker added to map at [${lat}, ${lng}]`);
         
         return { marker };
     },
@@ -312,9 +322,10 @@ window.mapHelpers = {
         const map = window.mapHelpers._mapInstance;
         if (!map) return;
         
-        map.on('moveend', function() {
+        const handleMoveEnd = function() {
             const bounds = map.getBounds();
             const zoom = map.getZoom();
+            console.log('Map moveend event triggered', { zoom: zoom });
             dotNetRef.invokeMethodAsync('OnMapMoveEnd', 
                 bounds.getSouth(),
                 bounds.getWest(),
@@ -322,7 +333,9 @@ window.mapHelpers = {
                 bounds.getEast(),
                 zoom
             );
-        });
+        };
+        
+        map.on('moveend', handleMoveEnd);
     },
     
     getMapBounds: function () {
@@ -344,9 +357,16 @@ window.mapHelpers = {
     },
     
     removeAllMarkers: function (markers) {
+        if (!markers) return;
         markers.forEach(m => {
-            if (m.marker) m.marker.remove();
-            if (m.circle) m.circle.remove();
+            if (m && m.marker) {
+                try {
+                    m.marker.off('click');
+                    m.marker.remove();
+                } catch (e) {
+                    console.error('Error removing marker:', e);
+                }
+            }
         });
     }
 };
