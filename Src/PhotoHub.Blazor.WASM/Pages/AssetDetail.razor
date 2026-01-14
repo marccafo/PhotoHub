@@ -25,14 +25,14 @@ else if (_asset != null)
                 left: 0;
                 right: 0;
                 bottom: 0;
-                background-color: #000;
-                z-index: 1200;
+                z-index: 1100;
                 display: flex;
                 flex-direction: column;
                 outline: none;
                 margin: -24px;
                 width: calc(100% + 48px);
                 height: calc(100% + 48px);
+                background-color: black;
             }
             .asset-detail-content {
                 flex-grow: 1;
@@ -86,10 +86,26 @@ else if (_asset != null)
                 opacity: 0;
                 pointer-events: none;
             }
+            .asset-detail-menu-popover {
+                background-color: #1a1a1a !important;
+                color: #e1e1e1 !important;
+                border: 1px solid #333 !important;
+            }
+            .asset-detail-menu-popover .mud-popover-paper {
+                background-color: #1a1a1a !important;
+                box-shadow: 0px 5px 5px -3px rgba(0,0,0,0.2),0px 8px 10px 1px rgba(0,0,0,0.14),0px 3px 14px 2px rgba(0,0,0,0.12) !important;
+                border: 1px solid #333 !important;
+            }
+            .asset-detail-menu-popover .mud-list-item {
+                color: #e1e1e1 !important;
+            }
+            .asset-detail-menu-popover .mud-list-item:hover {
+                background-color: rgba(255, 255, 255, 0.1) !important;
+            }
         </style>
 
         <div class="asset-detail-content" @onclick="ToggleToolbar">
-            <span @onclick:stopPropagation="true">
+            <span @onclick:stopPropagation="true" @onclick:preventDefault="true">
                 <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" 
                                Class="@GetNavButtonClass(true)" 
                                Size="Size.Large"
@@ -114,7 +130,7 @@ else if (_asset != null)
                 <MudIcon Icon="@GetAssetIcon(_asset.Type)" Size="Size.Large" Color="Color.Default" Style="width: 128px; height: 128px;" />
             }
 
-            <span @onclick:stopPropagation="true">
+            <span @onclick:stopPropagation="true" @onclick:preventDefault="true">
                 <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" 
                                Class="@GetNavButtonClass(false)" 
                                Size="Size.Large"
@@ -238,6 +254,7 @@ else
 @code {
     [Parameter] public int AssetId { get; set; }
     [SupplyParameterFromQuery] public string? Path { get; set; }
+    [SupplyParameterFromQuery] public int? AlbumId { get; set; }
     
     private PhotoHub.Blazor.Shared.Models.AssetDetail? _asset;
     private bool _loading = true;
@@ -268,17 +285,13 @@ else
 
     private void UpdateNavbar()
     {
-        // Forzar actualización del estado antes de renderizar el navbar
-        var currentSyncStatus = _asset?.SyncStatus ?? AssetSyncStatus.Pending;
-        var assetId = _asset?.Id ?? 0;
-        
         LayoutService.SetCustomNavbar(
             @<text>
                 <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" OnClick="GoBack" Edge="Edge.Start" />
                 <MudSpacer />
                 
-                <div class="d-flex align-center gap-1" @onclick:stopPropagation="true">
-                    @if (_asset != null && assetId == 0 && currentSyncStatus == AssetSyncStatus.Pending)
+                <div class="d-flex align-center gap-1">
+                    @if (_asset != null && _asset.Id == 0 && _asset.SyncStatus == AssetSyncStatus.Pending)
                     {
                         <MudTooltip Text="Sincronizar ahora">
                             <MudIconButton Icon="@Icons.Material.Filled.CloudUpload" 
@@ -287,14 +300,12 @@ else
                                            Disabled="@_syncing" />
                         </MudTooltip>
                     }
-                    else if (_asset != null && (assetId == 0 && currentSyncStatus == AssetSyncStatus.Copied))
+                    else if (_asset != null && (_asset.Id == 0 && _asset.SyncStatus == AssetSyncStatus.Copied))
                     {
                         <MudTooltip Text="Pendiente de indexar">
-                            <span @onclick:stopPropagation="true">
-                                <MudIconButton Icon="@Icons.Material.Outlined.Schedule" 
-                                               Color="Color.Default" 
-                                               OnClick="NavigateToIndex" />
-                            </span>
+                            <MudIconButton Icon="@Icons.Material.Outlined.Schedule" 
+                                           Color="Color.Default" 
+                                           OnClick="NavigateToIndex" />
                         </MudTooltip>
                     }
 
@@ -328,16 +339,16 @@ else
                         <MudIconButton Icon="@Icons.Material.Outlined.Download" Color="Color.Inherit" />
                     </MudTooltip>
 
-                    @if (_asset != null && _asset.Id > 0)
+                    @if (_asset is { Id: > 0 })
                     {
                         <MudTooltip Text="Eliminar">
                             <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Inherit" />
                         </MudTooltip>
 
-                        <MudMenu Icon="@Icons.Material.Outlined.MoreVert" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                        <MudMenu Icon="@Icons.Material.Outlined.MoreVert" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true" PopoverClass="asset-detail-menu-popover">
                             <MudMenuItem Icon="@Icons.Material.Outlined.Edit">Editar fecha y hora</MudMenuItem>
                             <MudMenuItem Icon="@Icons.Material.Outlined.LocationOn">Editar ubicación</MudMenuItem>
-                            <MudMenuItem Icon="@Icons.Material.Outlined.Add" OnClick="OpenAddToAlbumDialog">Añadir a álbum</MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Outlined.Add" OnClick="@OpenAddToAlbumDialog">Añadir a álbum</MudMenuItem>
                             <MudMenuItem Icon="@Icons.Material.Outlined.Archive">Archivar</MudMenuItem>
                         </MudMenu>
                     }
@@ -370,7 +381,14 @@ else
             
             if (_allAssets.Count == 0)
             {
-                _allAssets = await AssetService.GetTimelineAsync();
+                if (AlbumId.HasValue && AlbumId.Value > 0)
+                {
+                    _allAssets = await AlbumService.GetAlbumAssetsAsync(AlbumId.Value);
+                }
+                else
+                {
+                    _allAssets = await AssetService.GetTimelineAsync();
+                }
             }
             
             UpdateNavigation();
@@ -418,14 +436,16 @@ else
     {
         if (asset == null) return;
 
+        var albumQuery = AlbumId.HasValue ? $"&albumId={AlbumId}" : "";
+
         if (asset.SyncStatus == AssetSyncStatus.Synced)
         {
-            Navigation.NavigateTo($"/asset/{asset.Id}");
+            Navigation.NavigateTo($"/asset/{asset.Id}?{(albumQuery.StartsWith("&") ? albumQuery.Substring(1) : albumQuery)}");
         }
         else
         {
             var encodedPath = System.Net.WebUtility.UrlEncode(asset.FullPath);
-            Navigation.NavigateTo($"/asset/0?path={encodedPath}");
+            Navigation.NavigateTo($"/asset/0?path={encodedPath}{albumQuery}");
         }
     }
 
@@ -438,7 +458,14 @@ else
 
     private void GoBack()
     {
-        Navigation.NavigateTo("/");
+        if (AlbumId.HasValue && AlbumId.Value > 0)
+        {
+            Navigation.NavigateTo($"/albums/{AlbumId.Value}");
+        }
+        else
+        {
+            Navigation.NavigateTo("/");
+        }
     }
 
     private void NavigateToIndex()
@@ -450,6 +477,7 @@ else
     {
         _infoOpen = !_infoOpen;
         UpdateNavbar();
+        StateHasChanged();
     }
 
     private void ToggleToolbar()
@@ -554,8 +582,21 @@ else
 
         _addToAlbumDialogVisible = true;
         _loadingAlbums = true;
-        _availableAlbums = await AlbumService.GetAlbumsAsync();
-        _loadingAlbums = false;
+        StateHasChanged();
+        
+        try 
+        {
+            _availableAlbums = await AlbumService.GetAlbumsAsync();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Error al cargar álbumes", Severity.Error);
+        }
+        finally
+        {
+            _loadingAlbums = false;
+            StateHasChanged();
+        }
     }
 
     private async Task AddToAlbum()
@@ -635,7 +676,7 @@ else
                                 }
                                 else
                                 {
-                                    <div style="width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; background: var(--mud-palette-surface); border-radius: 4px;">
+                                    <div style="width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; background: #333; border-radius: 4px;">
                                         <MudIcon Icon="@Icons.Material.Filled.Collections" Size="Size.Small" />
                                     </div>
                                 }

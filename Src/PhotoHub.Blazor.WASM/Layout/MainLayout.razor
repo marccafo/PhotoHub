@@ -73,6 +73,15 @@
             background-color: var(--mud-palette-surface);
             border: 1px solid var(--mud-palette-primary);
         }
+        @* .custom-navbar { *@
+        @*     z-index: 1200; *@
+        @* } *@
+        @* .mud-drawer.mud-drawer-fixed { *@
+        @*     z-index: 1350; *@
+        @* } *@
+        @* .mud-drawer-overlay { *@
+        @*     z-index: 1340; *@
+        @* } *@
     </style>
     <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="0" 
                Variant="@DrawerVariant.Responsive" Class="@GetDrawerClass()">
@@ -129,7 +138,7 @@
 
     private string GetAppBarClass()
     {
-        return LayoutService.IsNavbarCustom ? "px-4" : "px-4 border-b";
+        return LayoutService.IsNavbarCustom ? "px-4 custom-navbar" : "px-4 border-b";
     }
 
     private string GetDrawerClass()
@@ -140,6 +149,7 @@
     private void ToggleDrawer()
     {
         _drawerOpen = !_drawerOpen;
+        StateHasChanged();
     }
 
     protected override void OnInitialized()

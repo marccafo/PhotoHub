@@ -264,7 +264,7 @@ else
 
     private void OpenAsset(TimelineItem asset)
     {
-        Navigation.NavigateTo($"/asset/{asset.Id}");
+        Navigation.NavigateTo($"/asset/{asset.Id}?albumId={AlbumId}");
     }
 
     private void OpenCreateDialog()
