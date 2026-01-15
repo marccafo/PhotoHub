@@ -48,5 +48,11 @@ builder.Services.AddScoped<IAlbumPermissionService>(sp =>
     var authService = sp.GetRequiredService<PhotoHub.Blazor.WASM.Services.AuthService>();
     return new AlbumPermissionService(httpClient, async () => await authService.GetTokenAsync());
 });
+builder.Services.AddScoped<IAdminStatsService>(sp =>
+{
+    var httpClient = sp.GetRequiredService<HttpClient>();
+    var authService = sp.GetRequiredService<PhotoHub.Blazor.WASM.Services.AuthService>();
+    return new AdminStatsService(httpClient, async () => await authService.GetTokenAsync());
+});
 
 await builder.Build().RunAsync();

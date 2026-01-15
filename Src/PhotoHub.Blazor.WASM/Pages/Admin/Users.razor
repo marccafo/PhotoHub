@@ -11,18 +11,18 @@
 
 @if (!_isAuthorized)
 {
-    <MudContainer Class="mt-8">
+    <div class="mt-8">
         <MudText Typo="Typo.h5">Acceso Denegado</MudText>
         <MudText Typo="Typo.body1">Solo los administradores pueden acceder a esta página.</MudText>
         <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary" Class="mt-4">
             Volver al inicio
         </MudButton>
-    </MudContainer>
+    </div>
 }
 else
 {
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+<div class="mt-4">
     <MudText Typo="Typo.h4" Class="mb-4">Gestión de Usuarios</MudText>
     
     <MudButton Variant="Variant.Filled" 
@@ -90,7 +90,7 @@ else
             </MudTd>
         </RowTemplate>
     </MudTable>
-</MudContainer>
+</div>
 }
 
 @code {

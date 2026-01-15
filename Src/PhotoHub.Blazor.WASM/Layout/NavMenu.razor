@@ -1,35 +1,92 @@
-﻿<MudNavMenu Class="mt-4">
-    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.PhotoLibrary" IconColor="Color.Inherit">
-        Fotos
-    </MudNavLink>
-    <MudNavLink Href="/explorer" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Folder" IconColor="Color.Inherit">
-        Explorador
-    </MudNavLink>
-    <MudNavLink Href="/map" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Map" IconColor="Color.Inherit">
-        Mapa
-    </MudNavLink>
-    <MudNavLink Href="/albums" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Collections" IconColor="Color.Inherit">
-        Álbumes
-    </MudNavLink>
-    
-    <MudDivider Class="my-2" />
-    
-    <MudNavLink Href="/device" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.PhoneAndroid" IconColor="Color.Inherit">
-        Mi Dispositivo
-    </MudNavLink>
-    <MudNavLink Href="/upload" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.CloudUpload" IconColor="Color.Inherit">
-        Subir
-    </MudNavLink>
-    <MudNavLink Href="/index" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Search" IconColor="Color.Inherit">
-        Indexar
-    </MudNavLink>
-    <MudNavLink Href="/settings" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Settings" IconColor="Color.Inherit">
-        Configuración
-    </MudNavLink>
-    
-    <MudDivider Class="my-2" />
-    
-    <MudNavLink Href="/admin/users" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.AdminPanelSettings" IconColor="Color.Inherit">
-        Administración
-    </MudNavLink>
+@using PhotoHub.Blazor.WASM.Components
+@implements IDisposable
+@inject NavigationManager Navigation
+
+<MudNavMenu Class="mt-4">
+    <AuthorizeView Roles="Admin">
+        <Authorized>
+            @if (IsAdminSection)
+            {
+                <MudNavLink Href="/admin/users" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.People" IconColor="Color.Inherit">
+                    Usuarios
+                </MudNavLink>
+                <MudNavLink Href="/admin/queues" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Work" IconColor="Color.Inherit">
+                    Colas de trabajo
+                </MudNavLink>
+                <MudNavLink Href="/admin/settings" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Settings" IconColor="Color.Inherit">
+                    Ajustes
+                </MudNavLink>
+                <MudNavLink Href="/admin/stats" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.QueryStats" IconColor="Color.Inherit">
+                    Estadísticas del servidor
+                </MudNavLink>
+            }
+            else
+            {
+                <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.PhotoLibrary" IconColor="Color.Inherit">
+                    Fotos
+                </MudNavLink>
+                <MudNavLink Href="/explorer" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Folder" IconColor="Color.Inherit">
+                    Explorador
+                </MudNavLink>
+                <MudNavLink Href="/map" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Map" IconColor="Color.Inherit">
+                    Mapa
+                </MudNavLink>
+                <MudNavLink Href="/albums" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Collections" IconColor="Color.Inherit">
+                    Álbumes
+                </MudNavLink>
+                
+                <MudDivider Class="my-2" />
+                
+                <MudNavLink Href="/device" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.PhoneAndroid" IconColor="Color.Inherit">
+                    Mi Dispositivo
+                </MudNavLink>
+                <MudNavLink Href="/upload" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.CloudUpload" IconColor="Color.Inherit">
+                    Subir
+                </MudNavLink>
+            }
+        </Authorized>
+        <NotAuthorized>
+            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.PhotoLibrary" IconColor="Color.Inherit">
+                Fotos
+            </MudNavLink>
+            <MudNavLink Href="/explorer" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Folder" IconColor="Color.Inherit">
+                Explorador
+            </MudNavLink>
+            <MudNavLink Href="/map" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Map" IconColor="Color.Inherit">
+                Mapa
+            </MudNavLink>
+            <MudNavLink Href="/albums" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Collections" IconColor="Color.Inherit">
+                Álbumes
+            </MudNavLink>
+            
+            <MudDivider Class="my-2" />
+            
+            <MudNavLink Href="/device" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.PhoneAndroid" IconColor="Color.Inherit">
+                Mi Dispositivo
+            </MudNavLink>
+            <MudNavLink Href="/upload" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.CloudUpload" IconColor="Color.Inherit">
+                Subir
+            </MudNavLink>
+        </NotAuthorized>
+    </AuthorizeView>
 </MudNavMenu>
+
+@code {
+    private bool IsAdminSection
+        => new Uri(Navigation.Uri).AbsolutePath.Trim('/').StartsWith("admin", StringComparison.OrdinalIgnoreCase);
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += HandleLocationChanged;
+    }
+
+    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= HandleLocationChanged;
+    }
+}

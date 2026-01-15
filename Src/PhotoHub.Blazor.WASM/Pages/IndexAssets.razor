@@ -1,113 +1,144 @@
-@page "/index"
+@page "/admin/queues/indexar"
 @inject IIndexService IndexService
 @inject IAssetService AssetService
 @inject ISnackbar Snackbar
 @inject ISettingsService SettingsService
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
 
 <PageTitle>Indexar - PhotoHub</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">Indexar Assets</MudText>
+@if (!_isAuthorized)
+{
+    <div class="mt-8">
+        <MudText Typo="Typo.h5">Acceso Denegado</MudText>
+        <MudText Typo="Typo.body1">Solo los administradores pueden acceder a esta página.</MudText>
+        <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary" Class="mt-4">
+            Volver al inicio
+        </MudButton>
+    </div>
+}
+else
+{
+    <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/admin/queues"))" Class="mb-2">
+        Volver
+    </MudButton>
+    <MudText Typo="Typo.h4" Class="mb-4">Indexar Assets</MudText>
 
-<MudGrid>
-    <MudItem xs="12">
-        <MudCard Style="height:100%">
+    <MudGrid>
+        <MudItem xs="12">
+            <MudCard Style="height:100%">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Indexar Directorio Interno</MudText>
+                        <MudText Typo="Typo.body2">Analiza el directorio interno de assets (ASSETS_PATH) para indexar nuevos archivos sincronizados.</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudAlert Severity="Severity.Info" Class="mb-4">
+                        Se indexará el directorio interno configurado en ASSETS_PATH. Solo se indexarán los archivos que ya están en el directorio interno de la aplicación.
+                    </MudAlert>
+                    
+                    <MudButton Variant="Variant.Filled" 
+                               Color="Color.Primary" 
+                               OnClick="StartScan"
+                               Disabled="@_scanning"
+                               StartIcon="@Icons.Material.Filled.PlayArrow">
+                        @if (_scanning)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ml-2" />
+                        }
+                        Iniciar Indexación
+                    </MudButton>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    @if (_scanning || _lastUpdate != null)
+    {
+        <MudCard Class="mt-4">
             <MudCardHeader>
                 <CardHeaderContent>
-                    <MudText Typo="Typo.h6">Indexar Directorio Interno</MudText>
-                    <MudText Typo="Typo.body2">Analiza el directorio interno de assets (ASSETS_PATH) para indexar nuevos archivos sincronizados.</MudText>
+                    <MudText Typo="Typo.h6">Estado de la Indexación</MudText>
                 </CardHeaderContent>
-            </MudCardHeader>
-            <MudCardContent>
-                <MudAlert Severity="Severity.Info" Class="mb-4">
-                    Se indexará el directorio interno configurado en ASSETS_PATH. Solo se indexarán los archivos que ya están en el directorio interno de la aplicación.
-                </MudAlert>
-                
-                <MudButton Variant="Variant.Filled" 
-                           Color="Color.Primary" 
-                           OnClick="StartScan"
-                           Disabled="@_scanning"
-                           StartIcon="@Icons.Material.Filled.PlayArrow">
+                <CardHeaderActions>
                     @if (_scanning)
                     {
-                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ml-2" />
+                        <MudChip T="string" Color="Color.Info" Variant="Variant.Text" Size="Size.Small" Icon="@Icons.Material.Filled.Autorenew">En curso</MudChip>
                     }
-                    Iniciar Indexación
-                </MudButton>
+                    else if (_lastUpdate?.IsCompleted == true)
+                    {
+                        <MudChip T="string" Color="Color.Success" Variant="Variant.Text" Size="Size.Small" Icon="@Icons.Material.Filled.Check">Completado</MudChip>
+                    }
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudText Typo="Typo.body1" Class="mb-2">@_currentStatus</MudText>
+                <MudProgressLinear Color="Color.Primary" Value="@_progress" Class="my-4" />
+                
+                @if (_statistics != null)
+                {
+                    <MudGrid Class="mt-4">
+                        <MudItem xs="12" sm="6" md="3">
+                            <MudPaper Elevation="1" Class="text-center pa-4">
+                                <MudText Typo="Typo.h4" Color="Color.Primary">@_statistics.TotalFilesFound</MudText>
+                                <MudText Typo="Typo.body2">Archivos Encontrados</MudText>
+                            </MudPaper>
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="3">
+                            <MudPaper Elevation="1" Class="text-center pa-4">
+                                <MudText Typo="Typo.h4" Color="Color.Success">@_statistics.NewFiles</MudText>
+                                <MudText Typo="Typo.body2">Nuevos Archivos</MudText>
+                            </MudPaper>
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="3">
+                            <MudPaper Elevation="1" Class="text-center pa-4">
+                                <MudText Typo="Typo.h4" Color="Color.Info">@_statistics.UpdatedFiles</MudText>
+                                <MudText Typo="Typo.body2">Archivos Actualizados</MudText>
+                            </MudPaper>
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="3">
+                            <MudPaper Elevation="1" Class="text-center pa-4">
+                                <MudText Typo="Typo.h4" Color="Color.Warning">@(_statistics.ThumbnailsGenerated + _statistics.ThumbnailsRegenerated)</MudText>
+                                <MudText Typo="Typo.body2">Miniaturas</MudText>
+                            </MudPaper>
+                        </MudItem>
+                    </MudGrid>
+                }
+
+                <MudExpansionPanels Class="mt-4">
+                    <MudExpansionPanel Text="Registro detallado">
+                        <div style="max-height: 200px; overflow-y: auto;">
+                            @foreach (var update in _updates.AsEnumerable().Reverse())
+                            {
+                                <MudText Typo="Typo.caption" Class="d-block border-b pa-1">
+                                    <span class="text-muted">[@DateTime.Now.ToString("HH:mm:ss")]</span> @update.Message
+                                </MudText>
+                            }
+                        </div>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
             </MudCardContent>
         </MudCard>
-    </MudItem>
-</MudGrid>
-
-@if (_scanning || _lastUpdate != null)
-{
-    <MudCard Class="mt-4">
-        <MudCardHeader>
-            <CardHeaderContent>
-                <MudText Typo="Typo.h6">Estado de la Indexación</MudText>
-            </CardHeaderContent>
-            <CardHeaderActions>
-                @if (_scanning)
-                {
-                    <MudChip T="string" Color="Color.Info" Variant="Variant.Text" Size="Size.Small" Icon="@Icons.Material.Filled.Autorenew">En curso</MudChip>
-                }
-                else if (_lastUpdate?.IsCompleted == true)
-                {
-                    <MudChip T="string" Color="Color.Success" Variant="Variant.Text" Size="Size.Small" Icon="@Icons.Material.Filled.Check">Completado</MudChip>
-                }
-            </CardHeaderActions>
-        </MudCardHeader>
-        <MudCardContent>
-            <MudText Typo="Typo.body1" Class="mb-2">@_currentStatus</MudText>
-            <MudProgressLinear Color="Color.Primary" Value="@_progress" Class="my-4" />
-            
-            @if (_statistics != null)
-            {
-                <MudGrid Class="mt-4">
-                    <MudItem xs="12" sm="6" md="3">
-                        <MudPaper Elevation="1" Class="text-center pa-4">
-                            <MudText Typo="Typo.h4" Color="Color.Primary">@_statistics.TotalFilesFound</MudText>
-                            <MudText Typo="Typo.body2">Archivos Encontrados</MudText>
-                        </MudPaper>
-                    </MudItem>
-                    <MudItem xs="12" sm="6" md="3">
-                        <MudPaper Elevation="1" Class="text-center pa-4">
-                            <MudText Typo="Typo.h4" Color="Color.Success">@_statistics.NewFiles</MudText>
-                            <MudText Typo="Typo.body2">Nuevos Archivos</MudText>
-                        </MudPaper>
-                    </MudItem>
-                    <MudItem xs="12" sm="6" md="3">
-                        <MudPaper Elevation="1" Class="text-center pa-4">
-                            <MudText Typo="Typo.h4" Color="Color.Info">@_statistics.UpdatedFiles</MudText>
-                            <MudText Typo="Typo.body2">Archivos Actualizados</MudText>
-                        </MudPaper>
-                    </MudItem>
-                    <MudItem xs="12" sm="6" md="3">
-                        <MudPaper Elevation="1" Class="text-center pa-4">
-                            <MudText Typo="Typo.h4" Color="Color.Warning">@(_statistics.ThumbnailsGenerated + _statistics.ThumbnailsRegenerated)</MudText>
-                            <MudText Typo="Typo.body2">Miniaturas</MudText>
-                        </MudPaper>
-                    </MudItem>
-                </MudGrid>
-            }
-
-            <MudExpansionPanels Class="mt-4">
-                <MudExpansionPanel Text="Registro detallado">
-                    <div style="max-height: 200px; overflow-y: auto;">
-                        @foreach (var update in _updates.AsEnumerable().Reverse())
-                        {
-                            <MudText Typo="Typo.caption" Class="d-block border-b pa-1">
-                                <span class="text-muted">[@DateTime.Now.ToString("HH:mm:ss")]</span> @update.Message
-                            </MudText>
-                        }
-                    </div>
-                </MudExpansionPanel>
-            </MudExpansionPanels>
-        </MudCardContent>
-    </MudCard>
+    }
 }
 
 @code {
+    private bool _isAuthorized = false;
     private bool _scanning = false;
+    protected override async Task OnInitializedAsync()
+    {
+        if (!await AuthService.IsAuthenticatedAsync())
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        var currentUser = await AuthService.GetCurrentUserAsync();
+        _isAuthorized = currentUser?.Role == "Admin";
+    }
+
     private double _progress = 0;
     private string _currentStatus = "Esperando inicio...";
     private IndexStatistics? _statistics;

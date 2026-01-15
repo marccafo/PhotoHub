@@ -1,0 +1,67 @@
+@page "/admin/settings/tasks"
+@using PhotoHub.Blazor.Shared.Services
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Administración - Configuración de tareas - PhotoHub</PageTitle>
+
+@if (!_isAuthorized)
+{
+    <div class="mt-8">
+        <MudText Typo="Typo.h5">Acceso Denegado</MudText>
+        <MudText Typo="Typo.body1">Solo los administradores pueden acceder a esta página.</MudText>
+        <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary" Class="mt-4">
+            Volver al inicio
+        </MudButton>
+    </div>
+}
+else
+{
+    <div class="mt-4">
+        <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/admin/settings"))" Class="mb-2">
+            Volver
+        </MudButton>
+        <MudText Typo="Typo.h4" Class="mb-2">Configuración de tareas</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            Define procesos simultáneos por tipo de tarea.
+        </MudText>
+    </div>
+
+    <MudGrid Class="mt-4">
+        <MudItem xs="12" md="6">
+            <MudCard>
+                <MudCardContent>
+                    <MudNumericField T="int" Label="Miniaturas" @bind-Value="_thumbnailWorkers" Min="1" Max="32" Variant="Variant.Outlined" FullWidth="true" Class="mb-3" />
+                    <MudNumericField T="int" Label="Extracción de metadatos" @bind-Value="_metadataWorkers" Min="1" Max="32" Variant="Variant.Outlined" FullWidth="true" Class="mb-3" />
+                    <MudNumericField T="int" Label="Detección de caras" @bind-Value="_faceDetectionWorkers" Min="1" Max="32" Variant="Variant.Outlined" FullWidth="true" Class="mb-3" />
+                    <MudNumericField T="int" Label="Reconocimiento facial" @bind-Value="_faceRecognitionWorkers" Min="1" Max="32" Variant="Variant.Outlined" FullWidth="true" />
+                </MudCardContent>
+                <MudCardActions Class="px-4 pb-4">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="true">
+                        Guardar
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private bool _isAuthorized = false;
+    private int _thumbnailWorkers = 2;
+    private int _metadataWorkers = 2;
+    private int _faceDetectionWorkers = 1;
+    private int _faceRecognitionWorkers = 1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!await AuthService.IsAuthenticatedAsync())
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        var currentUser = await AuthService.GetCurrentUserAsync();
+        _isAuthorized = currentUser?.Role == "Admin";
+    }
+}
