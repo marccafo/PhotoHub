@@ -27,7 +27,12 @@ builder.Services.AddScoped<PhotoHub.Blazor.WASM.Services.AuthService>(sp =>
     (PhotoHub.Blazor.WASM.Services.AuthService)sp.GetRequiredService<PhotoHub.Blazor.Shared.Services.IAuthService>());
 builder.Services.AddScoped<IAssetService, AssetService>();
 builder.Services.AddScoped<IIndexService, IndexService>();
-builder.Services.AddScoped<IFolderService, FolderService>();
+builder.Services.AddScoped<IFolderService>(sp =>
+{
+    var httpClient = sp.GetRequiredService<HttpClient>();
+    var authService = sp.GetRequiredService<PhotoHub.Blazor.WASM.Services.AuthService>();
+    return new FolderService(httpClient, async () => await authService.GetTokenAsync());
+});
 builder.Services.AddScoped<IMapService, MapService>();
 builder.Services.AddScoped<IAlbumService>(sp =>
 {

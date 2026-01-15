@@ -1,5 +1,6 @@
 @page "/explorer"
 @page "/explorer/folder/{FolderId:int}"
+@using PhotoHub.Blazor.Shared.Models
 @inject IFolderService FolderService
 @inject IAssetService AssetService
 @inject ISnackbar Snackbar
@@ -80,6 +81,23 @@
         </MudCard>
     </MudItem>
     <MudItem xs="12" md="9">
+        <div class="d-flex justify-space-between align-center mb-2">
+            <div class="d-flex align-center">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CreateNewFolder" OnClick="OpenCreateFolderDialog">
+                    Nueva carpeta
+                </MudButton>
+                <MudButton Variant="Variant.Text" Disabled="@(_selectedFolder == null)" Class="ml-2" OnClick="OpenEditFolderDialog">
+                    Renombrar
+                </MudButton>
+                <MudButton Variant="Variant.Text" Disabled="@(_selectedFolder == null)" Class="ml-2" OnClick="OpenDeleteFolderDialog">
+                    Eliminar
+                </MudButton>
+                <MudButton Variant="Variant.Text" Disabled="@(_selectedFolder == null || !_assets.Any())" Class="ml-2" OnClick="OpenMoveAssetsDialog">
+                    Mover archivos
+                </MudButton>
+            </div>
+        </div>
+
         @if (_selectedFolder != null)
         {
             <MudBreadcrumbs Items="@_breadcrumbs" MaxItems="10" />
@@ -148,6 +166,94 @@
     </MudItem>
 </MudGrid>
 
+<MudDialog @bind-Visible="_createFolderDialogVisible" Options="@(new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Nueva carpeta</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="_folderNameInput" Label="Nombre" Variant="Variant.Outlined" FullWidth="true" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseCreateFolderDialog">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="CreateFolderAsync">Crear</MudButton>
+    </DialogActions>
+</MudDialog>
+
+<MudDialog @bind-Visible="_editFolderDialogVisible" Options="@(new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Editar carpeta</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="_folderNameInput" Label="Nombre" Variant="Variant.Outlined" FullWidth="true" Class="mb-3" />
+        <MudSelect T="int?" Label="Carpeta padre" Variant="Variant.Outlined" @bind-Value="_editParentFolderId" FullWidth="true">
+            <MudSelectItem T="int?" Value="@(null)">Raíz</MudSelectItem>
+            @foreach (var folder in _allFolders.Where(f => _selectedFolder == null || f.Id != _selectedFolder.Id))
+            {
+                <MudSelectItem T="int?" Value="@folder.Id">@folder.Name</MudSelectItem>
+            }
+        </MudSelect>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseEditFolderDialog">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="UpdateFolderAsync">Guardar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+<MudDialog @bind-Visible="_deleteFolderDialogVisible" Options="@(new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Eliminar carpeta</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText>¿Estás seguro de que quieres eliminar la carpeta "@_selectedFolder?.Name"?</MudText>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">Debe estar vacía para poder eliminarla.</MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseDeleteFolderDialog">Cancelar</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="DeleteFolderAsync">Eliminar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+<MudDialog @bind-Visible="_moveAssetsDialogVisible" Options="@(new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Mover archivos</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudAutocomplete T="int?"
+                         Label="Destino"
+                         Variant="Variant.Outlined"
+                         @bind-Value="_moveTargetFolderId"
+                         SearchFunc="SearchMoveFolderAsync"
+                         ToStringFunc="MoveFolderToString"
+                         ResetValueOnEmptyText="true"
+                         CoerceText="true"
+                         FullWidth="true"
+                         Class="mb-3" />
+
+        <MudButton Variant="Variant.Text" OnClick="ToggleSelectAllAssets" Disabled="@(!_assets.Any())" Class="mb-2">
+            @(_selectedAssetIds.Count == _assets.Count ? "Deseleccionar todo" : "Seleccionar todo")
+        </MudButton>
+
+        <MudTable Items="@_assets" Dense="true" Hover="true">
+            <HeaderContent>
+                <MudTh></MudTh>
+                <MudTh>Archivo</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="">
+                    <MudCheckBox T="bool"
+                                 Value="@_selectedAssetIds.Contains(context.Id)"
+                                 ValueChanged="@(EventCallback.Factory.Create<bool>(this, value => ToggleAssetSelection(context.Id, value)))" />
+                </MudTd>
+                <MudTd DataLabel="Archivo">@context.FileName</MudTd>
+            </RowTemplate>
+        </MudTable>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseMoveAssetsDialog">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(!_selectedAssetIds.Any() || !_moveTargetFolderId.HasValue)" OnClick="MoveAssetsAsync">Mover</MudButton>
+    </DialogActions>
+</MudDialog>
+
 @code {
     [Parameter] public int? FolderId { get; set; }
     
@@ -162,6 +268,15 @@
     private List<BreadcrumbItem> _breadcrumbs = new();
     private List<FolderWithThumbnail> _subFoldersWithThumbnails = new();
     private List<FolderItem?> _breadcrumbFolders = new(); // Lista paralela con las carpetas del breadcrumb (null = raíz)
+
+    private bool _createFolderDialogVisible = false;
+    private bool _editFolderDialogVisible = false;
+    private bool _deleteFolderDialogVisible = false;
+    private bool _moveAssetsDialogVisible = false;
+    private string _folderNameInput = string.Empty;
+    private int? _editParentFolderId;
+    private int? _moveTargetFolderId;
+    private HashSet<int> _selectedAssetIds = new();
     
     private class FolderWithThumbnail
     {
@@ -629,5 +744,210 @@
     private void OpenAsset(TimelineItem asset)
     {
         Navigation.NavigateTo($"/asset/{asset.Id}");
+    }
+
+    private void OpenCreateFolderDialog()
+    {
+        _folderNameInput = string.Empty;
+        _createFolderDialogVisible = true;
+    }
+
+    private void CloseCreateFolderDialog()
+    {
+        _createFolderDialogVisible = false;
+    }
+
+    private async Task CreateFolderAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_folderNameInput))
+        {
+            Snackbar.Add("El nombre de la carpeta es obligatorio", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            var request = new CreateFolderRequest
+            {
+                Name = _folderNameInput.Trim(),
+                ParentFolderId = _selectedFolder?.Id
+            };
+
+            var created = await FolderService.CreateFolderAsync(request);
+            _createFolderDialogVisible = false;
+            await LoadFolders();
+            Navigation.NavigateTo($"/explorer/folder/{created.Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al crear carpeta: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void OpenEditFolderDialog()
+    {
+        if (_selectedFolder == null) return;
+        _folderNameInput = _selectedFolder.Name;
+        _editParentFolderId = _selectedFolder.ParentFolderId;
+        _editFolderDialogVisible = true;
+    }
+
+    private void CloseEditFolderDialog()
+    {
+        _editFolderDialogVisible = false;
+    }
+
+    private async Task UpdateFolderAsync()
+    {
+        if (_selectedFolder == null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_folderNameInput))
+        {
+            Snackbar.Add("El nombre de la carpeta es obligatorio", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            var request = new UpdateFolderRequest
+            {
+                Name = _folderNameInput.Trim(),
+                ParentFolderId = _editParentFolderId
+            };
+
+            await FolderService.UpdateFolderAsync(_selectedFolder.Id, request);
+            _editFolderDialogVisible = false;
+            await LoadFolders();
+            Navigation.NavigateTo($"/explorer/folder/{_selectedFolder.Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al actualizar carpeta: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void OpenDeleteFolderDialog()
+    {
+        if (_selectedFolder == null) return;
+        _deleteFolderDialogVisible = true;
+    }
+
+    private void CloseDeleteFolderDialog()
+    {
+        _deleteFolderDialogVisible = false;
+    }
+
+    private async Task DeleteFolderAsync()
+    {
+        if (_selectedFolder == null) return;
+
+        try
+        {
+            await FolderService.DeleteFolderAsync(_selectedFolder.Id);
+            _deleteFolderDialogVisible = false;
+            Navigation.NavigateTo("/explorer");
+            await LoadFolders();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al eliminar carpeta: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void OpenMoveAssetsDialog()
+    {
+        if (_selectedFolder == null) return;
+        _moveTargetFolderId = null;
+        _selectedAssetIds = new HashSet<int>();
+        _moveAssetsDialogVisible = true;
+    }
+
+    private void CloseMoveAssetsDialog()
+    {
+        _moveAssetsDialogVisible = false;
+    }
+
+    private void ToggleAssetSelection(int assetId, bool selected)
+    {
+        if (selected)
+        {
+            _selectedAssetIds.Add(assetId);
+        }
+        else
+        {
+            _selectedAssetIds.Remove(assetId);
+        }
+        StateHasChanged();
+    }
+
+    private void ToggleSelectAllAssets()
+    {
+        if (_selectedAssetIds.Count == _assets.Count)
+        {
+            _selectedAssetIds.Clear();
+        }
+        else
+        {
+            _selectedAssetIds = _assets.Select(a => a.Id).ToHashSet();
+        }
+        StateHasChanged();
+    }
+
+    private async Task MoveAssetsAsync()
+    {
+        if (_selectedFolder == null || !_moveTargetFolderId.HasValue || !_selectedAssetIds.Any())
+        {
+            return;
+        }
+
+        try
+        {
+            var request = new MoveFolderAssetsRequest
+            {
+                SourceFolderId = _selectedFolder.Id,
+                TargetFolderId = _moveTargetFolderId.Value,
+                AssetIds = _selectedAssetIds.ToList()
+            };
+
+            await FolderService.MoveFolderAssetsAsync(request);
+            _moveAssetsDialogVisible = false;
+            await LoadFolderAssets(_selectedFolder.Id);
+            await LoadSubFoldersWithThumbnails(_selectedFolder);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al mover archivos: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private Task<IEnumerable<int?>> SearchMoveFolderAsync(string value, CancellationToken cancellationToken)
+    {
+        var query = string.IsNullOrWhiteSpace(value)
+            ? _allFolders.AsEnumerable()
+            : _allFolders.Where(f =>
+                f.Path.Contains(value, StringComparison.OrdinalIgnoreCase) ||
+                f.Name.Contains(value, StringComparison.OrdinalIgnoreCase));
+
+        var results = query
+            .Where(f => _selectedFolder == null || f.Id != _selectedFolder.Id)
+            .OrderBy(f => f.Path)
+            .Select(f => (int?)f.Id)
+            .ToList();
+
+        return Task.FromResult<IEnumerable<int?>>(results);
+    }
+
+    private string MoveFolderToString(int? folderId)
+    {
+        if (!folderId.HasValue)
+        {
+            return string.Empty;
+        }
+
+        var folder = _allFolders.FirstOrDefault(f => f.Id == folderId.Value);
+        return folder == null ? string.Empty : folder.Path;
     }
 }
