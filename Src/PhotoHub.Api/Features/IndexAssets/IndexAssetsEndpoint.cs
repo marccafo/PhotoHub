@@ -137,7 +137,7 @@ public class IndexAssetsEndpoint : IEndpoint
                         indexContext.ProcessedDirectories.Add(virtualFolder);
                     }
                     
-                    await EnsureFolderStructureForFileAsync(scopedDbContext, file.FullPath, new HashSet<string>(), cancellationToken);
+                    await EnsureFolderStructureForFileAsync(scopedDbContext, scopedSettingsService, file.FullPath, new HashSet<string>(), cancellationToken);
                     
                     var changeResult = await VerifyFileChangesAsync(file, existingAssetsByPath, existingAssetsByChecksum, scopedHashService, scopedDbContext, stats, scopedSettingsService, cancellationToken);
                     
@@ -258,7 +258,7 @@ public class IndexAssetsEndpoint : IEndpoint
                 if (asset.FolderId == null && !string.IsNullOrEmpty(asset.FullPath))
                 {
                     var fileDirectory = Path.GetDirectoryName(asset.FullPath);
-                    var folder = await GetOrCreateFolderForPathAsync(dbContext, fileDirectory, cancellationToken);
+                    var folder = await GetOrCreateFolderForPathAsync(dbContext, settingsService, fileDirectory, cancellationToken);
                     asset.FolderId = folder?.Id;
                 }
             }
@@ -535,7 +535,7 @@ public class IndexAssetsEndpoint : IEndpoint
             context.AssetsToDelete.Add(file.FullPath);
             
             // Ensure folder structure exists
-            await EnsureFolderStructureForFileAsync(dbContext, file.FullPath, context.ProcessedDirectories, cancellationToken);
+            await EnsureFolderStructureForFileAsync(dbContext, settingsService, file.FullPath, context.ProcessedDirectories, cancellationToken);
             
             // STEP 2: Change verification (differential)
             var changeResult = await VerifyFileChangesAsync(
@@ -598,15 +598,20 @@ public class IndexAssetsEndpoint : IEndpoint
 
     private async Task EnsureFolderStructureForFileAsync(
         ApplicationDbContext dbContext,
+        SettingsService settingsService,
         string filePath,
         HashSet<string> processedDirectories,
         CancellationToken cancellationToken)
     {
         var fileDirectory = Path.GetDirectoryName(filePath);
-        if (!string.IsNullOrEmpty(fileDirectory) && !processedDirectories.Contains(fileDirectory))
+        if (!string.IsNullOrEmpty(fileDirectory))
         {
-            await EnsureFolderStructureExistsAsync(dbContext, fileDirectory, cancellationToken);
-            processedDirectories.Add(fileDirectory);
+            var virtualDirectory = NormalizeVirtualPath(await settingsService.VirtualizePathAsync(fileDirectory));
+            if (!processedDirectories.Contains(virtualDirectory))
+            {
+                await EnsureFolderStructureExistsAsync(dbContext, settingsService, virtualDirectory, cancellationToken);
+                processedDirectories.Add(virtualDirectory);
+            }
         }
     }
 
@@ -666,7 +671,7 @@ public class IndexAssetsEndpoint : IEndpoint
         {
             // New file
             var fileDirectory = Path.GetDirectoryName(file.FullPath);
-            var folder = await GetOrCreateFolderForPathAsync(dbContext, fileDirectory, cancellationToken);
+            var folder = await GetOrCreateFolderForPathAsync(dbContext, settingsService, fileDirectory, cancellationToken);
             
             asset = new Asset
             {
@@ -833,7 +838,7 @@ public class IndexAssetsEndpoint : IEndpoint
             if (asset.FolderId == null && !string.IsNullOrEmpty(asset.FullPath))
             {
                 var fileDirectory = Path.GetDirectoryName(asset.FullPath);
-                var folder = await GetOrCreateFolderForPathAsync(dbContext, fileDirectory, cancellationToken);
+                var folder = await GetOrCreateFolderForPathAsync(dbContext, settingsService, fileDirectory, cancellationToken);
                 asset.FolderId = folder?.Id;
             }
         }
@@ -1293,57 +1298,99 @@ public class IndexAssetsEndpoint : IEndpoint
 
     private async Task<Folder?> GetOrCreateFolderForPathAsync(
         ApplicationDbContext dbContext,
+        SettingsService settingsService,
         string? folderPath,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(folderPath))
             return null;
-        
-        var normalizedPath = folderPath.Replace('\\', '/').TrimEnd('/');
+
+        var virtualPath = await settingsService.VirtualizePathAsync(folderPath);
+        var normalizedPath = NormalizeVirtualPath(virtualPath);
         if (string.IsNullOrEmpty(normalizedPath))
             return null;
-        
+
         var folder = await dbContext.Folders
             .FirstOrDefaultAsync(f => f.Path == normalizedPath, cancellationToken);
-        
-        if (folder != null)
-            return folder;
-        
-        // Ensure parent exists
-        var parentPath = Path.GetDirectoryName(folderPath);
+
+        var parentPath = GetParentVirtualPath(normalizedPath);
         Folder? parentFolder = null;
-        
-        if (!string.IsNullOrEmpty(parentPath) && parentPath != folderPath)
+
+        if (!string.IsNullOrEmpty(parentPath) && !string.Equals(parentPath, normalizedPath, StringComparison.OrdinalIgnoreCase))
         {
-            parentFolder = await GetOrCreateFolderForPathAsync(dbContext, parentPath, cancellationToken);
+            parentFolder = await GetOrCreateFolderForPathAsync(dbContext, settingsService, parentPath, cancellationToken);
         }
-        
-        var folderName = Path.GetFileName(folderPath);
-        if (string.IsNullOrEmpty(folderName))
+
+        if (folder != null)
         {
-            folderName = normalizedPath.Split('/').LastOrDefault() ?? normalizedPath;
+            if (folder.ParentFolderId != parentFolder?.Id || !string.Equals(folder.Path, normalizedPath, StringComparison.OrdinalIgnoreCase))
+            {
+                folder.Path = normalizedPath;
+                folder.Name = GetVirtualFolderName(normalizedPath);
+                folder.ParentFolderId = parentFolder?.Id;
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+
+            return folder;
         }
-        
+
+        var normalizedPhysical = NormalizeVirtualPath(folderPath);
+        folder = await dbContext.Folders
+            .FirstOrDefaultAsync(f => f.Path == normalizedPhysical, cancellationToken);
+
+        if (folder != null)
+        {
+            folder.Path = normalizedPath;
+            folder.Name = GetVirtualFolderName(normalizedPath);
+            folder.ParentFolderId = parentFolder?.Id;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return folder;
+        }
+
         folder = new Folder
         {
             Path = normalizedPath,
-            Name = folderName,
+            Name = GetVirtualFolderName(normalizedPath),
             ParentFolderId = parentFolder?.Id,
             CreatedAt = DateTime.UtcNow
         };
-        
+
         dbContext.Folders.Add(folder);
         await dbContext.SaveChangesAsync(cancellationToken);
-        
+
         return folder;
     }
 
     private async Task EnsureFolderStructureExistsAsync(
         ApplicationDbContext dbContext,
+        SettingsService settingsService,
         string folderPath,
         CancellationToken cancellationToken)
     {
-        await GetOrCreateFolderForPathAsync(dbContext, folderPath, cancellationToken);
+        await GetOrCreateFolderForPathAsync(dbContext, settingsService, folderPath, cancellationToken);
+    }
+
+    private static string NormalizeVirtualPath(string path)
+    {
+        return path.Replace('\\', '/').TrimEnd('/');
+    }
+
+    private static string GetParentVirtualPath(string path)
+    {
+        var normalized = NormalizeVirtualPath(path);
+        var lastSlash = normalized.LastIndexOf('/');
+        if (lastSlash <= 0)
+        {
+            return string.Empty;
+        }
+        return normalized.Substring(0, lastSlash);
+    }
+
+    private static string GetVirtualFolderName(string path)
+    {
+        var normalized = NormalizeVirtualPath(path);
+        var lastSlash = normalized.LastIndexOf('/');
+        return lastSlash >= 0 ? normalized[(lastSlash + 1)..] : normalized;
     }
 }
 

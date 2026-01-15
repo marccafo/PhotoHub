@@ -1,7 +1,10 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PhotoHub.API.Shared.Data;
 using PhotoHub.API.Shared.Interfaces;
+using PhotoHub.API.Shared.Models;
 using PhotoHub.API.Shared.Services;
 
 namespace PhotoHub.API.Features.SyncAsset;
@@ -13,7 +16,8 @@ public class SyncAssetEndpoint : IEndpoint
         app.MapPost("/api/assets/sync", Handle)
             .WithName("SyncAsset")
             .WithTags("Assets")
-            .WithDescription("Copies a pending asset from the user's device to the internal assets directory. The file will be indexed when the scan process runs.");
+            .WithDescription("Copies a pending asset from the user's device to the internal assets directory. The file will be indexed when the scan process runs.")
+            .RequireAuthorization();
     }
 
     private async Task<IResult> Handle(
@@ -21,6 +25,7 @@ public class SyncAssetEndpoint : IEndpoint
         [FromServices] SettingsService settingsService,
         [FromServices] FileHashService hashService,
         [FromServices] ApplicationDbContext dbContext,
+        ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(path))
@@ -28,6 +33,12 @@ public class SyncAssetEndpoint : IEndpoint
 
         try
         {
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
             // Validar que el archivo proviene de la ruta configurada por el usuario
             var userConfiguredPath = await settingsService.GetAssetsPathAsync();
             if (!IsPathSafe(path, userConfiguredPath))
@@ -37,24 +48,33 @@ public class SyncAssetEndpoint : IEndpoint
                 return Results.NotFound("El archivo no existe en el disco");
 
             // Obtener la ruta interna del NAS (ASSETS_PATH)
-            var managedLibraryPath = settingsService.GetInternalAssetsPath();
+            var deviceBackupVirtual = $"/assets/users/{userId}/DeviceBackup";
+            var deviceBackupRoot = await settingsService.ResolvePhysicalPathAsync(deviceBackupVirtual);
 
-            if (!Directory.Exists(managedLibraryPath))
+            await EnsureFolderRecordAsync(dbContext, userId, deviceBackupVirtual, cancellationToken);
+
+            if (!Directory.Exists(deviceBackupRoot))
             {
-                Directory.CreateDirectory(managedLibraryPath);
-                Console.WriteLine($"[SYNC] Created internal assets directory: {managedLibraryPath}");
+                Directory.CreateDirectory(deviceBackupRoot);
+                Console.WriteLine($"[SYNC] Created device backup directory: {deviceBackupRoot}");
             }
             
             Console.WriteLine($"[SYNC] Source path: {path}");
-            Console.WriteLine($"[SYNC] Target internal path: {managedLibraryPath}");
+            Console.WriteLine($"[SYNC] Target internal path: {deviceBackupRoot}");
 
             var currentFileInfo = new FileInfo(path);
             var fileName = currentFileInfo.Name;
-            var targetPath = Path.Combine(managedLibraryPath, fileName);
+            var relativePath = Path.GetRelativePath(userConfiguredPath, path);
+            var targetPath = Path.Combine(deviceBackupRoot, relativePath);
+            var targetDirectory = Path.GetDirectoryName(targetPath);
+            if (!string.IsNullOrEmpty(targetDirectory))
+            {
+                Directory.CreateDirectory(targetDirectory);
+            }
 
             // Normalizar rutas para comparación
             var normalizedPath = Path.GetFullPath(path);
-            var normalizedLibraryPath = Path.GetFullPath(managedLibraryPath);
+            var normalizedLibraryPath = Path.GetFullPath(deviceBackupRoot);
 
             // Si el archivo ya está en el directorio interno, no hacer nada
             if (normalizedPath.StartsWith(normalizedLibraryPath, StringComparison.OrdinalIgnoreCase))
@@ -126,7 +146,7 @@ public class SyncAssetEndpoint : IEndpoint
                     });
                 }
                 // Si tiene diferente checksum, crear con nombre único
-                targetPath = Path.Combine(managedLibraryPath, $"{Guid.NewGuid()}_{fileName}");
+                targetPath = Path.Combine(deviceBackupRoot, $"{Guid.NewGuid()}_{fileName}");
             }
 
             // Preservar fechas originales
@@ -152,7 +172,7 @@ public class SyncAssetEndpoint : IEndpoint
 
             return Results.Ok(new { 
                 message = "Archivo sincronizado correctamente. Ejecuta la indexación para indexarlo.", 
-                targetPath = targetPath 
+                targetPath = await settingsService.VirtualizePathAsync(targetPath)
             });
         }
         catch (Exception ex)
@@ -168,5 +188,85 @@ public class SyncAssetEndpoint : IEndpoint
         var fullPath = Path.GetFullPath(path);
         var fullAssetsPath = Path.GetFullPath(assetsPath);
         return fullPath.StartsWith(fullAssetsPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task EnsureFolderRecordAsync(
+        ApplicationDbContext dbContext,
+        int userId,
+        string folderPath,
+        CancellationToken cancellationToken)
+    {
+        var normalizedPath = folderPath.Replace('\\', '/').TrimEnd('/');
+        if (string.IsNullOrEmpty(normalizedPath))
+        {
+            return;
+        }
+
+        var existing = await dbContext.Folders
+            .FirstOrDefaultAsync(f => f.Path == normalizedPath, cancellationToken);
+        if (existing != null)
+        {
+            return;
+        }
+
+        var parentPath = Path.GetDirectoryName(normalizedPath)?.Replace('\\', '/').TrimEnd('/');
+        Folder? parentFolder = null;
+        if (!string.IsNullOrEmpty(parentPath))
+        {
+            parentFolder = await dbContext.Folders
+                .FirstOrDefaultAsync(f => f.Path == parentPath, cancellationToken);
+
+            if (parentFolder == null)
+            {
+                parentFolder = new Folder
+                {
+                    Path = parentPath,
+                    Name = Path.GetFileName(parentPath),
+                    ParentFolderId = null
+                };
+                dbContext.Folders.Add(parentFolder);
+                await dbContext.SaveChangesAsync(cancellationToken);
+
+                await EnsureFolderPermissionAsync(dbContext, userId, parentFolder.Id, cancellationToken);
+            }
+        }
+
+        var folder = new Folder
+        {
+            Path = normalizedPath,
+            Name = Path.GetFileName(normalizedPath),
+            ParentFolderId = parentFolder?.Id
+        };
+
+        dbContext.Folders.Add(folder);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await EnsureFolderPermissionAsync(dbContext, userId, folder.Id, cancellationToken);
+    }
+
+    private static async Task EnsureFolderPermissionAsync(
+        ApplicationDbContext dbContext,
+        int userId,
+        int folderId,
+        CancellationToken cancellationToken)
+    {
+        var exists = await dbContext.FolderPermissions
+            .AnyAsync(p => p.UserId == userId && p.FolderId == folderId, cancellationToken);
+        if (exists)
+        {
+            return;
+        }
+
+        dbContext.FolderPermissions.Add(new FolderPermission
+        {
+            UserId = userId,
+            FolderId = folderId,
+            CanRead = true,
+            CanWrite = true,
+            CanDelete = true,
+            CanManagePermissions = true,
+            GrantedByUserId = userId
+        });
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 }

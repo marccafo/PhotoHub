@@ -5,6 +5,7 @@
 @inject IAssetService AssetService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
+@inject IAuthService AuthService
 
 <PageTitle>Explorador - PhotoHub</PageTitle>
 
@@ -71,7 +72,12 @@
                 }
                 else
                 {
-                    <MudTreeView T="FolderItem" Items="@_treeData" SelectedValueChanged="OnFolderSelected" Hover="true" Dense="true">
+                    <MudTreeView T="FolderItem"
+                                 Items="@_treeData"
+                                 SelectedValue="@_selectedTreeFolder"
+                                 SelectedValueChanged="OnFolderSelected"
+                                 Hover="true"
+                                 Dense="true">
                         <ItemTemplate>
                             <MudTreeViewItem @bind-Expanded="@context.Expanded" Items="@context.Children" Value="@context.Value" Icon="@context.Icon" Text="@context.Text" />
                         </ItemTemplate>
@@ -129,7 +135,7 @@
                             }
                             
                             <div class="folder-card-info">
-                                <MudText Typo="Typo.body2" Class="folder-card-name">@folderData.Folder.Name</MudText>
+                                <MudText Typo="Typo.body2" Class="folder-card-name">@GetDisplayFolderName(folderData.Folder)</MudText>
                                 <MudText Typo="Typo.caption" Class="folder-card-count">@folderData.Folder.AssetCount archivos</MudText>
                             </div>
                         </div>
@@ -185,13 +191,15 @@
     </TitleContent>
     <DialogContent>
         <MudTextField @bind-Value="_folderNameInput" Label="Nombre" Variant="Variant.Outlined" FullWidth="true" Class="mb-3" />
-        <MudSelect T="int?" Label="Carpeta padre" Variant="Variant.Outlined" @bind-Value="_editParentFolderId" FullWidth="true">
-            <MudSelectItem T="int?" Value="@(null)">Raíz</MudSelectItem>
-            @foreach (var folder in _allFolders.Where(f => _selectedFolder == null || f.Id != _selectedFolder.Id))
-            {
-                <MudSelectItem T="int?" Value="@folder.Id">@folder.Name</MudSelectItem>
-            }
-        </MudSelect>
+        <MudAutocomplete T="int?"
+                         Label="Carpeta padre"
+                         Variant="Variant.Outlined"
+                         @bind-Value="_editParentFolderId"
+                         SearchFunc="SearchEditParentFolderAsync"
+                         ToStringFunc="EditParentFolderToString"
+                         ResetValueOnEmptyText="true"
+                         CoerceText="true"
+                         FullWidth="true" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="CloseEditFolderDialog">Cancelar</MudButton>
@@ -261,6 +269,7 @@
     private List<FolderItem> _allFolders = new(); // Todas las carpetas para búsqueda rápida
     private List<TreeItemData<FolderItem>> _treeData = new();
     private FolderItem? _selectedFolder;
+    private FolderItem? _selectedTreeFolder;
     private List<TimelineItem> _assets = new();
     private bool _loadingFolders = true;
     private bool _loadingAssets = false;
@@ -277,6 +286,9 @@
     private int? _editParentFolderId;
     private int? _moveTargetFolderId;
     private HashSet<int> _selectedAssetIds = new();
+    private int? _userId;
+    private string _userRootPrefix = string.Empty;
+    private string _userRootPhysicalPrefix = string.Empty;
     
     private class FolderWithThumbnail
     {
@@ -288,6 +300,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadUserRootAsync();
         await LoadFolders();
     }
     
@@ -321,6 +334,7 @@
                 }
                 
                 _selectedFolder = folder;
+                _selectedTreeFolder = folder;
                 _subFoldersWithThumbnails.Clear();
                 _assets.Clear();
                 
@@ -338,17 +352,49 @@
         }
         else
         {
-            // Si no hay carpeta en la URL, mostrar carpetas raíz
+            // Si no hay carpeta en la URL, ir directamente a Inicio
+            var rootFolder = FindUserRootFolder();
+            if (rootFolder != null)
+            {
+                Navigation.NavigateTo($"/explorer/folder/{rootFolder.Id}", replace: true);
+                return;
+            }
+
             _selectedFolder = null;
+            _selectedTreeFolder = null;
             _assets.Clear();
             _subFoldersWithThumbnails.Clear();
             _breadcrumbs.Clear();
             _breadcrumbFolders.Clear();
-            if (_folderTree.Any())
+        }
+    }
+
+    private FolderItem? FindUserRootFolder()
+    {
+        if (!_allFolders.Any())
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrEmpty(_userRootPrefix))
+        {
+            var normalizedRoot = _userRootPrefix.TrimEnd('/');
+            var match = _allFolders.FirstOrDefault(f =>
+                f.Path.Replace('\\', '/').TrimEnd('/').Equals(normalizedRoot, StringComparison.OrdinalIgnoreCase));
+            if (match != null)
             {
-                await LoadRootFoldersWithThumbnails();
+                return match;
             }
         }
+
+        if (!string.IsNullOrEmpty(_userRootPhysicalPrefix))
+        {
+            var normalizedRoot = _userRootPhysicalPrefix.TrimEnd('/');
+            return _allFolders.FirstOrDefault(f =>
+                f.Path.Replace('\\', '/').TrimEnd('/').Equals(normalizedRoot, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return null;
     }
     
     private FolderItem? FindFolderInTreeById(int folderId, List<FolderItem> tree)
@@ -420,6 +466,8 @@
             _loadingFolders = true;
             _folderTree = await FolderService.GetFolderTreeAsync();
             _allFolders = await FolderService.GetFoldersAsync(); // Cargar todas las carpetas para búsqueda rápida
+            UpdateUserRootPhysicalPrefix();
+            FilterFoldersToUserRoot();
             _treeData = MapToTreeItemData(_folderTree);
         }
         catch (Exception ex)
@@ -437,15 +485,15 @@
         return folders.Select(f => new TreeItemData<FolderItem>
         {
             Value = f,
-            Text = $"{f.Name} ({f.AssetCount})",
+            Text = $"{GetDisplayFolderName(f)} ({f.AssetCount})",
             Icon = Icons.Material.Filled.Folder,
             Children = f.SubFolders.Any() ? MapToTreeItemData(f.SubFolders) : null
         }).ToList();
     }
 
-    private async Task OnFolderSelected(FolderItem folder)
+    private Task OnFolderSelected(FolderItem folder)
     {
-        if (folder == null) return;
+        if (folder == null) return Task.CompletedTask;
         _selectedFolder = folder;
         // Limpiar para dar feedback visual de carga
         _subFoldersWithThumbnails = new List<FolderWithThumbnail>();
@@ -453,6 +501,7 @@
         
         // Actualizar la URL sin recargar la página
         Navigation.NavigateTo($"/explorer/folder/{folder.Id}", replace: false);
+        return Task.CompletedTask;
     }
 
     private async Task OnFolderClick(FolderItem folder)
@@ -490,9 +539,17 @@
         // Construir la ruta completa desde la raíz hasta la carpeta actual
         var pathFolders = await BuildPathFolders(folder);
         
+        var skipRoot = pathFolders.FirstOrDefault() != null &&
+                       IsUserRootPath(pathFolders.First()!.Path.Replace('\\', '/'));
+
         foreach (var pathFolder in pathFolders)
         {
-            var breadcrumbText = pathFolder.Name;
+            if (skipRoot)
+            {
+                skipRoot = false;
+                continue;
+            }
+            var breadcrumbText = GetDisplayFolderName(pathFolder);
             // Usar href con el ID de la carpeta para navegación directa
             _breadcrumbs.Add(new BreadcrumbItem(breadcrumbText, $"/explorer/folder/{pathFolder.Id}"));
             _breadcrumbFolders.Add(pathFolder);
@@ -928,7 +985,7 @@
         var query = string.IsNullOrWhiteSpace(value)
             ? _allFolders.AsEnumerable()
             : _allFolders.Where(f =>
-                f.Path.Contains(value, StringComparison.OrdinalIgnoreCase) ||
+                GetDisplayPath(f).Contains(value, StringComparison.OrdinalIgnoreCase) ||
                 f.Name.Contains(value, StringComparison.OrdinalIgnoreCase));
 
         var results = query
@@ -948,6 +1005,182 @@
         }
 
         var folder = _allFolders.FirstOrDefault(f => f.Id == folderId.Value);
-        return folder == null ? string.Empty : folder.Path;
+        return folder == null ? string.Empty : GetDisplayPath(folder);
+    }
+
+    private Task<IEnumerable<int?>> SearchEditParentFolderAsync(string value, CancellationToken cancellationToken)
+    {
+        var query = string.IsNullOrWhiteSpace(value)
+            ? GetEditableParentFolders()
+            : GetEditableParentFolders().Where(f =>
+                GetDisplayPath(f).Contains(value, StringComparison.OrdinalIgnoreCase) ||
+                f.Name.Contains(value, StringComparison.OrdinalIgnoreCase));
+
+        var results = query
+            .OrderBy(f => f.Path)
+            .Select(f => (int?)f.Id)
+            .ToList();
+
+        return Task.FromResult<IEnumerable<int?>>(results);
+    }
+
+    private string EditParentFolderToString(int? folderId)
+    {
+        if (!folderId.HasValue)
+        {
+            return "Inicio";
+        }
+
+        var folder = _allFolders.FirstOrDefault(f => f.Id == folderId.Value);
+        return folder == null ? string.Empty : GetDisplayPath(folder);
+    }
+
+    private IEnumerable<FolderItem> GetEditableParentFolders()
+    {
+        return _allFolders.Where(f =>
+            _selectedFolder == null || f.Id != _selectedFolder.Id)
+            .Where(f => !IsUserRootPath(f.Path.Replace('\\', '/')));
+    }
+
+    private async Task LoadUserRootAsync()
+    {
+        var currentUser = await AuthService.GetCurrentUserAsync();
+        if (currentUser != null)
+        {
+            _userId = currentUser.Id;
+            _userRootPrefix = $"/assets/users/{currentUser.Id}/";
+        }
+    }
+
+    private void UpdateUserRootPhysicalPrefix()
+    {
+        if (_userId == null || !_allFolders.Any())
+        {
+            return;
+        }
+
+        var marker = $"/users/{_userId}/";
+        var match = _allFolders
+            .Select(f => f.Path.Replace('\\', '/'))
+            .FirstOrDefault(p => p.Contains(marker, StringComparison.OrdinalIgnoreCase));
+
+        if (match == null)
+        {
+            return;
+        }
+
+        var index = match.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (index >= 0)
+        {
+            _userRootPhysicalPrefix = match.Substring(0, index) + marker;
+        }
+    }
+
+    private void FilterFoldersToUserRoot()
+    {
+        if (string.IsNullOrEmpty(_userRootPrefix) && string.IsNullOrEmpty(_userRootPhysicalPrefix))
+        {
+            return;
+        }
+
+        bool IsInUserRoot(FolderItem folder)
+        {
+            var normalized = folder.Path.Replace('\\', '/');
+            if (!string.IsNullOrEmpty(_userRootPrefix) &&
+                (normalized.Equals(_userRootPrefix.TrimEnd('/'), StringComparison.OrdinalIgnoreCase) ||
+                 normalized.StartsWith(_userRootPrefix, StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+
+            if (!string.IsNullOrEmpty(_userRootPhysicalPrefix) &&
+                (normalized.Equals(_userRootPhysicalPrefix.TrimEnd('/'), StringComparison.OrdinalIgnoreCase) ||
+                 normalized.StartsWith(_userRootPhysicalPrefix, StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        List<FolderItem> FilterTree(List<FolderItem> folders)
+        {
+            var filtered = new List<FolderItem>();
+            foreach (var folder in folders)
+            {
+                if (folder.SubFolders != null && folder.SubFolders.Any())
+                {
+                    folder.SubFolders = FilterTree(folder.SubFolders);
+                }
+
+                if (IsInUserRoot(folder))
+                {
+                    filtered.Add(folder);
+                }
+                else if (folder.SubFolders != null && folder.SubFolders.Any())
+                {
+                    filtered.AddRange(folder.SubFolders);
+                }
+            }
+
+            return filtered;
+        }
+
+        _allFolders = _allFolders.Where(IsInUserRoot).ToList();
+        _folderTree = FilterTree(_folderTree);
+    }
+
+    private string GetDisplayPath(FolderItem folder)
+    {
+        var normalized = folder.Path.Replace('\\', '/');
+        if (!string.IsNullOrEmpty(_userRootPrefix) &&
+            normalized.Equals(_userRootPrefix.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
+        {
+            return "Inicio";
+        }
+
+        if (!string.IsNullOrEmpty(_userRootPrefix) &&
+            normalized.StartsWith(_userRootPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            var relative = normalized.Substring(_userRootPrefix.Length).TrimStart('/');
+            return string.IsNullOrEmpty(relative) ? "Inicio" : $"Inicio/{relative}";
+        }
+
+        if (!string.IsNullOrEmpty(_userRootPhysicalPrefix) &&
+            normalized.StartsWith(_userRootPhysicalPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            var relative = normalized.Substring(_userRootPhysicalPrefix.Length).TrimStart('/');
+            return string.IsNullOrEmpty(relative) ? "Inicio" : $"Inicio/{relative}";
+        }
+
+        return folder.Path;
+    }
+
+    private string GetDisplayFolderName(FolderItem folder)
+    {
+        var normalized = folder.Path.Replace('\\', '/');
+        if (IsUserRootPath(normalized))
+        {
+            return "Inicio";
+        }
+
+        return folder.Name;
+    }
+
+    private bool IsUserRootPath(string normalizedPath)
+    {
+        if (!string.IsNullOrEmpty(_userRootPrefix) &&
+            normalizedPath.Equals(_userRootPrefix.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrEmpty(_userRootPhysicalPrefix) &&
+            normalizedPath.Equals(_userRootPhysicalPrefix.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
     }
 }

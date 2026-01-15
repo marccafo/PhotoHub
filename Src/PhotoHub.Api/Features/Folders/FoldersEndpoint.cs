@@ -6,6 +6,7 @@ using PhotoHub.API.Shared.Data;
 using PhotoHub.API.Shared.Interfaces;
 using PhotoHub.API.Features.Timeline;
 using PhotoHub.API.Shared.Models;
+using PhotoHub.API.Shared.Services;
 using Scalar.AspNetCore;
 
 namespace PhotoHub.API.Features.Folders;
@@ -296,6 +297,7 @@ public class FoldersEndpoint : IEndpoint
 
     private async Task<IResult> CreateFolder(
         [FromServices] ApplicationDbContext dbContext,
+        [FromServices] SettingsService settingsService,
         [FromBody] CreateFolderRequest request,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
@@ -328,12 +330,23 @@ public class FoldersEndpoint : IEndpoint
         }
 
         var name = request.Name.Trim();
-        var path = parentFolder == null ? name : $"{parentFolder.Path.TrimEnd('/')}/{name}";
+        var userRootPath = GetUserRootPath(userId);
+        var normalizedPath = NormalizePath(parentFolder == null
+            ? $"{userRootPath}/{name}"
+            : $"{parentFolder.Path.TrimEnd('/')}/{name}");
+
+        var physicalPath = await settingsService.ResolvePhysicalPathAsync(normalizedPath);
+        if (Directory.Exists(physicalPath))
+        {
+            return Results.BadRequest(new { error = "Ya existe una carpeta con ese nombre en la ruta destino." });
+        }
+
+        Directory.CreateDirectory(physicalPath);
 
         var folder = new Folder
         {
             Name = name,
-            Path = path,
+            Path = normalizedPath,
             ParentFolderId = parentFolder?.Id
         };
 
@@ -373,6 +386,7 @@ public class FoldersEndpoint : IEndpoint
 
     private async Task<IResult> UpdateFolder(
         [FromServices] ApplicationDbContext dbContext,
+        [FromServices] SettingsService settingsService,
         [FromRoute] int folderId,
         [FromBody] UpdateFolderRequest request,
         ClaimsPrincipal user,
@@ -427,11 +441,42 @@ public class FoldersEndpoint : IEndpoint
         }
 
         var oldPath = folder.Path;
+        var userRootPath = GetUserRootPath(userId);
+        var newNormalizedPath = NormalizePath(newParent == null
+            ? $"{userRootPath}/{newName}"
+            : $"{newParent.Path.TrimEnd('/')}/{newName}");
+
+        var oldPhysicalPath = await settingsService.ResolvePhysicalPathAsync(oldPath);
+        var newPhysicalPath = await settingsService.ResolvePhysicalPathAsync(newNormalizedPath);
+
+        if (!string.Equals(oldPhysicalPath, newPhysicalPath, StringComparison.OrdinalIgnoreCase))
+        {
+            var existingFolder = await dbContext.Folders
+                .AsNoTracking()
+                .FirstOrDefaultAsync(f => f.Path == newNormalizedPath && f.Id != folderId, cancellationToken);
+            if (existingFolder != null)
+            {
+                return Results.BadRequest(new { error = "Ya existe una carpeta con ese nombre en la ruta destino." });
+            }
+
+            if (Directory.Exists(newPhysicalPath))
+            {
+                return Results.BadRequest(new { error = "La carpeta destino ya existe." });
+            }
+
+            if (Directory.Exists(oldPhysicalPath))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(newPhysicalPath)!);
+                Directory.Move(oldPhysicalPath, newPhysicalPath);
+            }
+        }
+
         folder.Name = newName;
         folder.ParentFolderId = newParent?.Id;
-        folder.Path = newParent == null ? newName : $"{newParent.Path.TrimEnd('/')}/{newName}";
+        folder.Path = newNormalizedPath;
 
         await UpdateSubfolderPathsAsync(dbContext, folderId, oldPath, folder.Path, cancellationToken);
+        await UpdateAssetPathsAsync(dbContext, oldPath, folder.Path, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var response = new FolderResponse
@@ -449,6 +494,7 @@ public class FoldersEndpoint : IEndpoint
 
     private async Task<IResult> DeleteFolder(
         [FromServices] ApplicationDbContext dbContext,
+        [FromServices] SettingsService settingsService,
         [FromRoute] int folderId,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
@@ -489,11 +535,18 @@ public class FoldersEndpoint : IEndpoint
         dbContext.FolderPermissions.RemoveRange(permissions);
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        var physicalPath = await settingsService.ResolvePhysicalPathAsync(folder.Path);
+        if (Directory.Exists(physicalPath))
+        {
+            Directory.Delete(physicalPath, recursive: true);
+        }
+
         return Results.NoContent();
     }
 
     private async Task<IResult> MoveFolderAssets(
         [FromServices] ApplicationDbContext dbContext,
+        [FromServices] SettingsService settingsService,
         [FromBody] MoveFolderAssetsRequest request,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
@@ -518,9 +571,39 @@ public class FoldersEndpoint : IEndpoint
             .Where(a => request.AssetIds.Contains(a.Id) && a.FolderId == request.SourceFolderId)
             .ToListAsync(cancellationToken);
 
+        var targetFolder = await dbContext.Folders
+            .FirstOrDefaultAsync(f => f.Id == request.TargetFolderId, cancellationToken);
+
+        if (targetFolder == null)
+        {
+            return Results.NotFound(new { error = "Carpeta destino no encontrada." });
+        }
+
+        var targetPhysicalPath = await settingsService.ResolvePhysicalPathAsync(targetFolder.Path);
+        Directory.CreateDirectory(targetPhysicalPath);
+
         foreach (var asset in assets)
         {
+            var sourcePhysicalPath = await settingsService.ResolvePhysicalPathAsync(asset.FullPath);
+            if (!File.Exists(sourcePhysicalPath))
+            {
+                continue;
+            }
+
+            var fileName = Path.GetFileName(sourcePhysicalPath);
+            var newPhysicalPath = Path.Combine(targetPhysicalPath, fileName);
+            if (File.Exists(newPhysicalPath))
+            {
+                var uniqueName = $"{Path.GetFileNameWithoutExtension(fileName)}_{Guid.NewGuid():N}{Path.GetExtension(fileName)}";
+                newPhysicalPath = Path.Combine(targetPhysicalPath, uniqueName);
+                fileName = uniqueName;
+            }
+
+            File.Move(sourcePhysicalPath, newPhysicalPath);
+
             asset.FolderId = request.TargetFolderId;
+            asset.FileName = fileName;
+            asset.FullPath = await settingsService.VirtualizePathAsync(newPhysicalPath);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -689,6 +772,26 @@ public class FoldersEndpoint : IEndpoint
         }
     }
 
+    private static async Task UpdateAssetPathsAsync(
+        ApplicationDbContext dbContext,
+        string oldVirtualPath,
+        string newVirtualPath,
+        CancellationToken ct)
+    {
+        var normalizedOldPath = NormalizePath(oldVirtualPath);
+        var normalizedNewPath = NormalizePath(newVirtualPath);
+        var likePattern = $"{normalizedOldPath}%";
+
+        var assets = await dbContext.Assets
+            .Where(a => EF.Functions.ILike(a.FullPath, likePattern))
+            .ToListAsync(ct);
+
+        foreach (var asset in assets)
+        {
+            asset.FullPath = normalizedNewPath + asset.FullPath.Substring(normalizedOldPath.Length);
+        }
+    }
+
     private static async Task<HashSet<int>> GetFolderSubtreeIdsAsync(
         ApplicationDbContext dbContext,
         int folderId,
@@ -725,6 +828,16 @@ public class FoldersEndpoint : IEndpoint
         }
 
         return result;
+    }
+
+    private static string NormalizePath(string path)
+    {
+        return path.Replace('\\', '/').TrimEnd('/');
+    }
+
+    private static string GetUserRootPath(int userId)
+    {
+        return $"/assets/users/{userId}";
     }
 }
 
