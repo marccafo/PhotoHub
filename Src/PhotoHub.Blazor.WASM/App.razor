@@ -35,7 +35,7 @@
         }
 
         var path = context.Path.Trim('/').ToLowerInvariant();
-        if (path.StartsWith("login") || path.StartsWith("register"))
+        if (path.StartsWith("login"))
         {
             return;
         }
