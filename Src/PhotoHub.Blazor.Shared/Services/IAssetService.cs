@@ -13,6 +13,8 @@ public interface IAssetService
     Task<UploadResponse?> UploadAssetAsync(string fileName, Stream content, CancellationToken cancellationToken = default);
     Task<SyncAssetResponse?> SyncAssetAsync(string path, CancellationToken cancellationToken = default);
     IAsyncEnumerable<SyncProgressUpdate> SyncMultipleAssetsAsync(IEnumerable<string> paths, CancellationToken cancellationToken = default);
+    Task DeleteAssetsAsync(DeleteAssetsRequest request);
+    Task RestoreAssetsAsync(RestoreAssetsRequest request);
 }
 
 public class UploadResponse

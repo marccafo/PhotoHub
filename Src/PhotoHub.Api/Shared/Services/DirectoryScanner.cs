@@ -59,6 +59,12 @@ public class DirectoryScanner
                     cancellationToken.ThrowIfCancellationRequested();
                     totalFilesFound++;
 
+                    if (IsInBinFolder(filePath))
+                    {
+                        rejectedFiles++;
+                        continue;
+                    }
+
                     var extension = Path.GetExtension(filePath);
                     
                     // Normalizar extensión: asegurar que tenga el punto y esté en minúsculas para comparación
@@ -145,6 +151,12 @@ public class DirectoryScanner
         }, cancellationToken);
 
         return files;
+    }
+
+    private static bool IsInBinFolder(string filePath)
+    {
+        var normalized = filePath.Replace('\\', '/');
+        return normalized.Contains("/_trash/", StringComparison.OrdinalIgnoreCase);
     }
 }
 

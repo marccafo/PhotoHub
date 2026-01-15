@@ -19,5 +19,6 @@ public class TimelineResponse
     public AssetSyncStatus SyncStatus { get; set; }
     public int? Width { get; set; }
     public int? Height { get; set; }
+    public DateTime? DeletedAt { get; set; }
 }
 

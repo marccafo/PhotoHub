@@ -118,4 +118,11 @@ public class FolderService : IFolderService
         var response = await _httpClient.PostAsJsonAsync("/api/folders/assets/move", request);
         response.EnsureSuccessStatusCode();
     }
+
+    public async Task RemoveFolderAssetsAsync(RemoveFolderAssetsRequest request)
+    {
+        await SetAuthHeaderAsync();
+        var response = await _httpClient.PostAsJsonAsync("/api/folders/assets/remove", request);
+        response.EnsureSuccessStatusCode();
+    }
 }

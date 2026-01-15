@@ -86,6 +86,10 @@ public class FoldersEndpoint : IEndpoint
         group.MapPost("assets/move", MoveFolderAssets)
             .WithName("MoveFolderAssets")
             .WithDescription("Moves assets between folders");
+
+        group.MapPost("assets/remove", RemoveFolderAssets)
+            .WithName("RemoveFolderAssets")
+            .WithDescription("Removes assets from a folder");
     }
 
     private async Task<IResult> GetAllFolders(
@@ -110,8 +114,10 @@ public class FoldersEndpoint : IEndpoint
                 Name = f.Name,
                 ParentFolderId = f.ParentFolderId,
                 CreatedAt = f.CreatedAt,
-                AssetCount = f.Assets.Count
+                AssetCount = f.Assets.Count(a => IsBinPath(f.Path) ? a.DeletedAt != null : a.DeletedAt == null)
             }).ToList();
+
+            ApplyRecursiveCounts(response);
 
             return Results.Ok(response);
         }
@@ -159,7 +165,7 @@ public class FoldersEndpoint : IEndpoint
                 Name = folder.Name,
                 ParentFolderId = folder.ParentFolderId,
                 CreatedAt = folder.CreatedAt,
-                AssetCount = folder.Assets.Count,
+                AssetCount = folder.Assets.Count(a => IsBinPath(folder.Path) ? a.DeletedAt != null : a.DeletedAt == null),
                 SubFolders = folder.SubFolders.Select(sf => new FolderResponse
                 {
                     Id = sf.Id,
@@ -212,6 +218,7 @@ public class FoldersEndpoint : IEndpoint
                 .Include(a => a.Exif)
                 .Include(a => a.Thumbnails)
                 .Where(a => a.FolderId == folderId)
+                .Where(a => IsBinPath(folder.Path) ? a.DeletedAt != null : a.DeletedAt == null)
                 .OrderByDescending(a => a.ScannedAt)
                 .ThenByDescending(a => a.ModifiedDate)
                 .ToListAsync(cancellationToken);
@@ -229,7 +236,8 @@ public class FoldersEndpoint : IEndpoint
                 Type = asset.Type.ToString(),
                 Checksum = asset.Checksum,
                 HasExif = asset.Exif != null,
-                HasThumbnails = asset.Thumbnails.Any()
+                HasThumbnails = asset.Thumbnails.Any(),
+                DeletedAt = asset.DeletedAt
             }).ToList();
 
             return Results.Ok(response);
@@ -266,7 +274,7 @@ public class FoldersEndpoint : IEndpoint
                 Name = f.Name,
                 ParentFolderId = f.ParentFolderId,
                 CreatedAt = f.CreatedAt,
-                AssetCount = f.Assets.Count,
+                AssetCount = f.Assets.Count(a => IsBinPath(f.Path) ? a.DeletedAt != null : a.DeletedAt == null),
                 SubFolders = new List<FolderResponse>()
             });
 
@@ -282,6 +290,11 @@ public class FoldersEndpoint : IEndpoint
                 {
                     rootFolders.Add(folder);
                 }
+            }
+
+            foreach (var root in rootFolders)
+            {
+                UpdateTotalAssetCount(root);
             }
 
             return Results.Ok(rootFolders);
@@ -486,7 +499,7 @@ public class FoldersEndpoint : IEndpoint
             Name = folder.Name,
             ParentFolderId = folder.ParentFolderId,
             CreatedAt = folder.CreatedAt,
-            AssetCount = await dbContext.Assets.CountAsync(a => a.FolderId == folder.Id, cancellationToken)
+            AssetCount = await dbContext.Assets.CountAsync(a => a.FolderId == folder.Id && a.DeletedAt == null, cancellationToken)
         };
 
         return Results.Ok(response);
@@ -568,7 +581,7 @@ public class FoldersEndpoint : IEndpoint
         }
 
         var assets = await dbContext.Assets
-            .Where(a => request.AssetIds.Contains(a.Id) && a.FolderId == request.SourceFolderId)
+            .Where(a => request.AssetIds.Contains(a.Id) && a.FolderId == request.SourceFolderId && a.DeletedAt == null)
             .ToListAsync(cancellationToken);
 
         var targetFolder = await dbContext.Folders
@@ -604,6 +617,41 @@ public class FoldersEndpoint : IEndpoint
             asset.FolderId = request.TargetFolderId;
             asset.FileName = fileName;
             asset.FullPath = await settingsService.VirtualizePathAsync(newPhysicalPath);
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return Results.NoContent();
+    }
+
+    private async Task<IResult> RemoveFolderAssets(
+        [FromServices] ApplicationDbContext dbContext,
+        [FromBody] RemoveFolderAssetsRequest request,
+        ClaimsPrincipal user,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(user, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        if (request.AssetIds == null || request.AssetIds.Count == 0)
+        {
+            return Results.BadRequest(new { error = "Debes seleccionar al menos un asset." });
+        }
+
+        if (!await CanWriteFolderAsync(dbContext, userId, user.IsInRole("Admin"), request.FolderId, cancellationToken))
+        {
+            return Results.Forbid();
+        }
+
+        var assets = await dbContext.Assets
+            .Where(a => request.AssetIds.Contains(a.Id) && a.FolderId == request.FolderId && a.DeletedAt == null)
+            .ToListAsync(cancellationToken);
+
+        foreach (var asset in assets)
+        {
+            asset.FolderId = null;
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -839,6 +887,50 @@ public class FoldersEndpoint : IEndpoint
     {
         return $"/assets/users/{userId}";
     }
+
+    private static bool IsBinPath(string path)
+    {
+        var normalized = NormalizePath(path);
+        return normalized.Contains("/_trash", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void ApplyRecursiveCounts(List<FolderResponse> flatFolders)
+    {
+        var dict = flatFolders.ToDictionary(f => f.Id, f => f);
+        foreach (var folder in flatFolders)
+        {
+            folder.SubFolders = new List<FolderResponse>();
+        }
+
+        var roots = new List<FolderResponse>();
+        foreach (var folder in dict.Values)
+        {
+            if (folder.ParentFolderId.HasValue && dict.TryGetValue(folder.ParentFolderId.Value, out var parent))
+            {
+                parent.SubFolders.Add(folder);
+            }
+            else
+            {
+                roots.Add(folder);
+            }
+        }
+
+        foreach (var root in roots)
+        {
+            UpdateTotalAssetCount(root);
+        }
+    }
+
+    private static int UpdateTotalAssetCount(FolderResponse folder)
+    {
+        var total = folder.AssetCount;
+        foreach (var child in folder.SubFolders)
+        {
+            total += UpdateTotalAssetCount(child);
+        }
+        folder.AssetCount = total;
+        return total;
+    }
 }
 
 public class CreateFolderRequest
@@ -857,5 +949,11 @@ public class MoveFolderAssetsRequest
 {
     public int SourceFolderId { get; set; }
     public int TargetFolderId { get; set; }
+    public List<int> AssetIds { get; set; } = new();
+}
+
+public class RemoveFolderAssetsRequest
+{
+    public int FolderId { get; set; }
     public List<int> AssetIds { get; set; } = new();
 }

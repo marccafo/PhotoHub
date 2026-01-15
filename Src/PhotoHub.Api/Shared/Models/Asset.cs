@@ -43,6 +43,11 @@ public class Asset
     
     public int? FolderId { get; set; }
     public Folder? Folder { get; set; }
+
+    public DateTime? DeletedAt { get; set; }
+    [MaxLength(1000)]
+    public string? DeletedFromPath { get; set; }
+    public int? DeletedFromFolderId { get; set; }
     
     // For videos
     public TimeSpan? Duration { get; set; }

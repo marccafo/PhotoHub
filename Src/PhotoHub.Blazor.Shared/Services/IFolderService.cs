@@ -12,4 +12,5 @@ public interface IFolderService
     Task<FolderItem> UpdateFolderAsync(int folderId, UpdateFolderRequest request);
     Task DeleteFolderAsync(int folderId);
     Task MoveFolderAssetsAsync(MoveFolderAssetsRequest request);
+    Task RemoveFolderAssetsAsync(RemoveFolderAssetsRequest request);
 }

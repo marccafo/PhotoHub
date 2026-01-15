@@ -254,7 +254,7 @@ public class AlbumsEndpoint : IEndpoint
                     .ThenInclude(a => a.Exif)
                 .Include(aa => aa.Asset)
                     .ThenInclude(a => a.Thumbnails)
-                .Where(aa => aa.AlbumId == albumId)
+                .Where(aa => aa.AlbumId == albumId && aa.Asset.DeletedAt == null)
                 .OrderBy(aa => aa.Order)
                 .ThenBy(aa => aa.AddedAt)
                 .ToListAsync(cancellationToken);
@@ -273,7 +273,8 @@ public class AlbumsEndpoint : IEndpoint
                 Checksum = aa.Asset.Checksum,
                 HasExif = aa.Asset.Exif != null,
                 HasThumbnails = aa.Asset.Thumbnails.Any(),
-                SyncStatus = PhotoHub.Blazor.Shared.Models.AssetSyncStatus.Synced
+                SyncStatus = PhotoHub.Blazor.Shared.Models.AssetSyncStatus.Synced,
+                DeletedAt = aa.Asset.DeletedAt
             }).ToList();
 
             return Results.Ok(response);
@@ -555,7 +556,7 @@ public class AlbumsEndpoint : IEndpoint
             }
 
             var asset = await dbContext.Assets
-                .FirstOrDefaultAsync(a => a.Id == request.AssetId, cancellationToken);
+                .FirstOrDefaultAsync(a => a.Id == request.AssetId && a.DeletedAt == null, cancellationToken);
 
             if (asset == null)
             {

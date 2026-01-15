@@ -39,7 +39,8 @@ public class MapAssetsEndpoint : IEndpoint
             // Obtener assets con coordenadas GPS
             var query = dbContext.Assets
                 .Include(a => a.Exif)
-                .Where(a => a.Exif != null && 
+                .Where(a => a.DeletedAt == null &&
+                           a.Exif != null && 
                            a.Exif.Latitude.HasValue && 
                            a.Exif.Longitude.HasValue);
 
@@ -117,7 +118,7 @@ public class MapAssetsEndpoint : IEndpoint
             // Obtener información de thumbnails para los primeros assets
             var firstAssetIds = clusters.Select(c => c.AssetIds.FirstOrDefault()).Where(id => id > 0).ToList();
             var assetsWithThumbInfo = await dbContext.Assets
-                .Where(a => firstAssetIds.Contains(a.Id))
+                .Where(a => firstAssetIds.Contains(a.Id) && a.DeletedAt == null)
                 .Select(a => new { a.Id, HasThumbnails = a.Thumbnails.Any() })
                 .ToDictionaryAsync(a => a.Id, a => a.HasThumbnails, cancellationToken);
 

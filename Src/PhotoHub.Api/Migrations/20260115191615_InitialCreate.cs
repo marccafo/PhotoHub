@@ -86,6 +86,9 @@ namespace PhotoHub.Api.Migrations
                     ScannedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     OwnerId = table.Column<int>(type: "integer", nullable: true),
                     FolderId = table.Column<int>(type: "integer", nullable: true),
+                    DeletedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    DeletedFromPath = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
+                    DeletedFromFolderId = table.Column<int>(type: "integer", nullable: true),
                     Duration = table.Column<TimeSpan>(type: "interval", nullable: true)
                 },
                 constraints: table =>

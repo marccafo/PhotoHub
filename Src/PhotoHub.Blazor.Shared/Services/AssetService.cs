@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using PhotoHub.Blazor.Shared.Models;
 
@@ -6,26 +7,49 @@ namespace PhotoHub.Blazor.Shared.Services;
 public class AssetService : IAssetService
 {
     private readonly HttpClient _httpClient;
+    private readonly Func<Task<string?>>? _getTokenFunc;
 
-    public AssetService(HttpClient httpClient)
+    public AssetService(HttpClient httpClient, Func<Task<string?>>? getTokenFunc = null)
     {
         _httpClient = httpClient;
+        _getTokenFunc = getTokenFunc;
+    }
+
+    private async Task SetAuthHeaderAsync()
+    {
+        string? token = null;
+        if (_getTokenFunc != null)
+        {
+            token = await _getTokenFunc();
+        }
+
+        if (!string.IsNullOrEmpty(token))
+        {
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
+        else
+        {
+            _httpClient.DefaultRequestHeaders.Authorization = null;
+        }
     }
 
     public async Task<List<TimelineItem>> GetTimelineAsync()
     {
+        await SetAuthHeaderAsync();
         var response = await _httpClient.GetFromJsonAsync<List<TimelineItem>>("/api/assets/timeline");
         return response ?? new List<TimelineItem>();
     }
 
     public async Task<List<TimelineItem>> GetDeviceAssetsAsync()
     {
+        await SetAuthHeaderAsync();
         var response = await _httpClient.GetFromJsonAsync<List<TimelineItem>>("/api/assets/device");
         return response ?? new List<TimelineItem>();
     }
 
     public async Task<TimelineItem?> GetAssetByIdAsync(int id)
     {
+        await SetAuthHeaderAsync();
         var timeline = await GetTimelineAsync();
         return timeline.FirstOrDefault(a => a.Id == id);
     }
@@ -34,6 +58,7 @@ public class AssetService : IAssetService
     {
         try
         {
+            await SetAuthHeaderAsync();
             var response = await _httpClient.GetFromJsonAsync<AssetDetailResponse>($"/api/assets/{id}");
             return MapResponseToDetail(response);
         }
@@ -47,6 +72,7 @@ public class AssetService : IAssetService
     {
         try
         {
+            await SetAuthHeaderAsync();
             var response = await _httpClient.GetFromJsonAsync<AssetDetailResponse>($"/api/assets/pending/detail?path={System.Net.WebUtility.UrlEncode(path)}");
             return MapResponseToDetail(response);
         }
@@ -114,6 +140,7 @@ public class AssetService : IAssetService
     {
         try
         {
+            await SetAuthHeaderAsync();
             var url = folderId.HasValue 
                 ? $"/api/folders/{folderId}/assets" 
                 : "/api/assets/timeline";
@@ -128,6 +155,7 @@ public class AssetService : IAssetService
 
     public async Task<UploadResponse?> UploadAssetAsync(string fileName, Stream content, CancellationToken cancellationToken = default)
     {
+        await SetAuthHeaderAsync();
         using var multipartContent = new MultipartFormDataContent();
         using var streamContent = new StreamContent(content);
         multipartContent.Add(streamContent, "file", fileName);
@@ -146,6 +174,7 @@ public class AssetService : IAssetService
     {
         try
         {
+            await SetAuthHeaderAsync();
             var response = await _httpClient.PostAsync($"/api/assets/sync?path={System.Net.WebUtility.UrlEncode(path)}", null, cancellationToken);
             if (response.IsSuccessStatusCode)
             {
@@ -205,5 +234,19 @@ public class AssetService : IAssetService
                 };
             }
         }
+    }
+
+    public async Task DeleteAssetsAsync(DeleteAssetsRequest request)
+    {
+        await SetAuthHeaderAsync();
+        var response = await _httpClient.PostAsJsonAsync("/api/assets/delete", request);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task RestoreAssetsAsync(RestoreAssetsRequest request)
+    {
+        await SetAuthHeaderAsync();
+        var response = await _httpClient.PostAsJsonAsync("/api/assets/restore", request);
+        response.EnsureSuccessStatusCode();
     }
 }

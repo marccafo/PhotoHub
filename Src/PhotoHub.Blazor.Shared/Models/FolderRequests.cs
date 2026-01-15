@@ -18,3 +18,19 @@ public class MoveFolderAssetsRequest
     public int TargetFolderId { get; set; }
     public List<int> AssetIds { get; set; } = new();
 }
+
+public class RemoveFolderAssetsRequest
+{
+    public int FolderId { get; set; }
+    public List<int> AssetIds { get; set; } = new();
+}
+
+public class DeleteAssetsRequest
+{
+    public List<int> AssetIds { get; set; } = new();
+}
+
+public class RestoreAssetsRequest
+{
+    public List<int> AssetIds { get; set; } = new();
+}

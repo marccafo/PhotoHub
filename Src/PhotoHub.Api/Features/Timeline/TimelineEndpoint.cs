@@ -38,6 +38,7 @@ public class TimelineEndpoint : IEndpoint
             var assets = await dbContext.Assets
                 .Include(a => a.Exif)
                 .Include(a => a.Thumbnails)
+                .Where(a => a.DeletedAt == null)
                 .OrderByDescending(a => a.ScannedAt)
                 .ThenByDescending(a => a.ModifiedDate)
                 .ToListAsync(cancellationToken);
@@ -58,7 +59,8 @@ public class TimelineEndpoint : IEndpoint
                 HasThumbnails = asset.Thumbnails.Any(),
                 SyncStatus = AssetSyncStatus.Synced,
                 Width = asset.Exif?.Width,
-                Height = asset.Exif?.Height
+                Height = asset.Exif?.Height,
+                DeletedAt = asset.DeletedAt
             }).ToList();
 
             // Normalizar rutas existentes en BD para comparación

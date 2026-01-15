@@ -12,7 +12,7 @@ using PhotoHub.API.Shared.Data;
 namespace PhotoHub.Api.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260114210146_InitialCreate")]
+    [Migration("20260115191615_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -156,6 +156,16 @@ namespace PhotoHub.Api.Migrations
 
                     b.Property<DateTime>("CreatedDate")
                         .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("DeletedFromFolderId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DeletedFromPath")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<TimeSpan?>("Duration")
                         .HasColumnType("interval");

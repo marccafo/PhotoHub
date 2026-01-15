@@ -27,6 +27,7 @@ public class AdminStatsEndpoint : IEndpoint
     {
         var assetStats = await dbContext.Assets
             .AsNoTracking()
+            .Where(a => a.DeletedAt == null)
             .GroupBy(a => new { a.OwnerId, a.Type })
             .Select(g => new
             {

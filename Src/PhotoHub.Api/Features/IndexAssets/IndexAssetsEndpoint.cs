@@ -99,7 +99,9 @@ public class IndexAssetsEndpoint : IEndpoint
 
                 // Load existing assets for differential comparison
                 // Manejar duplicados: si hay múltiples assets con el mismo checksum, tomar el más reciente
-                var allAssets = await dbContext.Assets.ToListAsync(cancellationToken);
+                var allAssets = await dbContext.Assets
+                    .Where(a => a.DeletedAt == null)
+                    .ToListAsync(cancellationToken);
                 var existingAssetsByChecksum = allAssets
                     .Where(a => !string.IsNullOrEmpty(a.Checksum))
                     .GroupBy(a => a.Checksum)
@@ -427,7 +429,9 @@ public class IndexAssetsEndpoint : IEndpoint
             
             // Load existing assets for differential comparison
             // Manejar duplicados: si hay múltiples assets con el mismo checksum, tomar el más reciente
-            var allAssets = await dbContext.Assets.ToListAsync(cancellationToken);
+            var allAssets = await dbContext.Assets
+                .Where(a => a.DeletedAt == null)
+                .ToListAsync(cancellationToken);
             var existingAssetsByChecksum = allAssets
                 .Where(a => !string.IsNullOrEmpty(a.Checksum))
                 .GroupBy(a => a.Checksum)
@@ -1169,7 +1173,7 @@ public class IndexAssetsEndpoint : IEndpoint
                 .ToListAsync(cancellationToken);
             
             var assetsToRemove = await dbContext.Assets
-                .Where(a => duplicatesToRemoveIds.Contains(a.Id))
+                .Where(a => duplicatesToRemoveIds.Contains(a.Id) && a.DeletedAt == null)
                 .ToListAsync(cancellationToken);
             
             dbContext.AssetThumbnails.RemoveRange(duplicateThumbnails);
@@ -1190,6 +1194,7 @@ public class IndexAssetsEndpoint : IEndpoint
         CancellationToken cancellationToken)
     {
         var allAssetPaths = await dbContext.Assets
+            .Where(a => a.DeletedAt == null)
             .Select(a => a.FullPath)
             .ToListAsync(cancellationToken);
         
@@ -1199,7 +1204,7 @@ public class IndexAssetsEndpoint : IEndpoint
             return;
         
         var orphanedAssets = await dbContext.Assets
-            .Where(a => orphanedPaths.Contains(a.FullPath))
+            .Where(a => orphanedPaths.Contains(a.FullPath) && a.DeletedAt == null)
             .ToListAsync(cancellationToken);
         
         // Delete thumbnails and EXIF first (cascade should handle this, but explicit for safety)
@@ -1233,7 +1238,7 @@ public class IndexAssetsEndpoint : IEndpoint
         
         // Get all folder IDs that have assets
         var foldersWithAssets = await dbContext.Assets
-            .Where(a => a.FolderId != null)
+            .Where(a => a.FolderId != null && a.DeletedAt == null)
             .Select(a => a.FolderId!.Value)
             .Distinct()
             .ToHashSetAsync(cancellationToken);

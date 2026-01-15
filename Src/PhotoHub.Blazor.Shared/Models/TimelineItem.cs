@@ -15,6 +15,7 @@ public class TimelineItem
     public bool HasExif { get; set; }
     public bool HasThumbnails { get; set; }
     public AssetSyncStatus SyncStatus { get; set; } = AssetSyncStatus.Synced;
+    public DateTime? DeletedAt { get; set; }
     public int? Width { get; set; }
     public int? Height { get; set; }
     

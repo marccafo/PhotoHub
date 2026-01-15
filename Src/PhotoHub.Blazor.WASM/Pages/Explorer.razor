@@ -57,6 +57,45 @@
         font-size: 0.75rem;
         color: var(--mud-palette-text-secondary);
     }
+    .folder-select-checkbox {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        z-index: 5;
+        opacity: 0;
+        transition: opacity 0.2s;
+        background: rgba(0,0,0,0.45);
+        border-radius: 999px;
+        padding: 2px;
+    }
+    .folder-card-container:hover .folder-select-checkbox {
+        opacity: 1;
+    }
+    .folder-card-container.selection-mode .folder-select-checkbox,
+    .folder-card-container.selected .folder-select-checkbox {
+        opacity: 1;
+    }
+    .asset-select-container {
+        position: relative;
+    }
+    .asset-select-checkbox {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        z-index: 5;
+        opacity: 0;
+        transition: opacity 0.2s;
+        background: rgba(0,0,0,0.4);
+        border-radius: 999px;
+        padding: 2px;
+    }
+    .asset-select-container:hover .asset-select-checkbox {
+        opacity: 1;
+    }
+    .asset-select-container.selection-mode .asset-select-checkbox,
+    .asset-select-container.selected .asset-select-checkbox {
+        opacity: 1;
+    }
 </style>
 
 <MudText Typo="Typo.h4" Class="mb-4">Explorador</MudText>
@@ -92,15 +131,6 @@
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CreateNewFolder" OnClick="OpenCreateFolderDialog">
                     Nueva carpeta
                 </MudButton>
-                <MudButton Variant="Variant.Text" Disabled="@(_selectedFolder == null)" Class="ml-2" OnClick="OpenEditFolderDialog">
-                    Renombrar
-                </MudButton>
-                <MudButton Variant="Variant.Text" Disabled="@(_selectedFolder == null)" Class="ml-2" OnClick="OpenDeleteFolderDialog">
-                    Eliminar
-                </MudButton>
-                <MudButton Variant="Variant.Text" Disabled="@(_selectedFolder == null || !_assets.Any())" Class="ml-2" OnClick="OpenMoveAssetsDialog">
-                    Mover archivos
-                </MudButton>
             </div>
         </div>
 
@@ -117,12 +147,41 @@
         @* Mostrar subcarpetas con miniaturas *@
         @if (_subFoldersWithThumbnails.Any())
         {
-            <MudText Typo="Typo.h6" Class="mt-4 mb-3">@(_selectedFolder != null ? "Carpetas" : "Carpetas raíz")</MudText>
+            <div class="d-flex justify-space-between align-center mt-4 mb-3">
+                <MudText Typo="Typo.h6">@(_selectedFolder != null ? "Carpetas" : "Carpetas raíz")</MudText>
+                <div class="d-flex align-center">
+                    @if (_folderSelectionMode)
+                    {
+                        <MudText Typo="Typo.body2" Class="mr-3">@_selectedFolderIds.Count seleccionadas</MudText>
+                        <MudButton Variant="Variant.Text" Disabled="@(_selectedFolderIds.Count != 1)" OnClick="OpenEditFolderDialog">
+                            Renombrar
+                        </MudButton>
+                        <MudButton Variant="Variant.Text" Disabled="@(!_selectedFolderIds.Any())" OnClick="OpenDeleteFolderDialog">
+                            Eliminar
+                        </MudButton>
+                        <MudButton Variant="Variant.Text" OnClick="ExitFolderSelectionMode" Class="ml-2">
+                            Cancelar
+                        </MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Text" OnClick="EnterFolderSelectionMode">
+                            Seleccionar
+                        </MudButton>
+                    }
+                </div>
+            </div>
             <MudGrid Class="mb-4">
                 @foreach (var folderData in _subFoldersWithThumbnails)
                 {
                     <MudItem xs="12" sm="6" md="4" lg="3" xl="2">
-                        <div class="folder-card-container" @onclick="@(() => OnFolderSelected(folderData.Folder))">
+                        <div class="folder-card-container @(_folderSelectionMode ? "selection-mode" : "") @(IsFolderSelected(folderData.Folder.Id) ? "selected" : "")"
+                             @onclick="@(() => OnFolderCardClick(folderData.Folder))">
+                            <div class="folder-select-checkbox" @onclick:stopPropagation="true">
+                                <MudCheckBox T="bool"
+                                             Value="@IsFolderSelected(folderData.Folder.Id)"
+                                             ValueChanged="@(EventCallback.Factory.Create<bool>(this, value => ToggleFolderSelection(folderData.Folder.Id, value)))" />
+                            </div>
                             @if (folderData.FirstAsset != null && folderData.FirstAsset.HasThumbnails)
                             {
                                 <img src="@folderData.FirstAsset.ThumbnailUrl" alt="@folderData.Folder.Name" class="folder-card-thumbnail" loading="lazy" />
@@ -150,12 +209,51 @@
             @* Mostrar assets de la carpeta actual *@
             @if (_assets.Any())
             {
-                <MudText Typo="Typo.h6" Class="mt-4 mb-3">Archivos</MudText>
+                <div class="d-flex justify-space-between align-center mt-4 mb-3">
+                    <MudText Typo="Typo.h6">Archivos</MudText>
+                    <div class="d-flex align-center">
+                        @if (_selectionMode)
+                        {
+                            <MudText Typo="Typo.body2" Class="mr-3">@_selectedAssetIds.Count seleccionadas</MudText>
+                            @if (!IsTrashFolderSelected)
+                            {
+                                <MudButton Variant="Variant.Text" Disabled="@(!_selectedAssetIds.Any())" OnClick="OpenMoveAssetsDialog">
+                                    Mover
+                                </MudButton>
+                                <MudButton Variant="Variant.Text" Disabled="@(!_selectedAssetIds.Any())" OnClick="OpenDeleteAssetsDialog">
+                                    Eliminar
+                                </MudButton>
+                            }
+                            else
+                            {
+                                <MudButton Variant="Variant.Text" Disabled="@(!_selectedAssetIds.Any())" OnClick="OpenRestoreAssetsDialog">
+                                    Restaurar
+                                </MudButton>
+                            }
+                            <MudButton Variant="Variant.Text" OnClick="ExitSelectionMode" Class="ml-2">
+                                Cancelar
+                            </MudButton>
+                        }
+                        else
+                        {
+                            <MudButton Variant="Variant.Text" OnClick="EnterSelectionMode">
+                                Seleccionar
+                            </MudButton>
+                        }
+                    </div>
+                </div>
                 <MudGrid Class="mt-4">
                     @foreach (var asset in _assets)
                     {
                         <MudItem xs="12" sm="6" md="4" lg="3" xl="2">
-                            <AssetCard Asset="@asset" OnAssetClick="OpenAsset" />
+                            <div class="asset-select-container @(_selectionMode ? "selection-mode" : "") @(IsAssetSelected(asset.Id) ? "selected" : "")">
+                                <AssetCard Asset="@asset" OnAssetClick="OpenAsset" />
+                                <div class="asset-select-checkbox" @onclick:stopPropagation="true">
+                                    <MudCheckBox T="bool"
+                                                 Value="@IsAssetSelected(asset.Id)"
+                                                 ValueChanged="@(EventCallback.Factory.Create<bool>(this, value => ToggleAssetSelection(asset.Id, value)))" />
+                                </div>
+                            </div>
                         </MudItem>
                     }
                 </MudGrid>
@@ -237,28 +335,38 @@
                          FullWidth="true"
                          Class="mb-3" />
 
-        <MudButton Variant="Variant.Text" OnClick="ToggleSelectAllAssets" Disabled="@(!_assets.Any())" Class="mb-2">
-            @(_selectedAssetIds.Count == _assets.Count ? "Deseleccionar todo" : "Seleccionar todo")
-        </MudButton>
-
-        <MudTable Items="@_assets" Dense="true" Hover="true">
-            <HeaderContent>
-                <MudTh></MudTh>
-                <MudTh>Archivo</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="">
-                    <MudCheckBox T="bool"
-                                 Value="@_selectedAssetIds.Contains(context.Id)"
-                                 ValueChanged="@(EventCallback.Factory.Create<bool>(this, value => ToggleAssetSelection(context.Id, value)))" />
-                </MudTd>
-                <MudTd DataLabel="Archivo">@context.FileName</MudTd>
-            </RowTemplate>
-        </MudTable>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Seleccionados: @_selectedAssetIds.Count</MudText>
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="CloseMoveAssetsDialog">Cancelar</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(!_selectedAssetIds.Any() || !_moveTargetFolderId.HasValue)" OnClick="MoveAssetsAsync">Mover</MudButton>
+    </DialogActions>
+</MudDialog>
+
+<MudDialog @bind-Visible="_deleteAssetsDialogVisible" Options="@(new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Eliminar archivos</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText>¿Quieres mover estos archivos a la papelera?</MudText>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">Se borrarán automáticamente después de 7 días.</MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseDeleteAssetsDialog">Cancelar</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" Disabled="@(!_selectedAssetIds.Any())" OnClick="DeleteAssetsAsync">Eliminar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+<MudDialog @bind-Visible="_restoreAssetsDialogVisible" Options="@(new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Restaurar archivos</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText>¿Quieres restaurar estos archivos a su ubicación original?</MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseRestoreAssetsDialog">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(!_selectedAssetIds.Any())" OnClick="RestoreAssetsAsync">Restaurar</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -282,10 +390,15 @@
     private bool _editFolderDialogVisible = false;
     private bool _deleteFolderDialogVisible = false;
     private bool _moveAssetsDialogVisible = false;
+    private bool _deleteAssetsDialogVisible = false;
+    private bool _restoreAssetsDialogVisible = false;
     private string _folderNameInput = string.Empty;
     private int? _editParentFolderId;
     private int? _moveTargetFolderId;
     private HashSet<int> _selectedAssetIds = new();
+    private bool _selectionMode = false;
+    private bool _folderSelectionMode = false;
+    private HashSet<int> _selectedFolderIds = new();
     private int? _userId;
     private string _userRootPrefix = string.Empty;
     private string _userRootPhysicalPrefix = string.Empty;
@@ -800,6 +913,12 @@
 
     private void OpenAsset(TimelineItem asset)
     {
+        if (_selectionMode)
+        {
+            ToggleAssetSelection(asset.Id, !IsAssetSelected(asset.Id));
+            return;
+        }
+
         Navigation.NavigateTo($"/asset/{asset.Id}");
     }
 
@@ -843,9 +962,11 @@
 
     private void OpenEditFolderDialog()
     {
-        if (_selectedFolder == null) return;
-        _folderNameInput = _selectedFolder.Name;
-        _editParentFolderId = _selectedFolder.ParentFolderId;
+        var targetFolder = GetSelectedFolderForEdit();
+        if (targetFolder == null) return;
+        _selectedFolder = targetFolder;
+        _folderNameInput = targetFolder.Name;
+        _editParentFolderId = targetFolder.ParentFolderId;
         _editFolderDialogVisible = true;
     }
 
@@ -888,7 +1009,7 @@
 
     private void OpenDeleteFolderDialog()
     {
-        if (_selectedFolder == null) return;
+        if (!_selectedFolderIds.Any()) return;
         _deleteFolderDialogVisible = true;
     }
 
@@ -899,14 +1020,18 @@
 
     private async Task DeleteFolderAsync()
     {
-        if (_selectedFolder == null) return;
+        if (!_selectedFolderIds.Any()) return;
 
         try
         {
-            await FolderService.DeleteFolderAsync(_selectedFolder.Id);
+            foreach (var folderId in _selectedFolderIds.ToList())
+            {
+                await FolderService.DeleteFolderAsync(folderId);
+            }
             _deleteFolderDialogVisible = false;
             Navigation.NavigateTo("/explorer");
             await LoadFolders();
+            ExitFolderSelectionMode();
         }
         catch (Exception ex)
         {
@@ -918,7 +1043,6 @@
     {
         if (_selectedFolder == null) return;
         _moveTargetFolderId = null;
-        _selectedAssetIds = new HashSet<int>();
         _moveAssetsDialogVisible = true;
     }
 
@@ -927,8 +1051,35 @@
         _moveAssetsDialogVisible = false;
     }
 
+    private void OpenDeleteAssetsDialog()
+    {
+        if (_selectedFolder == null) return;
+        _deleteAssetsDialogVisible = true;
+    }
+
+    private void CloseDeleteAssetsDialog()
+    {
+        _deleteAssetsDialogVisible = false;
+    }
+
+    private void OpenRestoreAssetsDialog()
+    {
+        if (_selectedFolder == null) return;
+        _restoreAssetsDialogVisible = true;
+    }
+
+    private void CloseRestoreAssetsDialog()
+    {
+        _restoreAssetsDialogVisible = false;
+    }
+
     private void ToggleAssetSelection(int assetId, bool selected)
     {
+        if (!_selectionMode)
+        {
+            _selectionMode = true;
+        }
+
         if (selected)
         {
             _selectedAssetIds.Add(assetId);
@@ -940,17 +1091,20 @@
         StateHasChanged();
     }
 
-    private void ToggleSelectAllAssets()
+    private bool IsAssetSelected(int assetId) => _selectedAssetIds.Contains(assetId);
+
+    private bool IsTrashFolderSelected
+        => _selectedFolder != null && _selectedFolder.Path.Replace('\\', '/').Contains("/_trash", StringComparison.OrdinalIgnoreCase);
+
+    private void EnterSelectionMode()
     {
-        if (_selectedAssetIds.Count == _assets.Count)
-        {
-            _selectedAssetIds.Clear();
-        }
-        else
-        {
-            _selectedAssetIds = _assets.Select(a => a.Id).ToHashSet();
-        }
-        StateHasChanged();
+        _selectionMode = true;
+    }
+
+    private void ExitSelectionMode()
+    {
+        _selectionMode = false;
+        _selectedAssetIds.Clear();
     }
 
     private async Task MoveAssetsAsync()
@@ -973,11 +1127,118 @@
             _moveAssetsDialogVisible = false;
             await LoadFolderAssets(_selectedFolder.Id);
             await LoadSubFoldersWithThumbnails(_selectedFolder);
+            ExitSelectionMode();
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Error al mover archivos: {ex.Message}", Severity.Error);
         }
+    }
+
+    private async Task DeleteAssetsAsync()
+    {
+        if (_selectedFolder == null || !_selectedAssetIds.Any())
+        {
+            return;
+        }
+
+        try
+        {
+            var request = new DeleteAssetsRequest
+            {
+                AssetIds = _selectedAssetIds.ToList()
+            };
+
+            await AssetService.DeleteAssetsAsync(request);
+            _deleteAssetsDialogVisible = false;
+            await LoadFolderAssets(_selectedFolder.Id);
+            await LoadSubFoldersWithThumbnails(_selectedFolder);
+            ExitSelectionMode();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al eliminar archivos: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task RestoreAssetsAsync()
+    {
+        if (_selectedFolder == null || !_selectedAssetIds.Any())
+        {
+            return;
+        }
+
+        try
+        {
+            var request = new RestoreAssetsRequest
+            {
+                AssetIds = _selectedAssetIds.ToList()
+            };
+
+            await AssetService.RestoreAssetsAsync(request);
+            _restoreAssetsDialogVisible = false;
+            await LoadFolderAssets(_selectedFolder.Id);
+            await LoadSubFoldersWithThumbnails(_selectedFolder);
+            ExitSelectionMode();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al restaurar archivos: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void EnterFolderSelectionMode()
+    {
+        _folderSelectionMode = true;
+    }
+
+    private void ExitFolderSelectionMode()
+    {
+        _folderSelectionMode = false;
+        _selectedFolderIds.Clear();
+    }
+
+    private void OnFolderCardClick(FolderItem folder)
+    {
+        if (_folderSelectionMode)
+        {
+            ToggleFolderSelection(folder.Id, !IsFolderSelected(folder.Id));
+            return;
+        }
+
+        _ = OnFolderSelected(folder);
+    }
+
+    private void ToggleFolderSelection(int folderId, bool selected)
+    {
+        if (!_folderSelectionMode)
+        {
+            _folderSelectionMode = true;
+        }
+
+        if (selected)
+        {
+            _selectedFolderIds.Add(folderId);
+        }
+        else
+        {
+            _selectedFolderIds.Remove(folderId);
+        }
+
+        StateHasChanged();
+    }
+
+    private bool IsFolderSelected(int folderId) => _selectedFolderIds.Contains(folderId);
+
+    private FolderItem? GetSelectedFolderForEdit()
+    {
+        if (_selectedFolderIds.Count != 1)
+        {
+            return null;
+        }
+
+        var folderId = _selectedFolderIds.First();
+        return _allFolders.FirstOrDefault(f => f.Id == folderId) ?? _selectedFolder;
     }
 
     private Task<IEnumerable<int?>> SearchMoveFolderAsync(string value, CancellationToken cancellationToken)
@@ -1143,14 +1404,14 @@
             normalized.StartsWith(_userRootPrefix, StringComparison.OrdinalIgnoreCase))
         {
             var relative = normalized.Substring(_userRootPrefix.Length).TrimStart('/');
-            return string.IsNullOrEmpty(relative) ? "Inicio" : $"Inicio/{relative}";
+            return string.IsNullOrEmpty(relative) ? "Inicio" : $"Inicio/{GetDisplayRelativePath(relative)}";
         }
 
         if (!string.IsNullOrEmpty(_userRootPhysicalPrefix) &&
             normalized.StartsWith(_userRootPhysicalPrefix, StringComparison.OrdinalIgnoreCase))
         {
             var relative = normalized.Substring(_userRootPhysicalPrefix.Length).TrimStart('/');
-            return string.IsNullOrEmpty(relative) ? "Inicio" : $"Inicio/{relative}";
+            return string.IsNullOrEmpty(relative) ? "Inicio" : $"Inicio/{GetDisplayRelativePath(relative)}";
         }
 
         return folder.Path;
@@ -1162,6 +1423,11 @@
         if (IsUserRootPath(normalized))
         {
             return "Inicio";
+        }
+
+        if (IsBinPath(normalized))
+        {
+            return "Papelera";
         }
 
         return folder.Name;
@@ -1182,5 +1448,22 @@
         }
 
         return false;
+    }
+
+    private static bool IsBinPath(string normalizedPath)
+    {
+        return normalizedPath.Replace('\\', '/').EndsWith("/_trash", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetDisplayRelativePath(string relativePath)
+    {
+        var normalized = relativePath.Replace('\\', '/');
+        if (normalized.Equals("_trash", StringComparison.OrdinalIgnoreCase) ||
+            normalized.StartsWith("_trash/", StringComparison.OrdinalIgnoreCase))
+        {
+            return normalized.Replace("_trash", "Papelera", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return normalized;
     }
 }
