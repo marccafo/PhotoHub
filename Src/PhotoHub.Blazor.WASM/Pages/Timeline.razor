@@ -1,8 +1,11 @@
 @page "/"
+@using PhotoHub.Blazor.WASM.Services
 @inject IAssetService AssetService
+@inject IAlbumService AlbumService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject LayoutService LayoutService
 @implements IDisposable
 
 <PageTitle>Timeline - PhotoHub</PageTitle>
@@ -32,7 +35,14 @@
                                              data-aspect-ratio="@asset.AspectRatio.ToString("F4", System.Globalization.CultureInfo.InvariantCulture)"
                                              data-width="@(asset.Width?.ToString() ?? "0")"
                                              data-height="@(asset.Height?.ToString() ?? "0")">
-                                            <AssetCard Asset="@asset" OnAssetClick="OpenAsset" />
+                                            <div class="asset-select-container @(_selectionMode ? "selection-mode" : "") @(IsAssetSelected(asset.Id) ? "selected" : "")">
+                                                <AssetCard Asset="@asset" OnAssetClick="OnTimelineAssetClick" />
+                                                <div class="asset-select-checkbox" @onclick:stopPropagation="true">
+                                                    <MudCheckBox T="bool"
+                                                                 Value="@IsAssetSelected(asset.Id)"
+                                                                 ValueChanged="@(EventCallback.Factory.Create<bool>(this, value => ToggleAssetSelection(asset.Id, value)))" />
+                                                </div>
+                                            </div>
                                         </div>
                                     }
                                 </div>
@@ -241,6 +251,32 @@
         display: block;
     }
 
+    .asset-select-container {
+        position: relative;
+        height: 100%;
+    }
+
+    .asset-select-checkbox {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        z-index: 5;
+        opacity: 0;
+        transition: opacity 0.2s;
+        background: rgba(0,0,0,0.4);
+        border-radius: 999px;
+        padding: 2px;
+    }
+
+    .asset-select-container:hover .asset-select-checkbox {
+        opacity: 1;
+    }
+
+    .asset-select-container.selection-mode .asset-select-checkbox,
+    .asset-select-container.selected .asset-select-checkbox {
+        opacity: 1;
+    }
+
     .timeline-nav-wrapper {
         position: absolute;
         right: 8px;
@@ -289,12 +325,101 @@
     }
 </style>
 
+<MudDialog @bind-Visible="_addToAlbumDialogVisible" Options="new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true }">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Añadir a álbum</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3">@($"{_selectedAssetIds.Count} elementos seleccionados")</MudText>
+        @if (!_showCreateAlbum)
+        {
+            @if (_loadingAlbums)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+            }
+            else if (_availableAlbums.Any())
+            {
+                <MudRadioGroup T="int?" @bind-Value="_selectedAlbumId">
+                    @foreach (var album in _availableAlbums)
+                    {
+                        <MudRadio T="int?" Value="@album.Id">
+                            <div class="d-flex flex-column">
+                                <MudText Typo="Typo.subtitle2">@album.Name</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@album.AssetCount fotos</MudText>
+                            </div>
+                        </MudRadio>
+                    }
+                </MudRadioGroup>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info">No hay álbumes disponibles.</MudAlert>
+            }
+            
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Outlined.Add"
+                       Class="mt-3"
+                       OnClick="@(() => _showCreateAlbum = true)">
+                Crear nuevo álbum
+            </MudButton>
+        }
+        else
+        {
+            <MudTextField @bind-Value="_newAlbumName"
+                          Label="Nombre del álbum"
+                          Variant="Variant.Outlined"
+                          FullWidth="true"
+                          Class="mb-3" />
+            <MudTextField @bind-Value="_newAlbumDescription"
+                          Label="Descripción (opcional)"
+                          Variant="Variant.Outlined"
+                          FullWidth="true"
+                          Lines="3" />
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Outlined.ArrowBack"
+                       Class="mt-3"
+                       OnClick="@(() => _showCreateAlbum = false)">
+                Volver a selección
+            </MudButton>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@CloseAddToAlbumDialog">Cancelar</MudButton>
+        @if (_showCreateAlbum)
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="CreateAlbumAndAddAsync">
+                Crear y añadir
+            </MudButton>
+        }
+        else
+        {
+            <MudButton Color="Color.Primary"
+                       Variant="Variant.Filled"
+                       OnClick="AddSelectionToAlbumAsync"
+                       Disabled="@(!_selectedAlbumId.HasValue)">
+                Añadir
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
 @code {
     private List<TimelineItem> _assets = new();
     private Dictionary<string, List<TimelineItem>> _groupedAssets = new();
     private bool _loading = true;
     private string _activeGroup = "";
     private DotNetObjectReference<Timeline>? _objRef;
+    private bool _selectionMode = false;
+    private HashSet<int> _selectedAssetIds = new();
+    private bool _addToAlbumDialogVisible = false;
+    private List<AlbumItem> _availableAlbums = new();
+    private bool _loadingAlbums = false;
+    private int? _selectedAlbumId = null;
+    private bool _showCreateAlbum = false;
+    private string _newAlbumName = "";
+    private string? _newAlbumDescription = "";
     
 
     protected override async Task OnInitializedAsync()
@@ -501,6 +626,216 @@
         }
     }
 
+    private void OnTimelineAssetClick(TimelineItem asset)
+    {
+        if (_selectionMode)
+        {
+            ToggleAssetSelection(asset.Id, !IsAssetSelected(asset.Id));
+            return;
+        }
+
+        OpenAsset(asset);
+    }
+
+    private void ToggleAssetSelection(int assetId, bool selected)
+    {
+        if (!_selectionMode)
+        {
+            _selectionMode = true;
+        }
+
+        if (selected)
+        {
+            _selectedAssetIds.Add(assetId);
+        }
+        else
+        {
+            _selectedAssetIds.Remove(assetId);
+            if (_selectedAssetIds.Count == 0)
+            {
+                ExitSelectionMode();
+                return;
+            }
+        }
+
+        UpdateSelectionNavbar();
+    }
+
+    private bool IsAssetSelected(int assetId) => _selectedAssetIds.Contains(assetId);
+
+    private void ExitSelectionMode()
+    {
+        _selectionMode = false;
+        _selectedAssetIds.Clear();
+        UpdateSelectionNavbar();
+    }
+
+    private void ToggleSelectAll()
+    {
+        if (_selectedAssetIds.Count == _assets.Count && _assets.Any())
+        {
+            _selectedAssetIds.Clear();
+            UpdateSelectionNavbar();
+            return;
+        }
+
+        _selectedAssetIds = _assets.Select(asset => asset.Id).ToHashSet();
+        if (_selectedAssetIds.Any())
+        {
+            _selectionMode = true;
+        }
+        UpdateSelectionNavbar();
+    }
+
+    private void OpenAddToAlbumDialog()
+    {
+        if (!_selectedAssetIds.Any())
+        {
+            return;
+        }
+
+        _addToAlbumDialogVisible = true;
+        _loadingAlbums = true;
+        _ = LoadAlbumsForSelectionAsync();
+    }
+
+    private async Task LoadAlbumsForSelectionAsync()
+    {
+        try
+        {
+            _availableAlbums = await AlbumService.GetAlbumsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar álbumes: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingAlbums = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CloseAddToAlbumDialog()
+    {
+        _addToAlbumDialogVisible = false;
+        _showCreateAlbum = false;
+        _selectedAlbumId = null;
+    }
+
+    private async Task AddSelectionToAlbumAsync()
+    {
+        if (!_selectedAlbumId.HasValue || !_selectedAssetIds.Any())
+        {
+            return;
+        }
+
+        var failed = 0;
+        foreach (var assetId in _selectedAssetIds.ToList())
+        {
+            try
+            {
+                var success = await AlbumService.AddAssetToAlbumAsync(_selectedAlbumId.Value, assetId);
+                if (!success)
+                {
+                    failed++;
+                }
+            }
+            catch
+            {
+                failed++;
+            }
+        }
+
+        CloseAddToAlbumDialog();
+        ExitSelectionMode();
+
+        if (failed == 0)
+        {
+            Snackbar.Add("Elementos añadidos al álbum", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("Algunos elementos no se pudieron añadir", Severity.Warning);
+        }
+    }
+
+    private async Task CreateAlbumAndAddAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newAlbumName))
+        {
+            Snackbar.Add("El nombre del álbum es obligatorio", Severity.Warning);
+            return;
+        }
+
+        var album = await AlbumService.CreateAlbumAsync(_newAlbumName, _newAlbumDescription);
+        if (album == null)
+        {
+            Snackbar.Add("Error al crear el álbum", Severity.Error);
+            return;
+        }
+
+        _selectedAlbumId = album.Id;
+        await AddSelectionToAlbumAsync();
+    }
+
+    private void ShareSelection()
+    {
+        Snackbar.Add("Compartir desde selección aún no está disponible.", Severity.Info);
+    }
+
+    private void ToggleFavorites()
+    {
+        Snackbar.Add("Favoritos desde selección aún no está disponible.", Severity.Info);
+    }
+
+    private void HandleMoreOption(string option)
+    {
+        Snackbar.Add($"{option} aún no está disponible en selección.", Severity.Info);
+    }
+
+    private void ExitSelectionFromNavbar()
+    {
+        ExitSelectionMode();
+    }
+
+    private void UpdateSelectionNavbar()
+    {
+        if (!_selectionMode)
+        {
+            LayoutService.ResetNavbar();
+            return;
+        }
+
+        var selectedCount = _selectedAssetIds.Count;
+        var allSelected = _assets.Any() && selectedCount == _assets.Count;
+
+        LayoutService.SetCustomNavbar(
+            @<text>
+                <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Inherit" Edge="Edge.Start" OnClick="ExitSelectionFromNavbar" />
+                <MudText Typo="Typo.h6" Class="ml-2">@($"{selectedCount} seleccionadas")</MudText>
+                <MudSpacer />
+                <MudTooltip Text="Compartir">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Share" Color="Color.Inherit" Disabled="@(!_selectedAssetIds.Any())" OnClick="ShareSelection" />
+                </MudTooltip>
+                <MudTooltip Text="@(allSelected ? "Deseleccionar todo" : "Seleccionar todo")">
+                    <MudIconButton Icon="@Icons.Material.Filled.SelectAll" Color="Color.Inherit" Disabled="@(!_assets.Any())" OnClick="ToggleSelectAll" />
+                </MudTooltip>
+                <MudTooltip Text="Añadir a álbum">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Add" Color="Color.Inherit" Disabled="@(!_selectedAssetIds.Any())" OnClick="OpenAddToAlbumDialog" />
+                </MudTooltip>
+                <MudTooltip Text="Favoritos">
+                    <MudIconButton Icon="@Icons.Material.Filled.FavoriteBorder" Color="Color.Inherit" Disabled="@(!_selectedAssetIds.Any())" OnClick="ToggleFavorites" />
+                </MudTooltip>
+                <MudMenu Icon="@Icons.Material.Outlined.MoreVert" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true">
+                    <MudMenuItem Icon="@Icons.Material.Outlined.Edit" OnClick="@(() => HandleMoreOption("Editar fecha y hora"))">Editar fecha y hora</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Outlined.LocationOn" OnClick="@(() => HandleMoreOption("Editar ubicación"))">Editar ubicación</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Outlined.Archive" OnClick="@(() => HandleMoreOption("Archivar"))">Archivar</MudMenuItem>
+                </MudMenu>
+            </text>
+        , keepDrawerVisible: true);
+    }
+
     private string GetGroupId(string groupName)
     {
         return "group-" + groupName.Replace(" ", "-").ToLower();
@@ -542,5 +877,6 @@
         _objRef?.Dispose();
         // Remover clase del body al salir de la página
         JS.InvokeVoidAsync("scrollHelpers.disableTimelineScroll");
+        LayoutService.ResetNavbar();
     }
 }
