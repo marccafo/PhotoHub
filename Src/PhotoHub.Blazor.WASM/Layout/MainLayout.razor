@@ -6,6 +6,8 @@
 @inject LayoutService LayoutService
 @inject ThemeService ThemeService
 @inject IAuthService AuthService
+@inject IDialogService DialogService
+@inject ApiErrorNotifier ApiErrorNotifier
 
 <MudThemeProvider IsDarkMode="LayoutService.IsDarkMode" Theme="ThemeService.Theme" />
 <MudPopoverProvider />
@@ -206,6 +208,7 @@
         LayoutService.OnMajorUpdate += StateHasChanged;
         AuthService.OnAuthStateChanged += HandleAuthStateChanged;
         Navigation.LocationChanged += HandleLocationChanged;
+        ApiErrorNotifier.OnError += HandleApiError;
     }
 
     protected override async Task OnInitializedAsync()
@@ -235,6 +238,7 @@
         LayoutService.OnMajorUpdate -= StateHasChanged;
         AuthService.OnAuthStateChanged -= HandleAuthStateChanged;
         Navigation.LocationChanged -= HandleLocationChanged;
+        ApiErrorNotifier.OnError -= HandleApiError;
     }
 
     private UserDto? _currentUser;
@@ -278,6 +282,28 @@
     private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
         StateHasChanged();
+    }
+
+    private void HandleApiError(ApiErrorInfo info)
+    {
+        _ = InvokeAsync(() =>
+        {
+            var parameters = new DialogParameters
+            {
+                ["Error"] = info
+            };
+
+            var options = new DialogOptions
+            {
+                Position = DialogPosition.Center,
+                MaxWidth = MaxWidth.Medium,
+                FullWidth = true,
+                CloseButton = true,
+                BackdropClick = false
+            };
+
+            DialogService.Show<ApiErrorDialog>(info.Title, parameters, options);
+        });
     }
 
     private void MarkAllNotificationsRead()

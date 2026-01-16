@@ -11,9 +11,18 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 
 // Configurar HttpClient para la API
 var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? builder.HostEnvironment.BaseAddress;
-builder.Services.AddScoped(sp => new HttpClient 
-{ 
-    BaseAddress = new Uri(apiBaseUrl) 
+builder.Services.AddScoped<ApiErrorNotifier>();
+builder.Services.AddScoped(sp =>
+{
+    var notifier = sp.GetRequiredService<ApiErrorNotifier>();
+    var handler = new ApiErrorHandler(notifier)
+    {
+        InnerHandler = new HttpClientHandler()
+    };
+    return new HttpClient(handler)
+    {
+        BaseAddress = new Uri(apiBaseUrl)
+    };
 });
 
 // Agregar MudBlazor

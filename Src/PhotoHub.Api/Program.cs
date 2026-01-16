@@ -1,5 +1,8 @@
+using System.Diagnostics;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using PhotoHub.Api;
 using Scalar.AspNetCore;
@@ -52,6 +55,39 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference();
 }
 
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (Exception ex)
+    {
+        var problem = new ProblemDetails
+        {
+            Status = StatusCodes.Status500InternalServerError
+        };
+
+        if (ex is DbUpdateException dbEx)
+        {
+            problem.Title = "Error de base de datos";
+            problem.Detail = BuildDbErrorDetail(dbEx);
+        }
+        else
+        {
+            problem.Title = "Error interno del servidor";
+            problem.Detail = ex.Message;
+        }
+
+        problem.Extensions["traceId"] = Activity.Current?.Id ?? context.TraceIdentifier;
+        problem.Extensions["stackTrace"] = ex.ToString();
+
+        context.Response.StatusCode = problem.Status.Value;
+        context.Response.ContentType = "application/problem+json";
+        await context.Response.WriteAsJsonAsync(problem);
+    }
+});
+
 app.UseHttpsRedirection();
 
 // IMPORTANTE: Authentication y Authorization deben ir antes de UseBlazorFrameworkFiles
@@ -81,3 +117,13 @@ app.RegisterEndpoints();
 app.MapFallbackToFile("index.html");
 
 app.Run();
+
+static string BuildDbErrorDetail(DbUpdateException exception)
+{
+    if (exception.InnerException?.Message is { Length: > 0 } innerMessage)
+    {
+        return $"{exception.Message} | {innerMessage}";
+    }
+
+    return exception.Message;
+}
