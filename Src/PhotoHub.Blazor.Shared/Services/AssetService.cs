@@ -249,4 +249,25 @@ public class AssetService : IAssetService
         var response = await _httpClient.PostAsJsonAsync("/api/assets/restore", request);
         response.EnsureSuccessStatusCode();
     }
+
+    public async Task PurgeAssetsAsync(PurgeAssetsRequest request)
+    {
+        await SetAuthHeaderAsync();
+        var response = await _httpClient.PostAsJsonAsync("/api/assets/purge", request);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task RestoreTrashAsync()
+    {
+        await SetAuthHeaderAsync();
+        var response = await _httpClient.PostAsync("/api/assets/trash/restore-all", null);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task EmptyTrashAsync()
+    {
+        await SetAuthHeaderAsync();
+        var response = await _httpClient.PostAsync("/api/assets/trash/empty", null);
+        response.EnsureSuccessStatusCode();
+    }
 }

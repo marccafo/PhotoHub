@@ -15,6 +15,9 @@ public interface IAssetService
     IAsyncEnumerable<SyncProgressUpdate> SyncMultipleAssetsAsync(IEnumerable<string> paths, CancellationToken cancellationToken = default);
     Task DeleteAssetsAsync(DeleteAssetsRequest request);
     Task RestoreAssetsAsync(RestoreAssetsRequest request);
+    Task PurgeAssetsAsync(PurgeAssetsRequest request);
+    Task RestoreTrashAsync();
+    Task EmptyTrashAsync();
 }
 
 public class UploadResponse

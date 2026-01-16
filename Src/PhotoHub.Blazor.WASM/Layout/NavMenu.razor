@@ -43,6 +43,12 @@
                 <MudNavLink Href="/upload" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.CloudUpload" IconColor="Color.Inherit">
                     Subir
                 </MudNavLink>
+
+                <MudDivider Class="my-2" />
+
+                <MudNavLink Href="/trash" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Delete" IconColor="Color.Inherit">
+                    Papelera
+                </MudNavLink>
             }
         </Authorized>
         <NotAuthorized>
@@ -66,6 +72,12 @@
             </MudNavLink>
             <MudNavLink Href="/upload" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.CloudUpload" IconColor="Color.Inherit">
                 Subir
+            </MudNavLink>
+
+            <MudDivider Class="my-2" />
+
+            <MudNavLink Href="/trash" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Delete" IconColor="Color.Inherit">
+                Papelera
             </MudNavLink>
         </NotAuthorized>
     </AuthorizeView>

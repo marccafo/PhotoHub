@@ -24,6 +24,18 @@ public class AssetsEndpoint : IEndpoint
         group.MapPost("restore", RestoreAssets)
             .WithName("RestoreAssets")
             .WithDescription("Restores assets from the user's _trash");
+
+        group.MapPost("purge", PurgeAssets)
+            .WithName("PurgeAssets")
+            .WithDescription("Permanently deletes assets from the user's trash");
+
+        group.MapPost("trash/restore-all", RestoreAllTrash)
+            .WithName("RestoreAllTrash")
+            .WithDescription("Restores all assets from the user's trash");
+
+        group.MapPost("trash/empty", EmptyTrash)
+            .WithName("EmptyTrash")
+            .WithDescription("Permanently deletes all assets from the user's trash");
     }
 
     private static async Task<IResult> DeleteAssets(
@@ -139,6 +151,51 @@ public class AssetsEndpoint : IEndpoint
 
         var userRootVirtual = $"/assets/users/{userId}";
 
+        await RestoreAssetsInternalAsync(dbContext, settingsService, assets, userId, ct);
+
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> RestoreAllTrash(
+        [FromServices] ApplicationDbContext dbContext,
+        [FromServices] SettingsService settingsService,
+        ClaimsPrincipal user,
+        CancellationToken ct)
+    {
+        if (!TryGetUserId(user, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var isAdmin = user.IsInRole("Admin");
+        var assets = await dbContext.Assets
+            .Where(a => a.DeletedAt != null)
+            .ToListAsync(ct);
+
+        if (!isAdmin)
+        {
+            assets = assets.Where(a => IsAssetInUserRoot(a.FullPath, userId)).ToList();
+        }
+
+        if (!assets.Any())
+        {
+            return Results.NoContent();
+        }
+
+        await RestoreAssetsInternalAsync(dbContext, settingsService, assets, userId, ct);
+
+        return Results.NoContent();
+    }
+
+    private static async Task RestoreAssetsInternalAsync(
+        ApplicationDbContext dbContext,
+        SettingsService settingsService,
+        List<Asset> assets,
+        int userId,
+        CancellationToken ct)
+    {
+        var userRootVirtual = $"/assets/users/{userId}";
+
         foreach (var asset in assets)
         {
             if (asset.DeletedAt == null)
@@ -176,8 +233,109 @@ public class AssetsEndpoint : IEndpoint
         }
 
         await dbContext.SaveChangesAsync(ct);
+    }
+
+    private static async Task<IResult> PurgeAssets(
+        [FromServices] ApplicationDbContext dbContext,
+        [FromServices] SettingsService settingsService,
+        [FromBody] PurgeAssetsRequest request,
+        ClaimsPrincipal user,
+        CancellationToken ct)
+    {
+        if (!TryGetUserId(user, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        if (request.AssetIds == null || request.AssetIds.Count == 0)
+        {
+            return Results.BadRequest(new { error = "Debes seleccionar al menos un asset." });
+        }
+
+        var isAdmin = user.IsInRole("Admin");
+        var assets = await dbContext.Assets
+            .Include(a => a.Thumbnails)
+            .Where(a => request.AssetIds.Contains(a.Id) && a.DeletedAt != null)
+            .ToListAsync(ct);
+
+        if (!assets.Any())
+        {
+            return Results.NotFound(new { error = "Assets no encontrados." });
+        }
+
+        if (!isAdmin && assets.Any(a => !IsAssetInUserRoot(a.FullPath, userId)))
+        {
+            return Results.Forbid();
+        }
+
+        await DeleteAssetsPermanentlyAsync(dbContext, settingsService, assets, ct);
 
         return Results.NoContent();
+    }
+
+    private static async Task<IResult> EmptyTrash(
+        [FromServices] ApplicationDbContext dbContext,
+        [FromServices] SettingsService settingsService,
+        ClaimsPrincipal user,
+        CancellationToken ct)
+    {
+        if (!TryGetUserId(user, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var isAdmin = user.IsInRole("Admin");
+        var assets = await dbContext.Assets
+            .Include(a => a.Thumbnails)
+            .Where(a => a.DeletedAt != null)
+            .ToListAsync(ct);
+
+        if (!isAdmin)
+        {
+            assets = assets.Where(a => IsAssetInUserRoot(a.FullPath, userId)).ToList();
+        }
+
+        if (!assets.Any())
+        {
+            return Results.NoContent();
+        }
+
+        await DeleteAssetsPermanentlyAsync(dbContext, settingsService, assets, ct);
+
+        return Results.NoContent();
+    }
+
+    private static async Task DeleteAssetsPermanentlyAsync(
+        ApplicationDbContext dbContext,
+        SettingsService settingsService,
+        List<Asset> assets,
+        CancellationToken ct)
+    {
+        foreach (var asset in assets)
+        {
+            var physicalPath = await settingsService.ResolvePhysicalPathAsync(asset.FullPath);
+            if (File.Exists(physicalPath))
+            {
+                File.Delete(physicalPath);
+            }
+
+            foreach (var thumbnail in asset.Thumbnails)
+            {
+                if (!string.IsNullOrEmpty(thumbnail.FilePath) && File.Exists(thumbnail.FilePath))
+                {
+                    File.Delete(thumbnail.FilePath);
+                }
+            }
+        }
+
+        var assetIds = assets.Select(a => a.Id).ToList();
+        var albumAssets = await dbContext.AlbumAssets
+            .Where(aa => assetIds.Contains(aa.AssetId))
+            .ToListAsync(ct);
+
+        dbContext.AlbumAssets.RemoveRange(albumAssets);
+        dbContext.Assets.RemoveRange(assets);
+        await dbContext.SaveChangesAsync(ct);
     }
 
     private static bool TryGetUserId(ClaimsPrincipal user, out int userId)
@@ -250,6 +408,11 @@ public class DeleteAssetsRequest
 }
 
 public class RestoreAssetsRequest
+{
+    public List<int> AssetIds { get; set; } = new();
+}
+
+public class PurgeAssetsRequest
 {
     public List<int> AssetIds { get; set; } = new();
 }

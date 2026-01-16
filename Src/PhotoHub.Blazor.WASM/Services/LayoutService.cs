@@ -69,16 +69,32 @@ public class LayoutService
         }
     }
 
-    public void SetCustomNavbar(RenderFragment? content)
+    private bool _keepDrawerVisible;
+    public bool KeepDrawerVisible
+    {
+        get => _keepDrawerVisible;
+        private set
+        {
+            if (_keepDrawerVisible != value)
+            {
+                _keepDrawerVisible = value;
+                NotifyUpdate();
+            }
+        }
+    }
+
+    public void SetCustomNavbar(RenderFragment? content, bool keepDrawerVisible = false)
     {
         IsNavbarCustom = true;
         NavbarContent = content;
+        KeepDrawerVisible = keepDrawerVisible;
     }
 
     public void ResetNavbar()
     {
         IsNavbarCustom = false;
         NavbarContent = null;
+        KeepDrawerVisible = false;
     }
 
     private void NotifyUpdate() => OnMajorUpdate?.Invoke();

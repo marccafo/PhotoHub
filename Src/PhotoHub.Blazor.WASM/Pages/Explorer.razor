@@ -1,11 +1,14 @@
 @page "/explorer"
 @page "/explorer/folder/{FolderId:int}"
 @using PhotoHub.Blazor.Shared.Models
+@using PhotoHub.Blazor.WASM.Services
 @inject IFolderService FolderService
 @inject IAssetService AssetService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @inject IAuthService AuthService
+@inject LayoutService LayoutService
+@implements IDisposable
 
 <PageTitle>Explorador - PhotoHub</PageTitle>
 
@@ -153,15 +156,6 @@
                     @if (_folderSelectionMode)
                     {
                         <MudText Typo="Typo.body2" Class="mr-3">@_selectedFolderIds.Count seleccionadas</MudText>
-                        <MudButton Variant="Variant.Text" Disabled="@(_selectedFolderIds.Count != 1)" OnClick="OpenEditFolderDialog">
-                            Renombrar
-                        </MudButton>
-                        <MudButton Variant="Variant.Text" Disabled="@(!_selectedFolderIds.Any())" OnClick="OpenDeleteFolderDialog">
-                            Eliminar
-                        </MudButton>
-                        <MudButton Variant="Variant.Text" OnClick="ExitFolderSelectionMode" Class="ml-2">
-                            Cancelar
-                        </MudButton>
                     }
                     else
                     {
@@ -215,24 +209,6 @@
                         @if (_selectionMode)
                         {
                             <MudText Typo="Typo.body2" Class="mr-3">@_selectedAssetIds.Count seleccionadas</MudText>
-                            @if (!IsTrashFolderSelected)
-                            {
-                                <MudButton Variant="Variant.Text" Disabled="@(!_selectedAssetIds.Any())" OnClick="OpenMoveAssetsDialog">
-                                    Mover
-                                </MudButton>
-                                <MudButton Variant="Variant.Text" Disabled="@(!_selectedAssetIds.Any())" OnClick="OpenDeleteAssetsDialog">
-                                    Eliminar
-                                </MudButton>
-                            }
-                            else
-                            {
-                                <MudButton Variant="Variant.Text" Disabled="@(!_selectedAssetIds.Any())" OnClick="OpenRestoreAssetsDialog">
-                                    Restaurar
-                                </MudButton>
-                            }
-                            <MudButton Variant="Variant.Text" OnClick="ExitSelectionMode" Class="ml-2">
-                                Cancelar
-                            </MudButton>
                         }
                         else
                         {
@@ -372,6 +348,7 @@
 
 @code {
     [Parameter] public int? FolderId { get; set; }
+    [SupplyParameterFromQuery(Name = "trash")] public bool? Trash { get; set; }
     
     private List<FolderItem> _folderTree = new();
     private List<FolderItem> _allFolders = new(); // Todas las carpetas para búsqueda rápida
@@ -465,6 +442,20 @@
         }
         else
         {
+            if (Trash == true)
+            {
+                var trashFolder = FindTrashFolder();
+                if (trashFolder != null)
+                {
+                    Navigation.NavigateTo($"/explorer/folder/{trashFolder.Id}", replace: true);
+                    return;
+                }
+
+                Snackbar.Add("No se encontró la papelera para este usuario.", Severity.Warning);
+                Navigation.NavigateTo("/explorer", replace: true);
+                return;
+            }
+
             // Si no hay carpeta en la URL, ir directamente a Inicio
             var rootFolder = FindUserRootFolder();
             if (rootFolder != null)
@@ -508,6 +499,16 @@
         }
 
         return null;
+    }
+
+    private FolderItem? FindTrashFolder()
+    {
+        if (!_allFolders.Any())
+        {
+            return null;
+        }
+
+        return _allFolders.FirstOrDefault(folder => IsBinPath(folder.Path));
     }
     
     private FolderItem? FindFolderInTreeById(int folderId, List<FolderItem> tree)
@@ -640,13 +641,16 @@
 
     private List<TreeItemData<FolderItem>> MapToTreeItemData(List<FolderItem> folders)
     {
-        return folders.Select(f => new TreeItemData<FolderItem>
-        {
-            Value = f,
-            Text = $"{GetDisplayFolderName(f)} ({f.AssetCount})",
-            Icon = Icons.Material.Filled.Folder,
-            Children = f.SubFolders.Any() ? MapToTreeItemData(f.SubFolders) : null
-        }).ToList();
+        return folders
+            .Where(folder => !IsBinPath(folder.Path))
+            .Select(folder => new TreeItemData<FolderItem>
+            {
+                Value = folder,
+                Text = $"{GetDisplayFolderName(folder)} ({folder.AssetCount})",
+                Icon = Icons.Material.Filled.Folder,
+                Children = folder.SubFolders.Any() ? MapToTreeItemData(folder.SubFolders) : null
+            })
+            .ToList();
     }
 
     private Task OnFolderSelected(FolderItem folder)
@@ -923,6 +927,11 @@
             // Para cada subcarpeta, obtener el primer asset para mostrar su miniatura
             foreach (var subFolder in folder.SubFolders)
             {
+                if (IsBinPath(subFolder.Path))
+                {
+                    continue;
+                }
+
                 var folderData = new FolderWithThumbnail { Folder = subFolder };
                 
                 // Obtener el primer asset de la subcarpeta si tiene assets
@@ -1123,6 +1132,8 @@
         if (!_selectionMode)
         {
             _selectionMode = true;
+            _folderSelectionMode = false;
+            _selectedFolderIds.Clear();
         }
 
         if (selected)
@@ -1133,6 +1144,7 @@
         {
             _selectedAssetIds.Remove(assetId);
         }
+        UpdateSelectionNavbar();
         StateHasChanged();
     }
 
@@ -1144,12 +1156,75 @@
     private void EnterSelectionMode()
     {
         _selectionMode = true;
+        _folderSelectionMode = false;
+        _selectedFolderIds.Clear();
+        UpdateSelectionNavbar();
     }
 
     private void ExitSelectionMode()
     {
         _selectionMode = false;
         _selectedAssetIds.Clear();
+        UpdateSelectionNavbar();
+    }
+
+    private void ExitSelectionFromNavbar()
+    {
+        if (_selectionMode)
+        {
+            ExitSelectionMode();
+        }
+
+        if (_folderSelectionMode)
+        {
+            ExitFolderSelectionMode();
+        }
+    }
+
+    private void UpdateSelectionNavbar()
+    {
+        if (!_selectionMode && !_folderSelectionMode)
+        {
+            LayoutService.ResetNavbar();
+            return;
+        }
+
+        var selectedCount = _selectionMode ? _selectedAssetIds.Count : _selectedFolderIds.Count;
+
+        LayoutService.SetCustomNavbar(
+            @<text>
+                <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Inherit" Edge="Edge.Start" OnClick="ExitSelectionFromNavbar" />
+                <MudText Typo="Typo.h6" Class="ml-2">@($"{selectedCount} seleccionadas")</MudText>
+                <MudSpacer />
+                @if (_selectionMode)
+                {
+                    if (!IsTrashFolderSelected)
+                    {
+                        <MudButton Variant="Variant.Text" Disabled="@(!_selectedAssetIds.Any())" OnClick="OpenMoveAssetsDialog">
+                            Mover
+                        </MudButton>
+                        <MudButton Variant="Variant.Text" Disabled="@(!_selectedAssetIds.Any())" OnClick="OpenDeleteAssetsDialog">
+                            Eliminar
+                        </MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Text" Disabled="@(!_selectedAssetIds.Any())" OnClick="OpenRestoreAssetsDialog">
+                            Restaurar
+                        </MudButton>
+                    }
+                }
+                else if (_folderSelectionMode)
+                {
+                    <MudButton Variant="Variant.Text" Disabled="@(_selectedFolderIds.Count != 1)" OnClick="OpenEditFolderDialog">
+                        Renombrar
+                    </MudButton>
+                    <MudButton Variant="Variant.Text" Disabled="@(!_selectedFolderIds.Any())" OnClick="OpenDeleteFolderDialog">
+                        Eliminar
+                    </MudButton>
+                }
+            </text>
+        , keepDrawerVisible: true);
     }
 
     private async Task MoveAssetsAsync()
@@ -1232,12 +1307,16 @@
     private void EnterFolderSelectionMode()
     {
         _folderSelectionMode = true;
+        _selectionMode = false;
+        _selectedAssetIds.Clear();
+        UpdateSelectionNavbar();
     }
 
     private void ExitFolderSelectionMode()
     {
         _folderSelectionMode = false;
         _selectedFolderIds.Clear();
+        UpdateSelectionNavbar();
     }
 
     private void OnFolderCardClick(FolderItem folder)
@@ -1256,6 +1335,8 @@
         if (!_folderSelectionMode)
         {
             _folderSelectionMode = true;
+            _selectionMode = false;
+            _selectedAssetIds.Clear();
         }
 
         if (selected)
@@ -1267,6 +1348,7 @@
             _selectedFolderIds.Remove(folderId);
         }
 
+        UpdateSelectionNavbar();
         StateHasChanged();
     }
 
@@ -1507,5 +1589,10 @@
         }
 
         return normalized;
+    }
+
+    public void Dispose()
+    {
+        LayoutService.ResetNavbar();
     }
 }

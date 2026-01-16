@@ -34,3 +34,8 @@ public class RestoreAssetsRequest
 {
     public List<int> AssetIds { get; set; } = new();
 }
+
+public class PurgeAssetsRequest
+{
+    public List<int> AssetIds { get; set; } = new();
+}
