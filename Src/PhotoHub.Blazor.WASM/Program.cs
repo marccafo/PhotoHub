@@ -15,11 +15,15 @@ builder.Services.AddScoped<ApiErrorNotifier>();
 builder.Services.AddScoped(sp =>
 {
     var notifier = sp.GetRequiredService<ApiErrorNotifier>();
-    var handler = new ApiErrorHandler(notifier)
+    var refreshHandler = new AuthRefreshHandler(() => sp.GetRequiredService<PhotoHub.Blazor.WASM.Services.AuthService>())
     {
         InnerHandler = new HttpClientHandler()
     };
-    return new HttpClient(handler)
+    var errorHandler = new ApiErrorHandler(notifier)
+    {
+        InnerHandler = refreshHandler
+    };
+    return new HttpClient(errorHandler)
     {
         BaseAddress = new Uri(apiBaseUrl)
     };

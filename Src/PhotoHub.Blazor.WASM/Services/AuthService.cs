@@ -9,7 +9,9 @@ public class AuthService : IAuthService
     private readonly HttpClient _httpClient;
     private readonly IJSRuntime _jsRuntime;
     private const string TokenKey = "authToken";
+    private const string RefreshTokenKey = "refreshToken";
     private const string UserKey = "authUser";
+    private const string DeviceIdKey = "deviceId";
     private UserDto? _currentUser;
 
     public event Action? OnAuthStateChanged;
@@ -24,7 +26,8 @@ public class AuthService : IAuthService
     {
         try
         {
-            var request = new LoginRequest { Username = username, Password = password };
+            var deviceId = await EnsureDeviceIdAsync();
+            var request = new LoginRequest { Username = username, Password = password, DeviceId = deviceId };
             var response = await _httpClient.PostAsJsonAsync("/api/auth/login", request);
 
             if (response.IsSuccessStatusCode)
@@ -33,6 +36,7 @@ public class AuthService : IAuthService
                 if (loginResponse != null)
                 {
                     await SaveTokenAsync(loginResponse.Token);
+                    await SaveRefreshTokenAsync(loginResponse.RefreshToken);
                     await SaveUserAsync(loginResponse.User);
                     _currentUser = loginResponse.User;
                     OnAuthStateChanged?.Invoke();
@@ -50,6 +54,7 @@ public class AuthService : IAuthService
     public async Task LogoutAsync()
     {
         await RemoveTokenAsync();
+        await RemoveRefreshTokenAsync();
         await RemoveUserAsync();
         _currentUser = null;
         OnAuthStateChanged?.Invoke();
@@ -106,9 +111,59 @@ public class AuthService : IAuthService
         return null;
     }
 
+    public async Task<bool> TryRefreshTokenAsync()
+    {
+        try
+        {
+            var refreshToken = await GetRefreshTokenAsync();
+            if (string.IsNullOrWhiteSpace(refreshToken))
+            {
+                return false;
+            }
+
+            var deviceId = await EnsureDeviceIdAsync();
+            var request = new RefreshTokenRequest
+            {
+                RefreshToken = refreshToken,
+                DeviceId = deviceId
+            };
+
+            using var message = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh")
+            {
+                Content = JsonContent.Create(request)
+            };
+            message.Options.Set(AuthRefreshHandler.SkipAuthRefresh, true);
+
+            var response = await _httpClient.SendAsync(message);
+            if (!response.IsSuccessStatusCode)
+            {
+                return false;
+            }
+
+            var refreshResponse = await response.Content.ReadFromJsonAsync<RefreshTokenResponse>();
+            if (refreshResponse == null)
+            {
+                return false;
+            }
+
+            await SaveTokenAsync(refreshResponse.Token);
+            await SaveRefreshTokenAsync(refreshResponse.RefreshToken);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public async Task SaveTokenAsync(string token)
     {
         await _jsRuntime.InvokeVoidAsync("localStorage.setItem", TokenKey, token);
+    }
+
+    public async Task SaveRefreshTokenAsync(string refreshToken)
+    {
+        await _jsRuntime.InvokeVoidAsync("localStorage.setItem", RefreshTokenKey, refreshToken);
     }
 
     public async Task SaveUserAsync(UserDto user)
@@ -124,8 +179,45 @@ public class AuthService : IAuthService
         await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", TokenKey);
     }
 
+    private async Task RemoveRefreshTokenAsync()
+    {
+        await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", RefreshTokenKey);
+    }
+
     private async Task RemoveUserAsync()
     {
         await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", UserKey);
+    }
+
+    private async Task<string?> GetRefreshTokenAsync()
+    {
+        try
+        {
+            return await _jsRuntime.InvokeAsync<string>("localStorage.getItem", RefreshTokenKey);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task<string> EnsureDeviceIdAsync()
+    {
+        try
+        {
+            var existing = await _jsRuntime.InvokeAsync<string>("localStorage.getItem", DeviceIdKey);
+            if (!string.IsNullOrWhiteSpace(existing))
+            {
+                return existing;
+            }
+        }
+        catch
+        {
+            // Ignore, we'll regenerate below.
+        }
+
+        var deviceId = Guid.NewGuid().ToString("N");
+        await _jsRuntime.InvokeVoidAsync("localStorage.setItem", DeviceIdKey, deviceId);
+        return deviceId;
     }
 }

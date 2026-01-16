@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PhotoHub.API.Shared.Data;
 using PhotoHub.API.Shared.Interfaces;
+using PhotoHub.API.Shared.Models;
 using PhotoHub.API.Shared.Services;
 using Scalar.AspNetCore;
 
@@ -29,6 +30,12 @@ public class LoginEndpoint : IEndpoint
             return Results.BadRequest(new { error = "Username and password are required" });
         }
 
+        if (string.IsNullOrWhiteSpace(request.DeviceId))
+        {
+            return Results.BadRequest(new { error = "DeviceId is required" });
+        }
+        var deviceId = request.DeviceId.Trim();
+
         var user = await dbContext.Users
             .FirstOrDefaultAsync(u => u.Username == request.Username || u.Email == request.Username, cancellationToken);
 
@@ -44,6 +51,28 @@ public class LoginEndpoint : IEndpoint
 
         // Actualizar último login
         user.LastLoginAt = DateTime.UtcNow;
+
+        // Eliminar tokens previos del mismo dispositivo
+        var existingTokens = await dbContext.RefreshTokens
+            .Where(rt => rt.UserId == user.Id && rt.DeviceId == deviceId)
+            .ToListAsync(cancellationToken);
+        if (existingTokens.Count > 0)
+        {
+            dbContext.RefreshTokens.RemoveRange(existingTokens);
+        }
+
+        var refreshToken = RefreshTokenHelper.GenerateToken();
+        var refreshTokenHash = RefreshTokenHelper.HashToken(refreshToken);
+        var refreshEntity = new RefreshToken
+        {
+            UserId = user.Id,
+            DeviceId = deviceId,
+            TokenHash = refreshTokenHash,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(30)
+        };
+        dbContext.RefreshTokens.Add(refreshEntity);
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var token = await authService.GenerateTokenAsync(user);
@@ -51,6 +80,7 @@ public class LoginEndpoint : IEndpoint
         return Results.Ok(new LoginResponse
         {
             Token = token,
+            RefreshToken = refreshToken,
             User = new UserDto
             {
                 Id = user.Id,
@@ -68,11 +98,13 @@ public class LoginRequest
 {
     public string Username { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
+    public string DeviceId { get; set; } = string.Empty;
 }
 
 public class LoginResponse
 {
     public string Token { get; set; } = string.Empty;
+    public string RefreshToken { get; set; } = string.Empty;
     public UserDto User { get; set; } = null!;
 }
 

@@ -483,6 +483,48 @@ namespace PhotoHub.Api.Migrations
                     b.ToTable("FolderPermissions");
                 });
 
+            modelBuilder.Entity("PhotoHub.API.Shared.Models.RefreshToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("DeviceId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "DeviceId");
+
+                    b.ToTable("RefreshTokens");
+                });
+
             modelBuilder.Entity("PhotoHub.API.Shared.Models.Setting", b =>
                 {
                     b.Property<string>("Key")
@@ -723,6 +765,17 @@ namespace PhotoHub.Api.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("PhotoHub.API.Shared.Models.RefreshToken", b =>
+                {
+                    b.HasOne("PhotoHub.API.Shared.Models.User", "User")
+                        .WithMany("RefreshTokens")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("PhotoHub.API.Shared.Models.Album", b =>
                 {
                     b.Navigation("AlbumAssets");
@@ -759,6 +812,8 @@ namespace PhotoHub.Api.Migrations
                     b.Navigation("FolderPermissions");
 
                     b.Navigation("OwnedAlbums");
+
+                    b.Navigation("RefreshTokens");
                 });
 #pragma warning restore 612, 618
         }

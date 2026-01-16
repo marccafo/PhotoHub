@@ -40,5 +40,6 @@ public class User
     public ICollection<Asset> Assets { get; set; } = new List<Asset>();
     public ICollection<AlbumPermission> AlbumPermissions { get; set; } = new List<AlbumPermission>();
     public ICollection<Album> OwnedAlbums { get; set; } = new List<Album>();
+    public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 }
 

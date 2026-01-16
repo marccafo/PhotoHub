@@ -22,6 +22,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<Album> Albums { get; set; }
     public DbSet<AlbumAsset> AlbumAssets { get; set; }
     public DbSet<AlbumPermission> AlbumPermissions { get; set; }
+    public DbSet<RefreshToken> RefreshTokens { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -368,6 +369,45 @@ public class ApplicationDbContext : DbContext
                 .HasConversion(
                     v => v.Kind == DateTimeKind.Utc ? DateTime.SpecifyKind(v, DateTimeKind.Unspecified) : v,
                     v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+        });
+
+        // Configure RefreshToken entity
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TokenHash).IsRequired().HasMaxLength(256);
+            entity.Property(e => e.DeviceId).IsRequired().HasMaxLength(200);
+
+            entity.HasOne(e => e.User)
+                .WithMany(u => u.RefreshTokens)
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => new { e.UserId, e.DeviceId });
+            entity.HasIndex(e => e.TokenHash).IsUnique();
+
+            entity.Property(e => e.CreatedAt)
+                .HasColumnType("timestamp without time zone")
+                .HasConversion(
+                    v => v.Kind == DateTimeKind.Utc ? DateTime.SpecifyKind(v, DateTimeKind.Unspecified) : v,
+                    v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+
+            entity.Property(e => e.ExpiresAt)
+                .HasColumnType("timestamp without time zone")
+                .HasConversion(
+                    v => v.Kind == DateTimeKind.Utc ? DateTime.SpecifyKind(v, DateTimeKind.Unspecified) : v,
+                    v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+
+            entity.Property(e => e.RevokedAt)
+                .HasColumnType("timestamp without time zone")
+                .HasConversion(
+                    v => v.HasValue && v.Value.Kind == DateTimeKind.Utc
+                        ? DateTime.SpecifyKind(v.Value, DateTimeKind.Unspecified)
+                        : v,
+                    v => v.HasValue
+                        ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc)
+                        : null);
         });
     }
 }
