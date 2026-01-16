@@ -591,6 +591,11 @@
         else
         {
             _selectedAssetIds.Remove(assetId);
+            if (_selectedAssetIds.Count == 0)
+            {
+                ExitSelectionMode();
+                return;
+            }
         }
         UpdateSelectionNavbar();
     }

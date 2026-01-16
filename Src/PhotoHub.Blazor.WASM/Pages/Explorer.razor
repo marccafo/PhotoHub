@@ -1143,6 +1143,11 @@
         else
         {
             _selectedAssetIds.Remove(assetId);
+            if (_selectedAssetIds.Count == 0)
+            {
+                ExitSelectionMode();
+                return;
+            }
         }
         UpdateSelectionNavbar();
         StateHasChanged();
@@ -1346,6 +1351,11 @@
         else
         {
             _selectedFolderIds.Remove(folderId);
+            if (_selectedFolderIds.Count == 0)
+            {
+                ExitFolderSelectionMode();
+                return;
+            }
         }
 
         UpdateSelectionNavbar();
