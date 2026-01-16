@@ -593,6 +593,51 @@
         }
     }
 
+    private void ClearCurrentFolderView()
+    {
+        _selectedFolder = null;
+        _selectedTreeFolder = null;
+        _assets.Clear();
+        _subFoldersWithThumbnails.Clear();
+        _breadcrumbs.Clear();
+        _breadcrumbFolders.Clear();
+    }
+
+    private async Task RefreshExplorerViewAsync(int? targetFolderId = null)
+    {
+        await LoadFolders();
+
+        var folderId = targetFolderId ?? _selectedFolder?.Id;
+        if (folderId.HasValue)
+        {
+            var updatedFolder = _allFolders.FirstOrDefault(f => f.Id == folderId.Value)
+                ?? FindFolderInTreeById(folderId.Value, _folderTree);
+
+            if (updatedFolder == null)
+            {
+                ClearCurrentFolderView();
+                return;
+            }
+
+            _selectedFolder = updatedFolder;
+            _selectedTreeFolder = updatedFolder;
+            _subFoldersWithThumbnails.Clear();
+            _assets.Clear();
+
+            await Task.WhenAll(
+                LoadFolderAssets(updatedFolder.Id),
+                LoadSubFoldersWithThumbnails(updatedFolder),
+                UpdateBreadcrumbs(updatedFolder)
+            );
+        }
+        else
+        {
+            ClearCurrentFolderView();
+        }
+
+        StateHasChanged();
+    }
+
     private List<TreeItemData<FolderItem>> MapToTreeItemData(List<FolderItem> folders)
     {
         return folders.Select(f => new TreeItemData<FolderItem>
@@ -951,8 +996,8 @@
 
             var created = await FolderService.CreateFolderAsync(request);
             _createFolderDialogVisible = false;
-            await LoadFolders();
-            Navigation.NavigateTo($"/explorer/folder/{created.Id}");
+            await RefreshExplorerViewAsync(created.Id);
+            Navigation.NavigateTo($"/explorer/folder/{created.Id}", replace: true);
         }
         catch (Exception ex)
         {
@@ -998,8 +1043,8 @@
 
             await FolderService.UpdateFolderAsync(_selectedFolder.Id, request);
             _editFolderDialogVisible = false;
-            await LoadFolders();
-            Navigation.NavigateTo($"/explorer/folder/{_selectedFolder.Id}");
+            await RefreshExplorerViewAsync(_selectedFolder.Id);
+            ExitFolderSelectionMode();
         }
         catch (Exception ex)
         {
@@ -1029,8 +1074,8 @@
                 await FolderService.DeleteFolderAsync(folderId);
             }
             _deleteFolderDialogVisible = false;
-            Navigation.NavigateTo("/explorer");
-            await LoadFolders();
+            await RefreshExplorerViewAsync(null);
+            Navigation.NavigateTo("/explorer", replace: true);
             ExitFolderSelectionMode();
         }
         catch (Exception ex)
@@ -1125,8 +1170,7 @@
 
             await FolderService.MoveFolderAssetsAsync(request);
             _moveAssetsDialogVisible = false;
-            await LoadFolderAssets(_selectedFolder.Id);
-            await LoadSubFoldersWithThumbnails(_selectedFolder);
+            await RefreshExplorerViewAsync();
             ExitSelectionMode();
         }
         catch (Exception ex)
@@ -1151,8 +1195,7 @@
 
             await AssetService.DeleteAssetsAsync(request);
             _deleteAssetsDialogVisible = false;
-            await LoadFolderAssets(_selectedFolder.Id);
-            await LoadSubFoldersWithThumbnails(_selectedFolder);
+            await RefreshExplorerViewAsync();
             ExitSelectionMode();
         }
         catch (Exception ex)
@@ -1177,8 +1220,7 @@
 
             await AssetService.RestoreAssetsAsync(request);
             _restoreAssetsDialogVisible = false;
-            await LoadFolderAssets(_selectedFolder.Id);
-            await LoadSubFoldersWithThumbnails(_selectedFolder);
+            await RefreshExplorerViewAsync();
             ExitSelectionMode();
         }
         catch (Exception ex)

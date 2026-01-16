@@ -19,7 +19,7 @@ public class AssetsEndpoint : IEndpoint
 
         group.MapPost("delete", DeleteAssets)
             .WithName("DeleteAssets")
-            .WithDescription("Moves assets to the user's bin and removes them from the library");
+            .WithDescription("Moves assets to the user's trash and removes them from the library");
 
         group.MapPost("restore", RestoreAssets)
             .WithName("RestoreAssets")
