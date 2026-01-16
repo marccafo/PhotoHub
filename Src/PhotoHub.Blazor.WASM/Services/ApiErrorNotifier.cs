@@ -20,10 +20,17 @@ public sealed class ApiErrorInfo
 
 public sealed class ApiErrorNotifier
 {
+    private bool _hasShown;
     public event Action<ApiErrorInfo>? OnError;
 
     public void Notify(ApiErrorInfo error)
     {
+        if (_hasShown)
+        {
+            return;
+        }
+
+        _hasShown = true;
         OnError?.Invoke(error);
     }
 }
