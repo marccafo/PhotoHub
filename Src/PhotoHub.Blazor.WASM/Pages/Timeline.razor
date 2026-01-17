@@ -406,6 +406,19 @@
     </DialogActions>
 </MudDialog>
 
+<MudDialog @bind-Visible="_deleteAssetsDialogVisible" Options="@(new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Eliminar archivos</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText>¿Quieres mover @_selectedAssetIds.Count archivos a la papelera?</MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseDeleteAssetsDialog">Cancelar</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="DeleteSelectedAsync">Eliminar</MudButton>
+    </DialogActions>
+</MudDialog>
+
 @code {
     private List<TimelineItem> _assets = new();
     private Dictionary<string, List<TimelineItem>> _groupedAssets = new();
@@ -415,12 +428,14 @@
     private bool _selectionMode = false;
     private HashSet<int> _selectedAssetIds = new();
     private bool _addToAlbumDialogVisible = false;
+    private bool _deleteAssetsDialogVisible = false;
     private List<AlbumItem> _availableAlbums = new();
     private bool _loadingAlbums = false;
     private int? _selectedAlbumId = null;
     private bool _showCreateAlbum = false;
     private string _newAlbumName = "";
     private string? _newAlbumDescription = "";
+    private bool _deleteDialogVisible = false;
     
 
     protected override async Task OnInitializedAsync()
@@ -830,6 +845,42 @@
         ExitSelectionMode();
     }
 
+    private void OpenDeleteAssetsDialog()
+    {
+        _deleteAssetsDialogVisible = true;
+    }
+
+    private void CloseDeleteAssetsDialog()
+    {
+        _deleteAssetsDialogVisible = false;
+    }
+
+    private async Task DeleteSelectedAsync()
+    {
+        if (!_selectedAssetIds.Any())
+        {
+            return;
+        }
+
+        try
+        {
+            var request = new DeleteAssetsRequest
+            {
+                AssetIds = _selectedAssetIds.ToList()
+            };
+
+            await AssetService.DeleteAssetsAsync(request);
+            _deleteAssetsDialogVisible = false;
+            Snackbar.Add($"{_selectedAssetIds.Count} elementos movidos a la papelera", Severity.Success);
+            await LoadTimeline();
+            ExitSelectionMode();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al eliminar archivos: {ex.Message}", Severity.Error);
+        }
+    }
+
     private void UpdateSelectionNavbar()
     {
         if (!_selectionMode)
@@ -862,6 +913,7 @@
                     <MudMenuItem Icon="@Icons.Material.Outlined.Edit" OnClick="@(() => HandleMoreOption("Editar fecha y hora"))">Editar fecha y hora</MudMenuItem>
                     <MudMenuItem Icon="@Icons.Material.Outlined.LocationOn" OnClick="@(() => HandleMoreOption("Editar ubicación"))">Editar ubicación</MudMenuItem>
                     <MudMenuItem Icon="@Icons.Material.Outlined.Archive" OnClick="@(() => HandleMoreOption("Archivar"))">Archivar</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Outlined.Delete" OnClick="@OpenDeleteAssetsDialog">Eliminar</MudMenuItem>
                 </MudMenu>
             </text>
         , keepDrawerVisible: true);

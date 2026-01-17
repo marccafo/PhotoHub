@@ -1,5 +1,5 @@
-@page "/explorer"
-@page "/explorer/folder/{FolderId:int}"
+@page "/folders"
+@page "/folders/{FolderId:int}"
 @using PhotoHub.Blazor.Shared.Models
 @using PhotoHub.Blazor.WASM.Services
 @inject IFolderService FolderService
@@ -10,7 +10,7 @@
 @inject LayoutService LayoutService
 @implements IDisposable
 
-<PageTitle>Explorador - PhotoHub</PageTitle>
+<PageTitle>Carpetas - PhotoHub</PageTitle>
 
 <style>
     .folder-card-container {
@@ -101,7 +101,7 @@
     }
 </style>
 
-<MudText Typo="Typo.h4" Class="mb-4">Explorador</MudText>
+<MudText Typo="Typo.h4" Class="mb-4">Carpetas</MudText>
 
 <MudGrid>
     <MudItem xs="12" md="3">
@@ -153,16 +153,6 @@
             <div class="d-flex justify-space-between align-center mt-4 mb-3">
                 <MudText Typo="Typo.h6">@(_selectedFolder != null ? "Carpetas" : "Carpetas raíz")</MudText>
                 <div class="d-flex align-center">
-                    @if (_folderSelectionMode)
-                    {
-                        <MudText Typo="Typo.body2" Class="mr-3">@_selectedFolderIds.Count seleccionadas</MudText>
-                    }
-                    else
-                    {
-                        <MudButton Variant="Variant.Text" OnClick="EnterFolderSelectionMode">
-                            Seleccionar
-                        </MudButton>
-                    }
                 </div>
             </div>
             <MudGrid Class="mb-4">
@@ -206,16 +196,6 @@
                 <div class="d-flex justify-space-between align-center mt-4 mb-3">
                     <MudText Typo="Typo.h6">Archivos</MudText>
                     <div class="d-flex align-center">
-                        @if (_selectionMode)
-                        {
-                            <MudText Typo="Typo.body2" Class="mr-3">@_selectedAssetIds.Count seleccionadas</MudText>
-                        }
-                        else
-                        {
-                            <MudButton Variant="Variant.Text" OnClick="EnterSelectionMode">
-                                Seleccionar
-                            </MudButton>
-                        }
                     </div>
                 </div>
                 <MudGrid Class="mt-4">
@@ -437,7 +417,7 @@
             else
             {
                 Snackbar.Add("Carpeta no encontrada", Severity.Warning);
-                Navigation.NavigateTo("/explorer");
+                Navigation.NavigateTo("/folders");
             }
         }
         else
@@ -447,12 +427,12 @@
                 var trashFolder = FindTrashFolder();
                 if (trashFolder != null)
                 {
-                    Navigation.NavigateTo($"/explorer/folder/{trashFolder.Id}", replace: true);
+                    Navigation.NavigateTo($"/folders/{trashFolder.Id}", replace: true);
                     return;
                 }
 
                 Snackbar.Add("No se encontró la papelera para este usuario.", Severity.Warning);
-                Navigation.NavigateTo("/explorer", replace: true);
+                Navigation.NavigateTo("/folders", replace: true);
                 return;
             }
 
@@ -460,7 +440,7 @@
             var rootFolder = FindUserRootFolder();
             if (rootFolder != null)
             {
-                Navigation.NavigateTo($"/explorer/folder/{rootFolder.Id}", replace: true);
+                Navigation.NavigateTo($"/folders/{rootFolder.Id}", replace: true);
                 return;
             }
 
@@ -604,7 +584,7 @@
         _breadcrumbFolders.Clear();
     }
 
-    private async Task RefreshExplorerViewAsync(int? targetFolderId = null)
+    private async Task RefreshFoldersViewAsync(int? targetFolderId = null)
     {
         await LoadFolders();
 
@@ -662,7 +642,7 @@
         _assets = new List<TimelineItem>();
         
         // Actualizar la URL sin recargar la página
-        Navigation.NavigateTo($"/explorer/folder/{folder.Id}", replace: false);
+        Navigation.NavigateTo($"/folders/{folder.Id}", replace: false);
         return Task.CompletedTask;
     }
 
@@ -695,7 +675,7 @@
         _breadcrumbFolders = new List<FolderItem?>();
         
         // Agregar "Inicio" que navega a la raíz - usar href especial para navegación
-        _breadcrumbs.Add(new BreadcrumbItem("Inicio", $"/explorer"));
+        _breadcrumbs.Add(new BreadcrumbItem("Inicio", $"/folders"));
         _breadcrumbFolders.Add(null); // null indica que es la raíz
         
         // Construir la ruta completa desde la raíz hasta la carpeta actual
@@ -713,7 +693,7 @@
             }
             var breadcrumbText = GetDisplayFolderName(pathFolder);
             // Usar href con el ID de la carpeta para navegación directa
-            _breadcrumbs.Add(new BreadcrumbItem(breadcrumbText, $"/explorer/folder/{pathFolder.Id}"));
+            _breadcrumbs.Add(new BreadcrumbItem(breadcrumbText, $"/folders/{pathFolder.Id}"));
             _breadcrumbFolders.Add(pathFolder);
         }
     }
@@ -1005,8 +985,8 @@
 
             var created = await FolderService.CreateFolderAsync(request);
             _createFolderDialogVisible = false;
-            await RefreshExplorerViewAsync(created.Id);
-            Navigation.NavigateTo($"/explorer/folder/{created.Id}", replace: true);
+            await RefreshFoldersViewAsync(created.Id);
+            Navigation.NavigateTo($"/folders/{created.Id}", replace: true);
         }
         catch (Exception ex)
         {
@@ -1052,7 +1032,7 @@
 
             await FolderService.UpdateFolderAsync(_selectedFolder.Id, request);
             _editFolderDialogVisible = false;
-            await RefreshExplorerViewAsync(_selectedFolder.Id);
+            await RefreshFoldersViewAsync(_selectedFolder.Id);
             ExitFolderSelectionMode();
         }
         catch (Exception ex)
@@ -1083,8 +1063,8 @@
                 await FolderService.DeleteFolderAsync(folderId);
             }
             _deleteFolderDialogVisible = false;
-            await RefreshExplorerViewAsync(null);
-            Navigation.NavigateTo("/explorer", replace: true);
+            await RefreshFoldersViewAsync(null);
+            Navigation.NavigateTo("/folders", replace: true);
             ExitFolderSelectionMode();
         }
         catch (Exception ex)
@@ -1158,13 +1138,6 @@
     private bool IsTrashFolderSelected
         => _selectedFolder != null && _selectedFolder.Path.Replace('\\', '/').Contains("/_trash", StringComparison.OrdinalIgnoreCase);
 
-    private void EnterSelectionMode()
-    {
-        _selectionMode = true;
-        _folderSelectionMode = false;
-        _selectedFolderIds.Clear();
-        UpdateSelectionNavbar();
-    }
 
     private void ExitSelectionMode()
     {
@@ -1250,7 +1223,7 @@
 
             await FolderService.MoveFolderAssetsAsync(request);
             _moveAssetsDialogVisible = false;
-            await RefreshExplorerViewAsync();
+            await RefreshFoldersViewAsync();
             ExitSelectionMode();
         }
         catch (Exception ex)
@@ -1275,7 +1248,7 @@
 
             await AssetService.DeleteAssetsAsync(request);
             _deleteAssetsDialogVisible = false;
-            await RefreshExplorerViewAsync();
+            await RefreshFoldersViewAsync();
             ExitSelectionMode();
         }
         catch (Exception ex)
@@ -1300,7 +1273,7 @@
 
             await AssetService.RestoreAssetsAsync(request);
             _restoreAssetsDialogVisible = false;
-            await RefreshExplorerViewAsync();
+            await RefreshFoldersViewAsync();
             ExitSelectionMode();
         }
         catch (Exception ex)
@@ -1309,13 +1282,6 @@
         }
     }
 
-    private void EnterFolderSelectionMode()
-    {
-        _folderSelectionMode = true;
-        _selectionMode = false;
-        _selectedAssetIds.Clear();
-        UpdateSelectionNavbar();
-    }
 
     private void ExitFolderSelectionMode()
     {

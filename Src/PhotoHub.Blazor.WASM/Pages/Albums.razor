@@ -177,20 +177,8 @@ else
     }
     else if (_albumAssets.Any())
     {
-        <div class="d-flex justify-space-between align-center mb-3">
+        <div class="mb-3">
             <MudText Typo="Typo.h6">Archivos</MudText>
-            <div class="d-flex align-center">
-                @if (_assetSelectionMode)
-                {
-                    <MudText Typo="Typo.body2" Class="mr-3">@_selectedAlbumAssetIds.Count seleccionadas</MudText>
-                }
-                else
-                {
-                    <MudButton Variant="Variant.Text" OnClick="EnterAssetSelectionMode">
-                        Seleccionar
-                    </MudButton>
-                }
-            </div>
         </div>
         <MudGrid>
             @foreach (var asset in _albumAssets)
@@ -639,6 +627,11 @@ else
         else
         {
             _selectedAlbumIds.Remove(albumId);
+            if (_selectedAlbumIds.Count == 0)
+            {
+                ExitAlbumSelectionMode();
+                return;
+            }
         }
 
         UpdateSelectionNavbar();
@@ -774,14 +767,6 @@ else
 
         await LeaveAlbum(album);
         ExitAlbumSelectionMode();
-    }
-
-    private void EnterAssetSelectionMode()
-    {
-        _assetSelectionMode = true;
-        _albumSelectionMode = false;
-        _selectedAlbumIds.Clear();
-        UpdateSelectionNavbar();
     }
 
     private void ExitAssetSelectionMode()

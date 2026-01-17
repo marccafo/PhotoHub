@@ -11,6 +11,8 @@
 
 <PageTitle>Papelera - PhotoHub</PageTitle>
 
+<MudText Typo="Typo.h4" Class="mb-4">Papelera</MudText>
+
 @if (_loading)
 {
     <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
@@ -18,12 +20,6 @@
 
 <div class="trash-toolbar">
     <div class="d-flex align-center">
-        @if (!_selectionMode)
-        {
-            <MudButton Variant="Variant.Text" OnClick="EnterSelectionMode">
-                Seleccionar
-            </MudButton>
-        }
     </div>
     <MudSpacer />
     <MudButton Variant="Variant.Text" Disabled="@(!_assets.Any())" OnClick="OpenRestoreAllDialog">
@@ -564,11 +560,6 @@
         return path.Replace('\\', '/').TrimEnd('/');
     }
 
-    private void EnterSelectionMode()
-    {
-        _selectionMode = true;
-        UpdateSelectionNavbar();
-    }
 
     private void ExitSelectionMode()
     {
