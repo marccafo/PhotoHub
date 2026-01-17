@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.Http.Headers;
+using System.Text.Json;
 using PhotoHub.Blazor.Shared.Models;
 
 namespace PhotoHub.Blazor.Shared.Services;
@@ -200,7 +201,18 @@ public class AlbumService : IAlbumService
             var request = new { AssetId = assetId };
             var response = await _httpClient.PostAsJsonAsync($"/api/albums/{albumId}/assets", request);
             ThrowIfForbidden(response);
-            return response.IsSuccessStatusCode;
+            if (response.IsSuccessStatusCode)
+            {
+                return true;
+            }
+
+            var message = NormalizeAlbumErrorMessage(await TryReadApiErrorMessageAsync(response));
+            if (!string.IsNullOrWhiteSpace(message))
+            {
+                throw new InvalidOperationException(message);
+            }
+
+            return false;
         }
         catch (UnauthorizedAccessException)
         {
@@ -249,5 +261,66 @@ public class AlbumService : IAlbumService
         {
             return false;
         }
+    }
+
+    private static async Task<string?> TryReadApiErrorMessageAsync(HttpResponseMessage response)
+    {
+        if (response.Content == null)
+        {
+            return null;
+        }
+
+        var content = await response.Content.ReadAsStringAsync();
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(content);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return content.Trim();
+            }
+
+            var message = TryGetString(document.RootElement, "error")
+                ?? TryGetString(document.RootElement, "message")
+                ?? TryGetString(document.RootElement, "detail")
+                ?? TryGetString(document.RootElement, "title");
+
+            return message ?? content.Trim();
+        }
+        catch
+        {
+            return content.Trim();
+        }
+    }
+
+    private static string? TryGetString(JsonElement element, string propertyName)
+    {
+        if (element.TryGetProperty(propertyName, out var value) &&
+            value.ValueKind == JsonValueKind.String)
+        {
+            return value.GetString();
+        }
+
+        return null;
+    }
+
+    private static string? NormalizeAlbumErrorMessage(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return null;
+        }
+
+        var trimmed = message.Trim();
+        if (trimmed.Contains("already in this album", StringComparison.OrdinalIgnoreCase))
+        {
+            return "El elemento ya está en el álbum.";
+        }
+
+        return trimmed;
     }
 }

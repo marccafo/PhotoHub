@@ -4,6 +4,10 @@ html, body {
     padding: 0;
 }
 
+.mud-icon-button {
+    padding: 8px;
+}
+
 .asset-card {
     cursor: pointer;
     transition: transform 0.2s, box-shadow 0.2s;

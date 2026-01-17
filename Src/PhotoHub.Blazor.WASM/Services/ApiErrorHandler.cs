@@ -21,7 +21,7 @@ public sealed class ApiErrorHandler : DelegatingHandler
         {
             var response = await base.SendAsync(request, cancellationToken);
 
-            if (!response.IsSuccessStatusCode)
+            if (!response.IsSuccessStatusCode && (int)response.StatusCode >= 500)
             {
                 var content = await ReadContentAsync(response);
                 var (message, traceId) = ExtractMessageAndTraceId(content);
@@ -42,30 +42,12 @@ public sealed class ApiErrorHandler : DelegatingHandler
 
             return response;
         }
-        catch (HttpRequestException ex)
+        catch (HttpRequestException)
         {
-            var info = new ApiErrorInfo
-            {
-                Title = "Error de conexión",
-                Message = ex.Message,
-                Url = request.RequestUri?.ToString(),
-                Method = request.Method.Method
-            };
-
-            _notifier.Notify(info);
             throw;
         }
-        catch (TaskCanceledException ex)
+        catch (TaskCanceledException)
         {
-            var info = new ApiErrorInfo
-            {
-                Title = "Tiempo de espera agotado",
-                Message = ex.Message,
-                Url = request.RequestUri?.ToString(),
-                Method = request.Method.Method
-            };
-
-            _notifier.Notify(info);
             throw;
         }
     }

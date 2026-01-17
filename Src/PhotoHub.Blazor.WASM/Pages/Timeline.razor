@@ -731,6 +731,8 @@
         }
 
         var failed = 0;
+        var alreadyInAlbum = 0;
+        var permissionDenied = false;
         foreach (var assetId in _selectedAssetIds.ToList())
         {
             try
@@ -741,6 +743,17 @@
                     failed++;
                 }
             }
+            catch (InvalidOperationException)
+            {
+                alreadyInAlbum++;
+                failed++;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                permissionDenied = true;
+                failed++;
+                break;
+            }
             catch
             {
                 failed++;
@@ -750,13 +763,30 @@
         CloseAddToAlbumDialog();
         ExitSelectionMode();
 
+        if (permissionDenied)
+        {
+            Snackbar.Add("No tienes permisos suficientes para añadir elementos a este álbum.", Severity.Error);
+            return;
+        }
+
         if (failed == 0)
         {
             Snackbar.Add("Elementos añadidos al álbum", Severity.Success);
         }
         else
         {
-            Snackbar.Add("Algunos elementos no se pudieron añadir", Severity.Warning);
+            if (alreadyInAlbum > 0)
+            {
+                var message = alreadyInAlbum == 1
+                    ? "El elemento ya está en el álbum."
+                    : $"{alreadyInAlbum} elementos ya estaban en el álbum.";
+                Snackbar.Add(message, Severity.Warning);
+            }
+
+            if (failed > alreadyInAlbum)
+            {
+                Snackbar.Add("Algunos elementos no se pudieron añadir", Severity.Warning);
+            }
         }
     }
 

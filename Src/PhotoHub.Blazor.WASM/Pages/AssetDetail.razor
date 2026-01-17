@@ -618,6 +618,10 @@ else
                 Snackbar.Add("Error al añadir la foto al álbum", Severity.Error);
             }
         }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
         catch (UnauthorizedAccessException)
         {
             Snackbar.Add("No tienes permisos suficientes para añadir fotos a este álbum.", Severity.Error);
@@ -651,6 +655,10 @@ else
                 {
                     Snackbar.Add("Álbum creado pero error al añadir la foto", Severity.Warning);
                 }
+            }
+            catch (InvalidOperationException ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Warning);
             }
             catch (UnauthorizedAccessException)
             {
