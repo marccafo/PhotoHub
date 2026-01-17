@@ -1,4 +1,5 @@
 @page "/"
+@using Microsoft.AspNetCore.Components
 @using PhotoHub.Blazor.WASM.Services
 @inject IAssetService AssetService
 @inject IAlbumService AlbumService
@@ -426,7 +427,7 @@
     {
         await LoadTimeline();
     }
-    
+
     private string? GetDateFromQuery()
     {
         var uri = Navigation.ToAbsoluteUri(Navigation.Uri);

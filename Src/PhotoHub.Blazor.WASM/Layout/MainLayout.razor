@@ -28,8 +28,11 @@
             <MudSpacer />
 
             <div class="search-container d-none d-md-flex">
-                <MudTextField @bind-Value="_searchQuery" 
-                              Placeholder="Buscar fotos, personas, lugares..." 
+                <MudTextField @bind-Value="_searchQuery"
+                              @bind-Value:after="@(() => OnSearchQueryChanged(_searchQuery))"
+                              Immediate="true"
+                              DebounceInterval="250"
+                              Placeholder="Buscar archivos por nombre..." 
                               Adornment="Adornment.Start" 
                               AdornmentIcon="@Icons.Material.Filled.Search" 
                               Variant="Variant.Outlined" 
@@ -150,11 +153,9 @@
             margin-top: 0;
         }
         .search-field .mud-input-outlined-border {
-            background-color: var(--mud-palette-background-grey);
             border: none;
         }
         .search-field:focus-within .mud-input-outlined-border {
-            background-color: var(--mud-palette-surface);
             border: 1px solid var(--mud-palette-primary);
         }
         @* .custom-navbar { *@
@@ -179,8 +180,8 @@
             padding: 24px;
         }
     </style>
-    <MudMainContent>
-        <div class="page-content" style="min-height: 100%;">
+    <MudMainContent Style="flex-grow: 1; display: flex; flex-direction: column;">
+        <div class="page-content" style="flex-grow: 1;">
             @Body
         </div>
     </MudMainContent>
@@ -212,6 +213,7 @@
         AuthService.OnAuthStateChanged += HandleAuthStateChanged;
         Navigation.LocationChanged += HandleLocationChanged;
         ApiErrorNotifier.OnError += HandleApiError;
+        UpdateSearchQueryFromUri();
     }
 
     protected override async Task OnInitializedAsync()
@@ -284,6 +286,7 @@
 
     private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
+        UpdateSearchQueryFromUri();
         StateHasChanged();
     }
 
@@ -315,6 +318,73 @@
         {
             notification.IsRead = true;
         }
+    }
+
+    private void OnSearchQueryChanged(string value)
+    {
+        _searchQuery = value ?? string.Empty;
+        UpdateSearchQueryInUrl(_searchQuery);
+    }
+
+    private void UpdateSearchQueryFromUri()
+    {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        if (!uri.AbsolutePath.Equals("/search", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!string.IsNullOrEmpty(_searchQuery))
+            {
+                _searchQuery = string.Empty;
+            }
+            return;
+        }
+
+        var queryParams = ParseQuery(uri.Query);
+        var newValue = queryParams.TryGetValue("search", out var value) ? value : string.Empty;
+
+        if (!string.Equals(_searchQuery, newValue, StringComparison.Ordinal))
+        {
+            _searchQuery = newValue;
+        }
+    }
+
+    private void UpdateSearchQueryInUrl(string value)
+    {
+        var trimmed = value?.Trim() ?? string.Empty;
+        var targetUri = string.IsNullOrWhiteSpace(trimmed)
+            ? "/search"
+            : $"/search?search={Uri.EscapeDataString(trimmed)}";
+        var currentPathAndQuery = Navigation.ToAbsoluteUri(Navigation.Uri).PathAndQuery;
+
+        if (!string.Equals(currentPathAndQuery, targetUri, StringComparison.OrdinalIgnoreCase))
+        {
+            Navigation.NavigateTo(targetUri, replace: true);
+        }
+    }
+
+    private static Dictionary<string, string> ParseQuery(string? query)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return result;
+        }
+
+        var trimmed = query.TrimStart('?');
+        var pairs = trimmed.Split('&', StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var pair in pairs)
+        {
+            var parts = pair.Split('=', 2);
+            var key = Uri.UnescapeDataString(parts[0]);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                continue;
+            }
+            var value = parts.Length > 1 ? Uri.UnescapeDataString(parts[1]) : string.Empty;
+            result[key] = value;
+        }
+
+        return result;
     }
 
     private sealed class NotificationItem

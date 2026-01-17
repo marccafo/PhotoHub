@@ -1,0 +1,112 @@
+@page "/search"
+@using Microsoft.AspNetCore.Components
+@inject IAssetService AssetService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>Buscar - PhotoHub</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Resultados de búsqueda</MudText>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+}
+else
+{
+    @if (string.IsNullOrWhiteSpace(_searchTerm))
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-4">Escribe un nombre de archivo para buscar.</MudAlert>
+    }
+    else if (!_results.Any())
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-4">No se encontraron archivos con ese nombre.</MudAlert>
+    }
+    else
+    {
+        <MudText Typo="Typo.subtitle2" Class="mb-2">
+            @($"Resultados: {_results.Count}")
+        </MudText>
+        <MudGrid Class="mt-2">
+            @foreach (var asset in _results)
+            {
+                <MudItem xs="12" sm="6" md="4" lg="3" xl="2">
+                    <AssetCard Asset="@asset" OnAssetClick="OpenAsset" />
+                </MudItem>
+            }
+        </MudGrid>
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "search")] public string? SearchTerm { get; set; }
+
+    private List<TimelineItem> _allAssets = new();
+    private List<TimelineItem> _results = new();
+    private bool _loading = true;
+    private string _searchTerm = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAssetsAsync();
+        ApplyFilter();
+    }
+
+    protected override Task OnParametersSetAsync()
+    {
+        var newTerm = (SearchTerm ?? string.Empty).Trim();
+        if (!string.Equals(_searchTerm, newTerm, StringComparison.Ordinal))
+        {
+            _searchTerm = newTerm;
+            ApplyFilter();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task LoadAssetsAsync()
+    {
+        try
+        {
+            _loading = true;
+            _allAssets = await AssetService.GetTimelineAsync();
+            _allAssets = _allAssets
+                .OrderByDescending(a => a.CreatedDate)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar archivos: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ApplyFilter()
+    {
+        if (string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            _results = new List<TimelineItem>();
+            return;
+        }
+
+        _results = _allAssets
+            .Where(a => a.FileName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    private void OpenAsset(TimelineItem asset)
+    {
+        if (asset.SyncStatus == AssetSyncStatus.Synced)
+        {
+            Navigation.NavigateTo($"/asset/{asset.Id}");
+        }
+        else
+        {
+            var encodedPath = System.Net.WebUtility.UrlEncode(asset.FullPath);
+            Navigation.NavigateTo($"/asset/0?path={encodedPath}");
+        }
+    }
+}
