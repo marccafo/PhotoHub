@@ -570,10 +570,18 @@ public class FoldersEndpoint : IEndpoint
         dbContext.FolderPermissions.RemoveRange(permissions);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        var physicalPath = await settingsService.ResolvePhysicalPathAsync(folder.Path);
-        if (Directory.Exists(physicalPath))
+        try
         {
-            Directory.Delete(physicalPath, recursive: true);
+            var physicalPath = await settingsService.ResolvePhysicalPathAsync(folder.Path);
+            if (Directory.Exists(physicalPath))
+            {
+                Directory.Delete(physicalPath, recursive: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log error or handle specifically if needed. 
+            // We continue because DB records are already removed, so the folder is "deleted" from app perspective.
         }
 
         return Results.NoContent();
@@ -695,6 +703,18 @@ public class FoldersEndpoint : IEndpoint
             return true;
         }
 
+        var folder = await dbContext.Folders
+            .AsNoTracking()
+            .FirstOrDefaultAsync(f => f.Id == folderId, ct);
+
+        if (folder == null) return false;
+
+        // Comprobación rápida para carpetas compartidas
+        if (folder.Path.Replace('\\', '/').StartsWith("/assets/shared", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
         var hasPermissions = await dbContext.FolderPermissions
             .AnyAsync(p => p.FolderId == folderId, ct);
 
@@ -714,6 +734,23 @@ public class FoldersEndpoint : IEndpoint
             return true;
         }
 
+        var folder = await dbContext.Folders
+            .AsNoTracking()
+            .FirstOrDefaultAsync(f => f.Id == folderId, ct);
+
+        if (folder == null) return false;
+
+        // Si es una carpeta compartida, por defecto permitimos escribir si no hay permisos específicos que lo prohíban
+        // O si preferimos ser restrictivos, comprobamos si el usuario tiene permiso explícito.
+        // Dado que GetFoldersForUserAsync permite ver carpetas sin permisos, CanWrite debería ser similar.
+        var hasPermissions = await dbContext.FolderPermissions
+            .AnyAsync(p => p.FolderId == folderId, ct);
+
+        if (!hasPermissions)
+        {
+            return true;
+        }
+
         return await dbContext.FolderPermissions
             .AnyAsync(p => p.UserId == userId && p.FolderId == folderId && p.CanWrite, ct);
     }
@@ -721,6 +758,20 @@ public class FoldersEndpoint : IEndpoint
     private static async Task<bool> CanDeleteFolderAsync(ApplicationDbContext dbContext, int userId, bool isAdmin, int folderId, CancellationToken ct)
     {
         if (isAdmin)
+        {
+            return true;
+        }
+
+        var folder = await dbContext.Folders
+            .AsNoTracking()
+            .FirstOrDefaultAsync(f => f.Id == folderId, ct);
+
+        if (folder == null) return false;
+
+        var hasPermissions = await dbContext.FolderPermissions
+            .AnyAsync(p => p.FolderId == folderId, ct);
+
+        if (!hasPermissions)
         {
             return true;
         }
@@ -873,7 +924,8 @@ public class FoldersEndpoint : IEndpoint
             .ToListAsync(ct);
 
         var childrenLookup = allFolders
-            .GroupBy(f => f.ParentFolderId)
+            .Where(f => f.ParentFolderId != null)
+            .GroupBy(f => f.ParentFolderId!.Value)
             .ToDictionary(g => g.Key, g => g.Select(x => x.Id).ToList());
 
         var result = new HashSet<int>();

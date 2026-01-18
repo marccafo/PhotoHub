@@ -967,7 +967,7 @@ else
             _allFolders = await FolderService.GetFoldersAsync();
         }
 
-        // 1. Identificar carpetas raíz técnicas (ParentFolderId == null)
+        // 1. Identificar carpetas raíz técnicas (ParentFolderId == null) que pertenecen al usuario o son compartidas
         var rootFolders = _allFolders.Where(f => f.ParentFolderId == null && !IsBinPath(f.Path)).ToList();
 
         foreach (var folder in rootFolders)
@@ -975,30 +975,42 @@ else
             var thumbnail = await GetFolderFirstAssetThumbnail(folder.Id);
             var item = new FolderWithThumbnail { Folder = folder, FirstAsset = thumbnail };
 
-            if (folder.IsShared)
+            if (folder.IsShared || folder.Path.Replace('\\', '/').StartsWith("/assets/shared", StringComparison.OrdinalIgnoreCase))
             {
-                _sharedFolders.Add(item);
+                if (!_sharedFolders.Any(f => f.Folder.Id == folder.Id))
+                {
+                    _sharedFolders.Add(item);
+                }
             }
             else
             {
-                _personalFolders.Add(item);
+                // Verificar si está en la ruta del usuario
+                var normalized = folder.Path.Replace('\\', '/');
+                bool isInUserRoot = false;
+                
+                if (!string.IsNullOrEmpty(_userRootPrefix) && normalized.StartsWith(_userRootPrefix, StringComparison.OrdinalIgnoreCase)) 
+                    isInUserRoot = true;
+                else if (!string.IsNullOrEmpty(_userRootPhysicalPrefix) && normalized.StartsWith(_userRootPhysicalPrefix, StringComparison.OrdinalIgnoreCase))
+                    isInUserRoot = true;
+                // Si no tenemos prefijos aún o es una carpeta que cuelga directamente de /assets/users/{id}
+                else if (normalized.Contains($"/assets/users/{_userId}/", StringComparison.OrdinalIgnoreCase))
+                    isInUserRoot = true;
+
+                if (isInUserRoot && !_personalFolders.Any(f => f.Folder.Id == folder.Id))
+                {
+                    _personalFolders.Add(item);
+                }
             }
         }
 
-        // 2. Si el usuario no tiene carpetas en el nivel superior técnico (ej. su raíz es /assets/users/1/), 
-        // buscamos su carpeta raíz personal para mostrarla en "Mi Espacio".
-        if (!_personalFolders.Any())
+        // 2. Si el usuario tiene una carpeta raíz específica (la carpeta del propio usuario)
+        // y no la hemos añadido ya, la añadimos para que pueda entrar en ella si contiene assets directos
+        // o si es la única forma de ver sus subcarpetas (aunque rootFolders ya debería haber traído sus hijos).
+        var userRoot = FindUserRootFolder();
+        if (userRoot != null && !_personalFolders.Any(f => f.Folder.Id == userRoot.Id))
         {
-            var userRoot = FindUserRootFolder();
-            if (userRoot != null)
-            {
-                // Solo la añadimos si no está ya (aunque al no haber _personalFolders es seguro)
-                if (!_personalFolders.Any(f => f.Folder.Id == userRoot.Id))
-                {
-                    var thumbnail = await GetFolderFirstAssetThumbnail(userRoot.Id);
-                    _personalFolders.Add(new FolderWithThumbnail { Folder = userRoot, FirstAsset = thumbnail });
-                }
-            }
+            var thumbnail = await GetFolderFirstAssetThumbnail(userRoot.Id);
+            _personalFolders.Add(new FolderWithThumbnail { Folder = userRoot, FirstAsset = thumbnail });
         }
         
         // 3. Lo mismo para el espacio compartido si estuviera vacío por temas de rutas
@@ -1571,14 +1583,30 @@ else
 
         try
         {
+            var isShared = _selectedFolder?.IsShared ?? false;
             foreach (var folderId in _selectedFolderIds.ToList())
             {
                 await FolderService.DeleteFolderAsync(folderId);
             }
+            
             _deleteFolderDialogVisible = false;
-            await RefreshFoldersViewAsync(null);
-            Navigation.NavigateTo("/folders", replace: true);
+            
+            // Si estábamos dentro de una carpeta que hemos borrado (no debería ser posible borrar la actual desde la lista, 
+            // pero si se borra una subcarpeta queremos refrescar la vista actual)
+            if (_selectedFolder != null && _selectedFolderIds.Contains(_selectedFolder.Id))
+            {
+                await RefreshFoldersViewAsync(null);
+                string space = isShared ? "shared" : "own";
+                Navigation.NavigateTo($"/folders/{space}", replace: true);
+            }
+            else
+            {
+                // Refrescar la carpeta actual
+                await RefreshFoldersViewAsync(_selectedFolder?.Id);
+            }
+            
             ExitFolderSelectionMode();
+            Snackbar.Add("Carpeta eliminada correctamente", Severity.Success);
         }
         catch (Exception ex)
         {
