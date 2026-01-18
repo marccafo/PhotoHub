@@ -63,40 +63,219 @@
     .asset-select-container.selected .asset-select-checkbox {
         opacity: 1;
     }
+
+    .albums-search {
+        min-width: 140px;
+    }
+
+    .albums-tabs {
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+
+    .albums-tabs :global(.mud-tabs-toolbar) {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .albums-tabs :global(.mud-tab) {
+        padding: 6px 12px;
+        min-width: 0;
+        flex: 1 1 0;
+        justify-content: center;
+    }
+
+    .albums-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+    }
+
+
+    .album-year-header {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        margin: 16px 0 8px;
+    }
+
+    .album-year-count {
+        color: var(--mud-palette-text-secondary);
+    }
+
+    .album-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .album-list-item {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 12px;
+        border-radius: 12px;
+        background: var(--mud-palette-surface);
+        transition: background 0.2s ease;
+    }
+
+    .album-list-item:hover {
+        background: var(--mud-palette-action-hover);
+    }
+
+    .album-list-thumb {
+        width: 96px;
+        height: 96px;
+        position: relative;
+        flex: 0 0 96px;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .album-list-info {
+        min-width: 0;
+    }
+
+    .album-list-title {
+        font-weight: 600;
+    }
+
+    .album-list-meta {
+        color: var(--mud-palette-text-secondary);
+    }
 </style>
 
 @if (_selectedAlbum == null)
 {
-    <div class="d-flex justify-space-between align-center mb-4">
-        <MudText Typo="Typo.h4">Álbumes</MudText>
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Add"
-                   OnClick="OpenCreateDialog">
-            Crear Álbum
-        </MudButton>
-    </div>
+    <MudText Typo="Typo.h4" Class="mb-4">Álbumes</MudText>
+
+    <MudTabs @bind-ActivePanelIndex="AlbumFilterIndex" Class="albums-tabs" Centered="true">
+        <MudTabPanel Text="Todos" />
+        <MudTabPanel Text="Propios" />
+        <MudTabPanel Text="Compartidos" />
+    </MudTabs>
     
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="albums-toolbar" Wrap="Wrap.Wrap">
+            <MudTextField @bind-Value="_albumSearch"
+                          Placeholder="Buscar álbumes"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Dense="true"
+                          Immediate="true"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          Class="albums-search" />
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="OpenCreateDialog">
+                Crear Álbum
+            </MudButton>
+            <MudSelect T="AlbumSort"
+                       @bind-Value="_albumSort"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense"
+                       Dense="true">
+                <MudSelectItem Value="AlbumSort.Recent">Foto más reciente</MudSelectItem>
+                <MudSelectItem Value="AlbumSort.Oldest">Foto más antigua</MudSelectItem>
+                <MudSelectItem Value="AlbumSort.Name">Nombre</MudSelectItem>
+            </MudSelect>
+            <MudButton Variant="Variant.Text"
+                       Color="@(_groupByYear ? Color.Primary : Color.Default)"
+                       Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.CalendarMonth"
+                       OnClick="ToggleGroupByYear">
+                Agrupar por año
+            </MudButton>
+            <MudButton Variant="Variant.Text"
+                       Size="Size.Small"
+                       StartIcon="@AlbumViewActionIcon"
+                       OnClick="ToggleAlbumViewMode">
+                @AlbumViewActionLabel
+            </MudButton>
+        </MudStack>
+
     @if (_loading)
     {
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
     }
-    else if (_albums.Any())
+    else
     {
-        <MudGrid>
-            @foreach (var album in _albums)
+        var albumGroups = GetAlbumGroups();
+        var hasAlbums = albumGroups.Any(group => group.Albums.Any());
+
+        if (hasAlbums)
+        {
+            @foreach (var group in albumGroups)
             {
-                <MudItem xs="12" sm="6" md="4" lg="3">
-                    <div class="album-card-container @(_albumSelectionMode ? "selection-mode" : "") @(IsAlbumSelected(album.Id) ? "selected" : "")"
-                         @onclick="@(() => OnAlbumCardClick(album.Id))">
-                        <div class="album-select-checkbox" @onclick:stopPropagation="true">
-                            <MudCheckBox T="bool"
-                                         Value="@IsAlbumSelected(album.Id)"
-                                         ValueChanged="@(EventCallback.Factory.Create<bool>(this, value => ToggleAlbumSelection(album.Id, value)))" />
-                        </div>
-                        <MudCard Class="album-card" Style="cursor: pointer;">
-                            <MudCardContent Style="padding: 0;">
-                                <div style="position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: hidden;">
+                if (group.Year.HasValue)
+                {
+                    <div class="album-year-header">
+                        <MudText Typo="Typo.h5">@group.Year</MudText>
+                        <MudText Typo="Typo.body2" Class="album-year-count">@($"{group.Albums.Count} álbumes")</MudText>
+                    </div>
+                }
+
+                if (_albumViewMode == AlbumViewMode.Grid)
+                {
+                    <MudGrid>
+                        @foreach (var album in group.Albums)
+                        {
+                            <MudItem xs="12" sm="6" md="4" lg="3">
+                                <div class="album-card-container @(_albumSelectionMode ? "selection-mode" : "") @(IsAlbumSelected(album.Id) ? "selected" : "")"
+                                     @onclick="@(() => OnAlbumCardClick(album.Id))">
+                                    <div class="album-select-checkbox" @onclick:stopPropagation="true">
+                                        <MudCheckBox T="bool"
+                                                     Value="@IsAlbumSelected(album.Id)"
+                                                     ValueChanged="@(EventCallback.Factory.Create<bool>(this, value => ToggleAlbumSelection(album.Id, value)))" />
+                                    </div>
+                                    <MudCard Class="album-card" Style="cursor: pointer;">
+                                        <MudCardContent Style="padding: 0;">
+                                            <div style="position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: hidden;">
+                                                @if (!string.IsNullOrEmpty(album.CoverThumbnailUrl))
+                                                {
+                                                    <img src="@album.CoverThumbnailUrl"
+                                                         style="width: 100%; height: 100%; object-fit: cover;"
+                                                         alt="@album.Name" />
+                                                }
+                                                else
+                                                {
+                                                    <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--mud-palette-primary) 0%, var(--mud-palette-primary-dark) 100%);">
+                                                        <MudIcon Icon="@Icons.Material.Filled.Collections"
+                                                                 Size="Size.Large"
+                                                                 Color="Color.Default" />
+                                                    </div>
+                                                }
+                                                <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 16px; background: linear-gradient(transparent, rgba(0,0,0,0.8));">
+                                                    <MudText Typo="Typo.h6" Style="color: white; font-weight: 600;">@album.Name</MudText>
+                                                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.9);">
+                                                        @album.AssetCount @(album.AssetCount == 1 ? "foto" : "fotos")
+                                                    </MudText>
+                                                </div>
+                                            </div>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </div>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                }
+                else
+                {
+                    <div class="album-list">
+                        @foreach (var album in group.Albums)
+                        {
+                            <div class="album-list-item album-card-container @(_albumSelectionMode ? "selection-mode" : "") @(IsAlbumSelected(album.Id) ? "selected" : "")"
+                                 @onclick="@(() => OnAlbumCardClick(album.Id))">
+                                <div class="album-list-thumb">
+                                    <div class="album-select-checkbox" @onclick:stopPropagation="true">
+                                        <MudCheckBox T="bool"
+                                                     Value="@IsAlbumSelected(album.Id)"
+                                                     ValueChanged="@(EventCallback.Factory.Create<bool>(this, value => ToggleAlbumSelection(album.Id, value)))" />
+                                    </div>
                                     @if (!string.IsNullOrEmpty(album.CoverThumbnailUrl))
                                     {
                                         <img src="@album.CoverThumbnailUrl"
@@ -107,27 +286,27 @@
                                     {
                                         <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--mud-palette-primary) 0%, var(--mud-palette-primary-dark) 100%);">
                                             <MudIcon Icon="@Icons.Material.Filled.Collections"
-                                                     Size="Size.Large"
+                                                     Size="Size.Medium"
                                                      Color="Color.Default" />
                                         </div>
                                     }
-                                    <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 16px; background: linear-gradient(transparent, rgba(0,0,0,0.8));">
-                                        <MudText Typo="Typo.h6" Style="color: white; font-weight: 600;">@album.Name</MudText>
-                                        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.9);">
-                                            @album.AssetCount @(album.AssetCount == 1 ? "foto" : "fotos")
-                                        </MudText>
-                                    </div>
                                 </div>
-                            </MudCardContent>
-                        </MudCard>
+                                <div class="album-list-info">
+                                    <MudText Typo="Typo.subtitle1" Class="album-list-title">@album.Name</MudText>
+                                    <MudText Typo="Typo.body2" Class="album-list-meta">
+                                        @album.AssetCount @(album.AssetCount == 1 ? "foto" : "fotos")
+                                    </MudText>
+                                </div>
+                            </div>
+                        }
                     </div>
-                </MudItem>
+                }
             }
-        </MudGrid>
-    }
-    else
-    {
-        <MudAlert Severity="Severity.Info">No hay álbumes. Crea uno para comenzar.</MudAlert>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info">No hay álbumes que coincidan con los filtros.</MudAlert>
+        }
     }
 }
 else
@@ -276,6 +455,26 @@ else
 @code {
     [Parameter] public int AlbumId { get; set; }
 
+    private enum AlbumFilter
+    {
+        All = 0,
+        Own = 1,
+        Shared = 2
+    }
+
+    private enum AlbumViewMode
+    {
+        Grid,
+        List
+    }
+
+    private enum AlbumSort
+    {
+        Recent,
+        Oldest,
+        Name
+    }
+
     private List<AlbumItem> _albums = new();
     private AlbumItem? _selectedAlbum;
     private List<TimelineItem> _albumAssets = new();
@@ -285,6 +484,11 @@ else
     private bool _assetSelectionMode = false;
     private HashSet<int> _selectedAlbumIds = new();
     private HashSet<int> _selectedAlbumAssetIds = new();
+    private string _albumSearch = string.Empty;
+    private AlbumFilter _albumFilter = AlbumFilter.All;
+    private AlbumViewMode _albumViewMode = AlbumViewMode.Grid;
+    private AlbumSort _albumSort = AlbumSort.Recent;
+    private bool _groupByYear = true;
 
     // Dialogs
     private bool _createDialogVisible = false;
@@ -300,6 +504,18 @@ else
     private string _deleteTargetAlbumName = "";
 
     private List<BreadcrumbItem> _breadcrumbs = new();
+
+    private int AlbumFilterIndex
+    {
+        get => (int)_albumFilter;
+        set => _albumFilter = (AlbumFilter)value;
+    }
+
+    private string AlbumViewActionLabel => _albumViewMode == AlbumViewMode.Grid ? "Lista" : "Cuadrícula";
+
+    private string AlbumViewActionIcon => _albumViewMode == AlbumViewMode.Grid
+        ? Icons.Material.Filled.ViewList
+        : Icons.Material.Filled.ViewModule;
 
     protected override async Task OnInitializedAsync()
     {
@@ -383,6 +599,51 @@ else
         {
             _loadingAssets = false;
         }
+    }
+
+    private List<AlbumYearGroup> GetAlbumGroups()
+    {
+        var albums = GetFilteredAlbums();
+
+        if (!_groupByYear)
+        {
+            return new List<AlbumYearGroup> { new AlbumYearGroup(null, albums) };
+        }
+
+        return albums
+            .GroupBy(album => album.CreatedAt.Year)
+            .OrderByDescending(group => group.Key)
+            .Select(group => new AlbumYearGroup(group.Key, group.ToList()))
+            .ToList();
+    }
+
+    private List<AlbumItem> GetFilteredAlbums()
+    {
+        IEnumerable<AlbumItem> query = _albums;
+
+        query = _albumFilter switch
+        {
+            AlbumFilter.Own => query.Where(album => album.IsOwner),
+            AlbumFilter.Shared => query.Where(album => !album.IsOwner),
+            _ => query
+        };
+
+        if (!string.IsNullOrWhiteSpace(_albumSearch))
+        {
+            var term = _albumSearch.Trim();
+            query = query.Where(album =>
+                album.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                (album.Description?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        query = _albumSort switch
+        {
+            AlbumSort.Oldest => query.OrderBy(album => album.UpdatedAt),
+            AlbumSort.Name => query.OrderBy(album => album.Name),
+            _ => query.OrderByDescending(album => album.UpdatedAt)
+        };
+
+        return query.ToList();
     }
 
     private void OpenAlbum(int albumId)
@@ -960,4 +1221,16 @@ else
     {
         LayoutService.ResetNavbar();
     }
+
+    private void ToggleAlbumViewMode()
+    {
+        _albumViewMode = _albumViewMode == AlbumViewMode.Grid ? AlbumViewMode.List : AlbumViewMode.Grid;
+    }
+
+    private void ToggleGroupByYear()
+    {
+        _groupByYear = !_groupByYear;
+    }
+
+    private sealed record AlbumYearGroup(int? Year, List<AlbumItem> Albums);
 }
