@@ -10,6 +10,7 @@ public class AlbumItem
     public int AssetCount { get; set; }
     public string? CoverThumbnailUrl { get; set; }
     public bool IsOwner { get; set; }
+    public bool IsShared { get; set; }
     public bool CanView { get; set; }
     public bool CanEdit { get; set; }
     public bool CanDelete { get; set; }

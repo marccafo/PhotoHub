@@ -123,6 +123,7 @@ public class AlbumsEndpoint : IEndpoint
                 UpdatedAt = a.UpdatedAt,
                 AssetCount = a.AlbumAssets.Count,
                 IsOwner = a.OwnerId == userId,
+                IsShared = a.Permissions.Any(p => p.CanView),
                 CanView = a.OwnerId == userId || a.Permissions.Any(p => p.UserId == userId && p.CanView),
                 CanEdit = a.OwnerId == userId || a.Permissions.Any(p => p.UserId == userId && p.CanEdit),
                 CanDelete = a.OwnerId == userId || a.Permissions.Any(p => p.UserId == userId && p.CanDelete),
@@ -207,6 +208,7 @@ public class AlbumsEndpoint : IEndpoint
                 UpdatedAt = album.UpdatedAt,
                 AssetCount = album.AlbumAssets.Count,
                 IsOwner = album.OwnerId == userId,
+                IsShared = album.Permissions.Any(p => p.CanView),
                 CanView = album.OwnerId == userId || album.Permissions.Any(p => p.UserId == userId && p.CanView),
                 CanEdit = album.OwnerId == userId || album.Permissions.Any(p => p.UserId == userId && p.CanEdit),
                 CanDelete = album.OwnerId == userId || album.Permissions.Any(p => p.UserId == userId && p.CanDelete),
@@ -747,6 +749,7 @@ public class AlbumResponse
     public int AssetCount { get; set; }
     public string? CoverThumbnailUrl { get; set; }
     public bool IsOwner { get; set; }
+    public bool IsShared { get; set; }
     public bool CanView { get; set; }
     public bool CanEdit { get; set; }
     public bool CanDelete { get; set; }
