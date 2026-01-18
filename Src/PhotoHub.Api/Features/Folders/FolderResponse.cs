@@ -8,5 +8,7 @@ public class FolderResponse
     public int? ParentFolderId { get; set; }
     public DateTime CreatedAt { get; set; }
     public int AssetCount { get; set; }
+    public bool IsShared { get; set; }
+    public bool IsOwner { get; set; }
     public List<FolderResponse> SubFolders { get; set; } = new();
 }

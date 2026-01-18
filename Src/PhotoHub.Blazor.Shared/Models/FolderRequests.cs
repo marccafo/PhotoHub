@@ -4,6 +4,7 @@ public class CreateFolderRequest
 {
     public string Name { get; set; } = string.Empty;
     public int? ParentFolderId { get; set; }
+    public bool IsSharedSpace { get; set; }
 }
 
 public class UpdateFolderRequest

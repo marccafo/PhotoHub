@@ -1,5 +1,5 @@
 @page "/albums"
-@page "/albums/filter/{Filter}"
+@page "/albums/{Filter}"
 @page "/albums/{AlbumId:int}"
 @using PhotoHub.Blazor.WASM.Services
 @inject IAlbumService AlbumService
@@ -69,6 +69,27 @@
         max-width: 300px;
     }
 
+    .album-card-container {
+        position: relative;
+        cursor: pointer;
+        width: 100%;
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--mud-palette-surface);
+        transition: transform 0.2s, box-shadow 0.2s;
+        border: 1px solid var(--mud-palette-divider);
+    }
+
+    .album-card-container:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--mud-elevation-4);
+    }
+
+    .album-card {
+        background: transparent !important;
+        box-shadow: none !important;
+    }
+
     .albums-toolbar {
         display: flex;
         align-items: center;
@@ -103,6 +124,8 @@
         border-radius: 12px;
         background: var(--mud-palette-surface);
         transition: background 0.2s ease;
+        cursor: pointer;
+        position: relative;
     }
 
     .album-list-item:hover {
@@ -128,6 +151,7 @@
 
     .album-list-meta {
         color: var(--mud-palette-text-secondary);
+        font-size: 0.85rem;
     }
 
     .fab-container {
@@ -284,7 +308,7 @@
                     <MudGrid>
                         @foreach (var album in group.Albums)
                         {
-                            <MudItem xs="12" sm="6" md="4" lg="3">
+                            <MudItem xs="6" sm="4" md="3" lg="2">
                                 <div class="album-card-container @(_albumSelectionMode ? "selection-mode" : "") @(IsAlbumSelected(album.Id) ? "selected" : "")"
                                      @onclick="@(() => OnAlbumCardClick(album.Id))">
                                     <div class="album-select-checkbox" @onclick:stopPropagation="true">
@@ -315,9 +339,9 @@
                                                                  Color="Color.Default" />
                                                     </div>
                                                 }
-                                                <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 16px; background: linear-gradient(transparent, rgba(0,0,0,0.8));">
-                                                    <MudText Typo="Typo.h6" Style="color: white; font-weight: 600;">@album.Name</MudText>
-                                                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.9);">
+                                                <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 12px; background: linear-gradient(transparent, rgba(0,0,0,0.8));">
+                                                    <MudText Typo="Typo.body2" Style="color: white; font-weight: 600; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">@album.Name</MudText>
+                                                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.9);">
                                                         @album.AssetCount @(album.AssetCount == 1 ? "foto" : "fotos")
                                                     </MudText>
                                                 </div>
@@ -369,19 +393,6 @@
                                         @album.AssetCount @(album.AssetCount == 1 ? "foto" : "fotos")
                                     </MudText>
                                 </div>
-                                <MudSpacer />
-                                <MudMenu Icon="@Icons.Material.Filled.MoreVert" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true" @onclick:stopPropagation="true">
-                                    @if (album.IsOwner)
-                                    {
-                                        <MudMenuItem OnClick="@(() => OpenPermissionsDialog(album.Id))">Permisos</MudMenuItem>
-                                        <MudMenuItem OnClick="@(() => OpenEditDialog(album))">Editar</MudMenuItem>
-                                        <MudMenuItem OnClick="@(() => OpenDeleteDialog(album))">Eliminar</MudMenuItem>
-                                    }
-                                    else
-                                    {
-                                        <MudMenuItem OnClick="@(() => LeaveAlbum(album))">Salir del álbum</MudMenuItem>
-                                    }
-                                </MudMenu>
                             </div>
                         }
                     </div>
@@ -404,7 +415,7 @@ else
         <div class="album-hero-bg" style="background-image: url('@(_selectedAlbum?.CoverThumbnailUrl ?? "")'); background-color: var(--mud-palette-primary);"></div>
         
         <div class="album-hero-back">
-            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" OnClick="@(() => Navigation.NavigateTo("/albums"))" Title="Volver a álbumes" />
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" OnClick="@(() => Navigation.NavigateTo($"/albums/{(_selectedAlbum?.IsOwner == true ? "own" : "shared")}"))" Title="Volver a álbumes" />
         </div>
 
         <div class="album-hero-actions">
@@ -679,7 +690,7 @@ else
                 _ => AlbumFilter.All
             };
         }
-        else
+        else if (AlbumId == 0)
         {
             _albumFilter = AlbumFilter.All;
         }

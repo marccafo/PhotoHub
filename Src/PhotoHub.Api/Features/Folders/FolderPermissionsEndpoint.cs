@@ -1,0 +1,259 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using PhotoHub.API.Shared.Data;
+using PhotoHub.API.Shared.Interfaces;
+using PhotoHub.API.Shared.Models;
+using Scalar.AspNetCore;
+
+namespace PhotoHub.API.Features.Folders;
+
+public class FolderPermissionsEndpoint : IEndpoint
+{
+    public void MapEndpoint(IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/folders/{folderId}/permissions")
+            .WithTags("Folders")
+            .RequireAuthorization();
+
+        group.MapGet("", GetFolderPermissions)
+            .WithName("GetFolderPermissions")
+            .WithDescription("Gets all permissions for a folder");
+
+        group.MapPost("", SetFolderPermission)
+            .WithName("SetFolderPermission")
+            .WithDescription("Sets or updates folder permissions for a user");
+
+        group.MapDelete("{userId:int}", RemoveFolderPermission)
+            .WithName("RemoveFolderPermission")
+            .WithDescription("Removes folder permission for a user");
+    }
+
+    private async Task<IResult> GetFolderPermissions(
+        int folderId,
+        [FromServices] ApplicationDbContext dbContext,
+        ClaimsPrincipal user,
+        CancellationToken cancellationToken)
+    {
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var currentUserId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var isAdmin = user.IsInRole("Admin");
+
+        // Validate folder exists and user has access to manage it
+        var folder = await dbContext.Folders
+            .Include(f => f.Permissions)
+            .ThenInclude(p => p.User)
+            .FirstOrDefaultAsync(f => f.Id == folderId, cancellationToken);
+
+        if (folder == null)
+        {
+            return Results.NotFound(new { error = "Folder not found" });
+        }
+
+        // Must be admin or have CanManagePermissions
+        var hasAccess = isAdmin || 
+            folder.Permissions.Any(p => p.UserId == currentUserId && p.CanManagePermissions);
+
+        if (!hasAccess)
+        {
+            return Results.Forbid();
+        }
+
+        var permissions = folder.Permissions.Select(p => new FolderPermissionDto
+        {
+            Id = p.Id,
+            UserId = p.UserId,
+            Username = p.User.Username,
+            Email = p.User.Email,
+            CanRead = p.CanRead,
+            CanWrite = p.CanWrite,
+            CanDelete = p.CanDelete,
+            CanManagePermissions = p.CanManagePermissions,
+            GrantedAt = p.GrantedAt,
+            GrantedByUserId = p.GrantedByUserId
+        }).ToList();
+
+        return Results.Ok(permissions);
+    }
+
+    private async Task<IResult> SetFolderPermission(
+        int folderId,
+        [FromBody] SetFolderPermissionRequest request,
+        [FromServices] ApplicationDbContext dbContext,
+        ClaimsPrincipal user,
+        CancellationToken cancellationToken)
+    {
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var currentUserId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var isAdmin = user.IsInRole("Admin");
+
+        // Validate folder exists
+        var folder = await dbContext.Folders
+            .Include(f => f.Permissions)
+            .FirstOrDefaultAsync(f => f.Id == folderId, cancellationToken);
+
+        if (folder == null)
+        {
+            return Results.NotFound(new { error = "Folder not found" });
+        }
+
+        // Must be admin or have CanManagePermissions
+        var hasAccess = isAdmin || 
+            folder.Permissions.Any(p => p.UserId == currentUserId && p.CanManagePermissions);
+
+        if (!hasAccess)
+        {
+            return Results.Forbid();
+        }
+
+        // Validate target user exists
+        var targetUser = await dbContext.Users
+            .FirstOrDefaultAsync(u => u.Id == request.UserId, cancellationToken);
+
+        if (targetUser == null)
+        {
+            return Results.NotFound(new { error = $"User with ID {request.UserId} not found" });
+        }
+
+        // Check if permission already exists
+        var existingPermission = await dbContext.FolderPermissions
+            .FirstOrDefaultAsync(
+                p => p.FolderId == folderId && p.UserId == request.UserId,
+                cancellationToken);
+
+        FolderPermission permission;
+
+        if (existingPermission != null)
+        {
+            // Update existing permission
+            existingPermission.CanRead = request.CanRead;
+            existingPermission.CanWrite = request.CanWrite;
+            existingPermission.CanDelete = request.CanDelete;
+            existingPermission.CanManagePermissions = request.CanManagePermissions;
+            existingPermission.GrantedByUserId = currentUserId;
+            existingPermission.GrantedAt = DateTime.UtcNow;
+            permission = existingPermission;
+        }
+        else
+        {
+            // Create new permission
+            permission = new FolderPermission
+            {
+                FolderId = folderId,
+                UserId = request.UserId,
+                CanRead = request.CanRead,
+                CanWrite = request.CanWrite,
+                CanDelete = request.CanDelete,
+                CanManagePermissions = request.CanManagePermissions,
+                GrantedByUserId = currentUserId,
+                GrantedAt = DateTime.UtcNow
+            };
+            dbContext.FolderPermissions.Add(permission);
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        // Load related data for response
+        await dbContext.Entry(permission)
+            .Reference(p => p.User)
+            .LoadAsync(cancellationToken);
+
+        var response = new FolderPermissionDto
+        {
+            Id = permission.Id,
+            UserId = permission.UserId,
+            Username = permission.User.Username,
+            Email = permission.User.Email,
+            CanRead = permission.CanRead,
+            CanWrite = permission.CanWrite,
+            CanDelete = permission.CanDelete,
+            CanManagePermissions = permission.CanManagePermissions,
+            GrantedAt = permission.GrantedAt,
+            GrantedByUserId = permission.GrantedByUserId
+        };
+
+        return Results.Ok(response);
+    }
+
+    private async Task<IResult> RemoveFolderPermission(
+        int folderId,
+        int userId,
+        [FromServices] ApplicationDbContext dbContext,
+        ClaimsPrincipal user,
+        CancellationToken cancellationToken)
+    {
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var currentUserId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var isAdmin = user.IsInRole("Admin");
+
+        // Validate folder exists
+        var folder = await dbContext.Folders
+            .Include(f => f.Permissions)
+            .FirstOrDefaultAsync(f => f.Id == folderId, cancellationToken);
+
+        if (folder == null)
+        {
+            return Results.NotFound(new { error = "Folder not found" });
+        }
+
+        // Must be admin or have CanManagePermissions
+        var hasAccess = isAdmin || 
+            folder.Permissions.Any(p => p.UserId == currentUserId && p.CanManagePermissions);
+
+        if (!hasAccess)
+        {
+            return Results.Forbid();
+        }
+
+        var permission = await dbContext.FolderPermissions
+            .FirstOrDefaultAsync(
+                p => p.FolderId == folderId && p.UserId == userId,
+                cancellationToken);
+
+        if (permission == null)
+        {
+            return Results.NotFound(new { error = "Permission not found" });
+        }
+
+        dbContext.FolderPermissions.Remove(permission);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return Results.NoContent();
+    }
+}
+
+public class SetFolderPermissionRequest
+{
+    public int UserId { get; set; }
+    public bool CanRead { get; set; }
+    public bool CanWrite { get; set; }
+    public bool CanDelete { get; set; }
+    public bool CanManagePermissions { get; set; }
+}
+
+public class FolderPermissionDto
+{
+    public int Id { get; set; }
+    public int UserId { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public bool CanRead { get; set; }
+    public bool CanWrite { get; set; }
+    public bool CanDelete { get; set; }
+    public bool CanManagePermissions { get; set; }
+    public DateTime GrantedAt { get; set; }
+    public int? GrantedByUserId { get; set; }
+}

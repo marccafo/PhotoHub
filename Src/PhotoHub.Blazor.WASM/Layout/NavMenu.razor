@@ -25,21 +25,20 @@
                 <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.PhotoLibrary" IconColor="Color.Inherit">
                     Fotos
                 </MudNavLink>
-                <MudNavLink Href="/folders" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Folder" IconColor="Color.Inherit">
-                    Carpetas
-                </MudNavLink>
+
+                <MudNavGroup Title="Carpetas" Icon="@Icons.Material.Outlined.Folder" Expanded="true">
+                    <MudNavLink Href="/folders/own" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Person">Mi Espacio</MudNavLink>
+                    <MudNavLink Href="/folders/shared" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Groups">Espacio Compartido</MudNavLink>
+                </MudNavGroup>
+
                 <MudNavLink Href="/map" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Map" IconColor="Color.Inherit">
                     Mapa
                 </MudNavLink>
-                <MudNavLink Href="/albums" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Collections" IconColor="Color.Inherit">
-                    Álbumes
-                </MudNavLink>
-                <MudNavLink Href="/albums/filter/own" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Person" IconColor="Color.Inherit" Class="ml-4">
-                    Mis Álbumes
-                </MudNavLink>
-                <MudNavLink Href="/albums/filter/shared" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.People" IconColor="Color.Inherit" Class="ml-4">
-                    Compartidos
-                </MudNavLink>
+
+                <MudNavGroup Title="Álbumes" Icon="@Icons.Material.Outlined.Collections" Expanded="true">
+                    <MudNavLink Href="/albums/own" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Person">Mis Álbumes</MudNavLink>
+                    <MudNavLink Href="/albums/shared" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.People">Compartidos</MudNavLink>
+                </MudNavGroup>
                 
                 <MudDivider Class="my-2" />
                 
@@ -58,21 +57,20 @@
             <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.PhotoLibrary" IconColor="Color.Inherit">
                 Fotos
             </MudNavLink>
-            <MudNavLink Href="/folders" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Folder" IconColor="Color.Inherit">
-                Carpetas
-            </MudNavLink>
+
+            <MudNavGroup Title="Carpetas" Icon="@Icons.Material.Outlined.Folder" Expanded="true">
+                <MudNavLink Href="/folders/own" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Person">Mi Espacio</MudNavLink>
+                <MudNavLink Href="/folders/shared" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Groups">Espacio Compartido</MudNavLink>
+            </MudNavGroup>
+
             <MudNavLink Href="/map" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Map" IconColor="Color.Inherit">
                 Mapa
             </MudNavLink>
-            <MudNavLink Href="/albums" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Collections" IconColor="Color.Inherit">
-                Álbumes
-            </MudNavLink>
-            <MudNavLink Href="/albums/filter/own" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Person" IconColor="Color.Inherit" Class="ml-4">
-                Mis Álbumes
-            </MudNavLink>
-            <MudNavLink Href="/albums/filter/shared" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.People" IconColor="Color.Inherit" Class="ml-4">
-                Compartidos
-            </MudNavLink>
+
+            <MudNavGroup Title="Álbumes" Icon="@Icons.Material.Outlined.Collections" Expanded="true">
+                <MudNavLink Href="/albums/own" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Person">Mis Álbumes</MudNavLink>
+                <MudNavLink Href="/albums/shared" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.People">Compartidos</MudNavLink>
+            </MudNavGroup>
             
             <MudDivider Class="my-2" />
             

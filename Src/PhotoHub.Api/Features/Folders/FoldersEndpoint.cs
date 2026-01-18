@@ -107,14 +107,24 @@ public class FoldersEndpoint : IEndpoint
             var isAdmin = user.IsInRole("Admin");
             var folders = await GetFoldersForUserAsync(dbContext, userId, isAdmin, includeAssets: true, cancellationToken);
 
-            var response = folders.Select(f => new FolderResponse
+            var permissions = await dbContext.FolderPermissions
+                .Where(p => p.UserId == userId)
+                .ToListAsync(cancellationToken);
+
+            var response = folders.Select(f =>
             {
-                Id = f.Id,
-                Path = f.Path,
-                Name = f.Name,
-                ParentFolderId = f.ParentFolderId,
-                CreatedAt = f.CreatedAt,
-                AssetCount = f.Assets.Count(a => IsBinPath(f.Path) ? a.DeletedAt != null : a.DeletedAt == null)
+                var userPerm = permissions.FirstOrDefault(p => p.FolderId == f.Id);
+                return new FolderResponse
+                {
+                    Id = f.Id,
+                    Path = f.Path,
+                    Name = f.Name,
+                    ParentFolderId = f.ParentFolderId,
+                    CreatedAt = f.CreatedAt,
+                    AssetCount = f.Assets.Count(a => IsBinPath(f.Path) ? a.DeletedAt != null : a.DeletedAt == null),
+                    IsOwner = userPerm?.CanManagePermissions ?? isAdmin,
+                    IsShared = f.Path.StartsWith("/assets/shared", StringComparison.OrdinalIgnoreCase)
+                };
             }).ToList();
 
             ApplyRecursiveCounts(response);
@@ -343,10 +353,20 @@ public class FoldersEndpoint : IEndpoint
         }
 
         var name = request.Name.Trim();
-        var userRootPath = GetUserRootPath(userId);
-        var normalizedPath = NormalizePath(parentFolder == null
-            ? $"{userRootPath}/{name}"
-            : $"{parentFolder.Path.TrimEnd('/')}/{name}");
+        string normalizedPath;
+        
+        if (parentFolder != null)
+        {
+            normalizedPath = NormalizePath($"{parentFolder.Path.TrimEnd('/')}/{name}");
+        }
+        else if (request.IsSharedSpace)
+        {
+            normalizedPath = NormalizePath($"{GetSharedRootPath()}/{name}");
+        }
+        else
+        {
+            normalizedPath = NormalizePath($"{GetUserRootPath(userId)}/{name}");
+        }
 
         var physicalPath = await settingsService.ResolvePhysicalPathAsync(normalizedPath);
         if (Directory.Exists(physicalPath))
@@ -391,7 +411,9 @@ public class FoldersEndpoint : IEndpoint
             Name = folder.Name,
             ParentFolderId = folder.ParentFolderId,
             CreatedAt = folder.CreatedAt,
-            AssetCount = 0
+            AssetCount = 0,
+            IsOwner = true,
+            IsShared = normalizedPath.StartsWith("/assets/shared", StringComparison.OrdinalIgnoreCase)
         };
 
         return Results.Ok(response);
@@ -888,6 +910,11 @@ public class FoldersEndpoint : IEndpoint
         return $"/assets/users/{userId}";
     }
 
+    private static string GetSharedRootPath()
+    {
+        return "/assets/shared";
+    }
+
     private static bool IsBinPath(string path)
     {
         var normalized = NormalizePath(path);
@@ -937,6 +964,7 @@ public class CreateFolderRequest
 {
     public string Name { get; set; } = string.Empty;
     public int? ParentFolderId { get; set; }
+    public bool IsSharedSpace { get; set; }
 }
 
 public class UpdateFolderRequest
