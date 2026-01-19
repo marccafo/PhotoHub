@@ -110,6 +110,28 @@
         color: var(--mud-palette-text-secondary);
     }
 
+    .album-shared-badge {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        background: rgba(0,0,0,0.5);
+        color: white;
+        padding: 2px 6px;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        z-index: 5;
+    }
+
+    .album-list-shared-badge {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        color: var(--mud-palette-text-secondary);
+        font-size: 0.875rem;
+    }
+
     .album-list {
         display: flex;
         flex-direction: column;
@@ -161,16 +183,6 @@
         z-index: 100;
     }
 
-    .shared-indicator {
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        background: rgba(0,0,0,0.4);
-        border-radius: 50%;
-        padding: 4px;
-        color: white;
-        z-index: 2;
-    }
 
     /* Estilos para el Hero del álbum */
     .album-hero {
@@ -316,10 +328,11 @@
                                                      Value="@IsAlbumSelected(album.Id)"
                                                      ValueChanged="@(EventCallback.Factory.Create<bool>(this, value => ToggleAlbumSelection(album.Id, value)))" />
                                     </div>
-                                    @if (album.IsShared)
+                                    @if (album.SharedWithCount > 1)
                                     {
-                                        <div class="shared-indicator">
-                                            <MudIcon Icon="@Icons.Material.Filled.People" Size="Size.Small" />
+                                        <div class="album-shared-badge" title="Compartido con @album.SharedWithCount usuarios">
+                                            <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" />
+                                            <span>@album.SharedWithCount</span>
                                         </div>
                                     }
                                     <MudCard Class="album-card" Style="cursor: pointer;">
@@ -384,9 +397,12 @@
                                 <div class="album-list-info">
                                     <MudText Typo="Typo.subtitle1" Class="album-list-title">
                                         @album.Name
-                                        @if (album.IsShared)
+                                        @if (album.SharedWithCount > 1)
                                         {
-                                            <MudIcon Icon="@Icons.Material.Filled.People" Size="Size.Small" Class="ml-1" Color="Color.Info" />
+                                            <div class="album-list-shared-badge" title="Compartido con @album.SharedWithCount usuarios">
+                                                <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" />
+                                                <span>@album.SharedWithCount</span>
+                                            </div>
                                         }
                                     </MudText>
                                     <MudText Typo="Typo.body2" Class="album-list-meta">

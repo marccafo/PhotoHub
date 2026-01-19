@@ -11,6 +11,7 @@ public class AlbumItem
     public string? CoverThumbnailUrl { get; set; }
     public bool IsOwner { get; set; }
     public bool IsShared { get; set; }
+    public int SharedWithCount { get; set; }
     public bool CanView { get; set; }
     public bool CanEdit { get; set; }
     public bool CanDelete { get; set; }

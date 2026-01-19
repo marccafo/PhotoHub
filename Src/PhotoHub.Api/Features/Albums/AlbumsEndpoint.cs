@@ -114,6 +114,22 @@ public class AlbumsEndpoint : IEndpoint
                 .OrderByDescending(a => a.UpdatedAt)
                 .ToListAsync(cancellationToken);
 
+            var albumIds = albums.Select(a => a.Id).ToList();
+            var sharedCounts = await dbContext.AlbumPermissions
+                .Include(p => p.Album)
+                .Where(p => albumIds.Contains(p.AlbumId) && p.CanView)
+                .ToListAsync(cancellationToken);
+
+            var albumSharedCounts = sharedCounts
+                .GroupBy(p => p.AlbumId)
+                .Select(g => new
+                {
+                    AlbumId = g.Key,
+                    // Contamos todos los que NO son el dueño del álbum
+                    Count = g.Count(p => p.UserId != p.Album.OwnerId)
+                })
+                .ToDictionary(x => x.AlbumId, x => x.Count);
+
             var response = albums.Select(a => new AlbumResponse
             {
                 Id = a.Id,
@@ -124,6 +140,7 @@ public class AlbumsEndpoint : IEndpoint
                 AssetCount = a.AlbumAssets.Count,
                 IsOwner = a.OwnerId == userId,
                 IsShared = a.Permissions.Any(p => p.CanView),
+                SharedWithCount = (albumSharedCounts.TryGetValue(a.Id, out var count) ? count : 0) + 1,
                 CanView = a.OwnerId == userId || a.Permissions.Any(p => p.UserId == userId && p.CanView),
                 CanEdit = a.OwnerId == userId || a.Permissions.Any(p => p.UserId == userId && p.CanEdit),
                 CanDelete = a.OwnerId == userId || a.Permissions.Any(p => p.UserId == userId && p.CanDelete),
@@ -185,6 +202,9 @@ public class AlbumsEndpoint : IEndpoint
                 return Results.Forbid();
             }
 
+            var sharedCount = await dbContext.AlbumPermissions
+                .CountAsync(p => p.AlbumId == albumId && p.CanView && p.UserId != album.OwnerId, cancellationToken) + 1;
+
             string? coverUrl = null;
             if (album.CoverAssetId.HasValue && album.CoverAsset?.Thumbnails.Any(t => t.Size == ThumbnailSize.Medium) == true)
             {
@@ -209,6 +229,7 @@ public class AlbumsEndpoint : IEndpoint
                 AssetCount = album.AlbumAssets.Count,
                 IsOwner = album.OwnerId == userId,
                 IsShared = album.Permissions.Any(p => p.CanView),
+                SharedWithCount = sharedCount,
                 CanView = album.OwnerId == userId || album.Permissions.Any(p => p.UserId == userId && p.CanView),
                 CanEdit = album.OwnerId == userId || album.Permissions.Any(p => p.UserId == userId && p.CanEdit),
                 CanDelete = album.OwnerId == userId || album.Permissions.Any(p => p.UserId == userId && p.CanDelete),
@@ -750,6 +771,7 @@ public class AlbumResponse
     public string? CoverThumbnailUrl { get; set; }
     public bool IsOwner { get; set; }
     public bool IsShared { get; set; }
+    public int SharedWithCount { get; set; }
     public bool CanView { get; set; }
     public bool CanEdit { get; set; }
     public bool CanDelete { get; set; }

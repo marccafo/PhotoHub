@@ -107,12 +107,19 @@ public class FolderPermissionsEndpoint : IEndpoint
         }
 
         // Must be admin or have CanManagePermissions
-        var hasAccess = isAdmin || 
+        var isOwner = folder.Path.Contains($"/users/{currentUserId}");
+        var hasAccess = isAdmin || isOwner ||
             folder.Permissions.Any(p => p.UserId == currentUserId && p.CanManagePermissions);
 
         if (!hasAccess)
         {
             return Results.Forbid();
+        }
+
+        // No permitir modificar permisos del propietario
+        if (request.UserId == currentUserId && isOwner)
+        {
+            return Results.BadRequest(new { error = "No se pueden modificar los permisos del propietario de la carpeta." });
         }
 
         // Validate target user exists
@@ -210,12 +217,19 @@ public class FolderPermissionsEndpoint : IEndpoint
         }
 
         // Must be admin or have CanManagePermissions
-        var hasAccess = isAdmin || 
+        var isOwner = folder.Path.Contains($"/users/{currentUserId}");
+        var hasAccess = isAdmin || isOwner ||
             folder.Permissions.Any(p => p.UserId == currentUserId && p.CanManagePermissions);
 
         if (!hasAccess)
         {
             return Results.Forbid();
+        }
+
+        // No permitir eliminar permisos del propietario
+        if (userId == currentUserId && isOwner)
+        {
+            return Results.BadRequest(new { error = "No se pueden eliminar los permisos del propietario de la carpeta." });
         }
 
         var permission = await dbContext.FolderPermissions

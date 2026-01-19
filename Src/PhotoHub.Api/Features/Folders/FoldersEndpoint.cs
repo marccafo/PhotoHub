@@ -109,10 +109,21 @@ public class FoldersEndpoint : IEndpoint
 
             var folderIds = folders.Select(f => f.Id).ToList();
             var sharedCounts = await dbContext.FolderPermissions
+                .Include(p => p.Folder)
                 .Where(p => folderIds.Contains(p.FolderId) && p.CanRead)
+                .ToListAsync(cancellationToken);
+
+            var folderSharedCounts = sharedCounts
                 .GroupBy(p => p.FolderId)
-                .Select(g => new { FolderId = g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.FolderId, x => x.Count, cancellationToken);
+                .Select(g => new
+                {
+                    FolderId = g.Key,
+                    // Contamos todos los que NO son el dueño de la carpeta
+                    Count = g.Count(p => p.UserId != (p.Folder.Path.Contains("/assets/users/") 
+                        ? int.Parse(p.Folder.Path.Split('/')[3]) 
+                        : 0))
+                })
+                .ToDictionary(x => x.FolderId, x => x.Count);
 
             var permissions = await dbContext.FolderPermissions
                 .Where(p => p.UserId == userId)
@@ -131,7 +142,7 @@ public class FoldersEndpoint : IEndpoint
                     AssetCount = f.Assets.Count(a => IsBinPath(f.Path) ? a.DeletedAt != null : a.DeletedAt == null),
                     IsOwner = userPerm?.CanManagePermissions ?? isAdmin,
                     IsShared = f.Path.StartsWith("/assets/shared", StringComparison.OrdinalIgnoreCase),
-                    SharedWithCount = sharedCounts.TryGetValue(f.Id, out var count) ? count : 0
+                    SharedWithCount = (folderSharedCounts.TryGetValue(f.Id, out var count) ? count : 0) + 1
                 };
             }).ToList();
 
@@ -178,7 +189,9 @@ public class FoldersEndpoint : IEndpoint
 
             var isAdmin = user.IsInRole("Admin");
             var sharedCount = await dbContext.FolderPermissions
-                .CountAsync(p => p.FolderId == folderId && p.CanRead, cancellationToken);
+                .CountAsync(p => p.FolderId == folderId && p.CanRead && p.UserId != (folder.Path.Contains("/assets/users/") 
+                    ? int.Parse(folder.Path.Split('/')[3]) 
+                    : 0), cancellationToken) + 1;
 
             var userPermission = await dbContext.FolderPermissions
                 .FirstOrDefaultAsync(p => p.FolderId == folderId && p.UserId == userId, cancellationToken);
@@ -298,10 +311,20 @@ public class FoldersEndpoint : IEndpoint
 
             var folderIds = allFolders.Select(f => f.Id).ToList();
             var sharedCounts = await dbContext.FolderPermissions
+                .Include(p => p.Folder)
                 .Where(p => folderIds.Contains(p.FolderId) && p.CanRead)
+                .ToListAsync(cancellationToken);
+
+            var folderSharedCounts = sharedCounts
                 .GroupBy(p => p.FolderId)
-                .Select(g => new { FolderId = g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.FolderId, x => x.Count, cancellationToken);
+                .Select(g => new
+                {
+                    FolderId = g.Key,
+                    Count = g.Count(p => p.UserId != (p.Folder.Path.Contains("/assets/users/") 
+                        ? int.Parse(p.Folder.Path.Split('/')[3]) 
+                        : 0))
+                })
+                .ToDictionary(x => x.FolderId, x => x.Count);
 
             var permissions = await dbContext.FolderPermissions
                 .Where(p => p.UserId == userId)
@@ -321,7 +344,7 @@ public class FoldersEndpoint : IEndpoint
                     AssetCount = f.Assets.Count(a => IsBinPath(f.Path) ? a.DeletedAt != null : a.DeletedAt == null),
                     IsOwner = userPerm?.CanManagePermissions ?? isAdmin,
                     IsShared = f.Path.StartsWith("/assets/shared", StringComparison.OrdinalIgnoreCase),
-                    SharedWithCount = sharedCounts.TryGetValue(f.Id, out var count) ? count : 0,
+                    SharedWithCount = (folderSharedCounts.TryGetValue(f.Id, out var count) ? count : 0) + 1,
                     SubFolders = new List<FolderResponse>()
                 };
             });
@@ -423,24 +446,6 @@ public class FoldersEndpoint : IEndpoint
 
         dbContext.Folders.Add(folder);
         await dbContext.SaveChangesAsync(cancellationToken);
-
-        var permissionExists = await dbContext.FolderPermissions
-            .AnyAsync(p => p.UserId == userId && p.FolderId == folder.Id, cancellationToken);
-
-        if (!permissionExists)
-        {
-            dbContext.FolderPermissions.Add(new FolderPermission
-            {
-                UserId = userId,
-                FolderId = folder.Id,
-                CanRead = true,
-                CanWrite = true,
-                CanDelete = true,
-                CanManagePermissions = true,
-                GrantedByUserId = userId
-            });
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
 
         var response = new FolderResponse
         {
