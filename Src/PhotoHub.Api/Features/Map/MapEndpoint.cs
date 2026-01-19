@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PhotoHub.API.Shared.Data;
@@ -27,6 +28,7 @@ public class MapAssetsEndpoint : IEndpoint
 
     private async Task<IResult> Handle(
         [FromServices] ApplicationDbContext dbContext,
+        ClaimsPrincipal user,
         [FromQuery] int? zoom,
         [FromQuery] double? minLat,
         [FromQuery] double? minLng,
@@ -36,6 +38,14 @@ public class MapAssetsEndpoint : IEndpoint
     {
         try
         {
+            if (!TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var isAdmin = user.IsInRole("Admin");
+            var userRootPath = GetUserRootPath(userId);
+
             // Obtener assets con coordenadas GPS
             var query = dbContext.Assets
                 .Include(a => a.Exif)
@@ -43,6 +53,12 @@ public class MapAssetsEndpoint : IEndpoint
                            a.Exif != null && 
                            a.Exif.Latitude.HasValue && 
                            a.Exif.Longitude.HasValue);
+
+            if (!isAdmin)
+            {
+                var allowedFolderIds = await GetAllowedFolderIdsForUserAsync(dbContext, userId, userRootPath, cancellationToken);
+                query = query.Where(a => a.FolderId.HasValue && allowedFolderIds.Contains(a.FolderId.Value));
+            }
 
             // Filtrar por bounds si se proporcionan y no es una vista global
             if (minLat.HasValue && minLng.HasValue && maxLat.HasValue && maxLng.HasValue)
@@ -151,6 +167,50 @@ public class MapAssetsEndpoint : IEndpoint
                 statusCode: StatusCodes.Status500InternalServerError
             );
         }
+    }
+
+    private bool TryGetUserId(ClaimsPrincipal user, out int userId)
+    {
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+        return int.TryParse(userIdClaim?.Value, out userId);
+    }
+
+    private string GetUserRootPath(int userId)
+    {
+        return $"/assets/users/{userId}";
+    }
+
+    private async Task<HashSet<int>> GetAllowedFolderIdsForUserAsync(
+        ApplicationDbContext dbContext,
+        int userId,
+        string userRootPath,
+        CancellationToken ct)
+    {
+        var allFolders = await dbContext.Folders.ToListAsync(ct);
+        var permissions = await dbContext.FolderPermissions
+            .Where(p => p.UserId == userId && p.CanRead)
+            .ToListAsync(ct);
+
+        var foldersWithPermissions = await dbContext.FolderPermissions
+            .Select(p => p.FolderId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var foldersWithPermissionsSet = foldersWithPermissions.ToHashSet();
+        var allowedIds = permissions.Select(p => p.FolderId).ToHashSet();
+
+        foreach (var folder in allFolders)
+        {
+            if (!foldersWithPermissionsSet.Contains(folder.Id))
+            {
+                if (folder.Path.Replace('\\', '/').StartsWith(userRootPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    allowedIds.Add(folder.Id);
+                }
+            }
+        }
+
+        return allowedIds;
     }
 
     private double GetClusterDistance(int zoom)
