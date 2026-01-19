@@ -2071,32 +2071,32 @@ else
         const string sharedPrefix = "/assets/shared/";
         if (normalized.Equals(sharedPrefix.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
         {
-            return "Inicio";
+            return "Espacio Compartido";
         }
         if (normalized.StartsWith(sharedPrefix, StringComparison.OrdinalIgnoreCase))
         {
             var relative = normalized.Substring(sharedPrefix.Length).TrimStart('/');
-            return string.IsNullOrEmpty(relative) ? "Inicio" : $"Inicio/{GetDisplayRelativePath(relative)}";
+            return string.IsNullOrEmpty(relative) ? "Espacio Compartido" : $"Espacio Compartido/{GetDisplayRelativePath(relative)}";
         }
 
         // Espacio Personal
         if (IsUserRootPath(normalized))
         {
-            return "Inicio";
+            return "Mi Espacio";
         }
 
         if (!string.IsNullOrEmpty(_userRootPrefix) &&
             normalized.StartsWith(_userRootPrefix, StringComparison.OrdinalIgnoreCase))
         {
             var relative = normalized.Substring(_userRootPrefix.Length).TrimStart('/');
-            return string.IsNullOrEmpty(relative) ? "Inicio" : $"Inicio/{GetDisplayRelativePath(relative)}";
+            return string.IsNullOrEmpty(relative) ? "Mi Espacio" : $"Mi Espacio/{GetDisplayRelativePath(relative)}";
         }
 
         if (!string.IsNullOrEmpty(_userRootPhysicalPrefix) &&
             normalized.StartsWith(_userRootPhysicalPrefix, StringComparison.OrdinalIgnoreCase))
         {
             var relative = normalized.Substring(_userRootPhysicalPrefix.Length).TrimStart('/');
-            return string.IsNullOrEmpty(relative) ? "Inicio" : $"Inicio/{GetDisplayRelativePath(relative)}";
+            return string.IsNullOrEmpty(relative) ? "Mi Espacio" : $"Mi Espacio/{GetDisplayRelativePath(relative)}";
         }
 
         return folder.Path;
