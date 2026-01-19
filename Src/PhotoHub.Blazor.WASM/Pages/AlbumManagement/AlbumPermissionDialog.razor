@@ -4,7 +4,7 @@
 <MudDialog>
     <DialogContent>
         <MudForm @ref="_form" @bind-IsValid="@_isValid" @bind-Errors="@_errors">
-            <MudSelect T="int?" @bind-Value="_selectedUserId" 
+            <MudSelect T="Guid?" @bind-Value="_selectedUserId" 
                      Label="Usuario" 
                      Variant="Variant.Outlined"
                      Required="true"
@@ -13,7 +13,7 @@
                      Class="mb-3">
                 @foreach (var user in Users)
                 {
-                    <MudSelectItem T="int?" Value="@((int?)user.Id)">
+                    <MudSelectItem T="Guid?" Value="@((Guid?)user.Id)">
                         @user.Username (@user.Email)
                     </MudSelectItem>
                 }
@@ -62,7 +62,7 @@
     [Parameter] public List<UserDto> Users { get; set; } = new();
     [Parameter] public AlbumPermissionDto? Permission { get; set; }
     [Parameter] public bool IsEdit { get; set; }
-    [Parameter] public int AlbumId { get; set; }
+    [Parameter] public Guid AlbumId { get; set; }
     [Inject] public IAlbumPermissionService AlbumPermissionService { get; set; } = null!;
     [Inject] public ISnackbar Snackbar { get; set; } = null!;
 
@@ -72,7 +72,7 @@
     private bool _saving = false;
     private bool _isEdit;
 
-    private int? _selectedUserId;
+    private Guid? _selectedUserId;
     private bool _canView = true;
     private bool _canEdit = false;
     private bool _canDelete = false;
@@ -110,7 +110,7 @@
                 CanManagePermissions = _canManagePermissions
             };
 
-            if (AlbumId > 0)
+            if (AlbumId != Guid.Empty)
             {
                 await AlbumPermissionService.SetAlbumPermissionAsync(AlbumId, request);
                 var userName = Users.FirstOrDefault(u => u.Id == _selectedUserId.Value)?.Username ?? "usuario";

@@ -4,9 +4,9 @@ namespace PhotoHub.API.Shared.Models;
 
 public class AssetExif
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
     
-    public int AssetId { get; set; }
+    public Guid AssetId { get; set; }
     public Asset Asset { get; set; } = null!;
     
     // DateTimeOriginal (prioritario para fecha de toma)

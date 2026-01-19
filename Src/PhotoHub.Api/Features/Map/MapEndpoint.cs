@@ -132,7 +132,7 @@ public class MapAssetsEndpoint : IEndpoint
             }
 
             // Obtener información de thumbnails para los primeros assets
-            var firstAssetIds = clusters.Select(c => c.AssetIds.FirstOrDefault()).Where(id => id > 0).ToList();
+            var firstAssetIds = clusters.Select(c => c.AssetIds.FirstOrDefault()).Where(id => id != Guid.Empty).ToList();
             var assetsWithThumbInfo = await dbContext.Assets
                 .Where(a => firstAssetIds.Contains(a.Id) && a.DeletedAt == null)
                 .Select(a => new { a.Id, HasThumbnails = a.Thumbnails.Any() })
@@ -154,7 +154,7 @@ public class MapAssetsEndpoint : IEndpoint
                     EarliestDate = c.EarliestDate,
                     LatestDate = c.LatestDate,
                     FirstAssetId = firstAssetId,
-                    HasThumbnail = firstAssetId > 0 && assetsWithThumbInfo.ContainsKey(firstAssetId) && assetsWithThumbInfo[firstAssetId]
+                    HasThumbnail = firstAssetId != Guid.Empty && assetsWithThumbInfo.ContainsKey(firstAssetId) && assetsWithThumbInfo[firstAssetId]
                 };
             }).ToList();
 
@@ -169,20 +169,20 @@ public class MapAssetsEndpoint : IEndpoint
         }
     }
 
-    private bool TryGetUserId(ClaimsPrincipal user, out int userId)
+    private bool TryGetUserId(ClaimsPrincipal user, out Guid userId)
     {
         var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-        return int.TryParse(userIdClaim?.Value, out userId);
+        return Guid.TryParse(userIdClaim?.Value, out userId);
     }
 
-    private string GetUserRootPath(int userId)
+    private string GetUserRootPath(Guid userId)
     {
         return $"/assets/users/{userId}";
     }
 
-    private async Task<HashSet<int>> GetAllowedFolderIdsForUserAsync(
+    private async Task<HashSet<Guid>> GetAllowedFolderIdsForUserAsync(
         ApplicationDbContext dbContext,
-        int userId,
+        Guid userId,
         string userRootPath,
         CancellationToken ct)
     {
@@ -239,7 +239,7 @@ public class MapAssetsEndpoint : IEndpoint
             return new List<MapCluster>();
 
         var clusters = new List<MapCluster>();
-        var processed = new HashSet<int>();
+        var processed = new HashSet<Guid>();
 
         // Ordenar assets por ID para hacer el algoritmo determinístico
         var sortedAssets = assets.OrderBy(a => a.Id).ToList();
@@ -254,7 +254,7 @@ public class MapAssetsEndpoint : IEndpoint
                 Latitude = asset.Latitude,
                 Longitude = asset.Longitude,
                 Count = 1,
-                AssetIds = new List<int> { asset.Id },
+                AssetIds = new List<Guid> { asset.Id },
                 EarliestDate = asset.CreatedDate,
                 LatestDate = asset.CreatedDate,
                 HasThumbnail = asset.HasThumbnails
@@ -542,11 +542,11 @@ public class MapAssetsEndpoint : IEndpoint
         // Ordenar por tamaño (más grandes primero) para priorizar clusters más completos
         var sortedClusters = deduplicated.OrderByDescending(c => c.Count).ToList();
         var finalClusters = new List<MapCluster>();
-        var usedAssetIds = new HashSet<int>();
+        var usedAssetIds = new HashSet<Guid>();
 
         foreach (var cluster in sortedClusters)
         {
-            var clusterAssetIds = new HashSet<int>(cluster.AssetIds);
+            var clusterAssetIds = new HashSet<Guid>(cluster.AssetIds);
             
             // Verificar si este cluster tiene assets que ya están en otro cluster
             var hasOverlap = clusterAssetIds.Any(id => usedAssetIds.Contains(id));
@@ -576,7 +576,7 @@ public class MapAssetsEndpoint : IEndpoint
         if (clusters.Count <= 1)
             return clusters;
 
-        var assetToCluster = new Dictionary<int, MapCluster>();
+        var assetToCluster = new Dictionary<Guid, MapCluster>();
         var clustersToRemove = new HashSet<MapCluster>();
 
         // Primera pasada: identificar duplicados
@@ -608,7 +608,7 @@ public class MapAssetsEndpoint : IEndpoint
 
         // Segunda pasada: limpiar clusters que tienen assets duplicados
         var validClusters = new List<MapCluster>();
-        var usedAssets = new HashSet<int>();
+        var usedAssets = new HashSet<Guid>();
 
         foreach (var cluster in clusters.OrderByDescending(c => c.Count))
         {
@@ -640,7 +640,7 @@ public class MapAssetsEndpoint : IEndpoint
             return clusters;
 
         // Crear un diccionario que mapea cada asset ID al mejor cluster que lo contiene
-        var assetToBestCluster = new Dictionary<int, MapCluster>();
+        var assetToBestCluster = new Dictionary<Guid, MapCluster>();
         
         foreach (var cluster in clusters.OrderByDescending(c => c.Count))
         {
@@ -670,7 +670,7 @@ public class MapAssetsEndpoint : IEndpoint
 
         // Reconstruir clusters asegurando que cada asset aparezca solo una vez
         var finalClusters = new List<MapCluster>();
-        var usedAssets = new HashSet<int>();
+        var usedAssets = new HashSet<Guid>();
 
         foreach (var cluster in uniqueClusters.OrderByDescending(c => c.Count))
         {
@@ -714,7 +714,7 @@ public class MapAssetsEndpoint : IEndpoint
         var allAssetIds = clusters.SelectMany(c => c.AssetIds).Distinct().ToList();
         
         // Para cada asset, encontrar el mejor cluster (más grande)
-        var assetToCluster = new Dictionary<int, MapCluster>();
+        var assetToCluster = new Dictionary<Guid, MapCluster>();
         
         foreach (var assetId in allAssetIds)
         {
@@ -766,8 +766,8 @@ public class MapAssetsEndpoint : IEndpoint
             if (x == null || y == null) return false;
             if (ReferenceEquals(x, y)) return true;
             
-            var xIds = new HashSet<int>(x.AssetIds.OrderBy(id => id));
-            var yIds = new HashSet<int>(y.AssetIds.OrderBy(id => id));
+            var xIds = new HashSet<Guid>(x.AssetIds.OrderBy(id => id));
+            var yIds = new HashSet<Guid>(y.AssetIds.OrderBy(id => id));
             
             return xIds.SetEquals(yIds);
         }
@@ -782,7 +782,7 @@ public class MapAssetsEndpoint : IEndpoint
 
     private class AssetLocation
     {
-        public int Id { get; set; }
+        public Guid Id { get; set; }
         public DateTime CreatedDate { get; set; }
         public double Latitude { get; set; }
         public double Longitude { get; set; }
@@ -794,7 +794,7 @@ public class MapAssetsEndpoint : IEndpoint
         public double Latitude { get; set; }
         public double Longitude { get; set; }
         public int Count { get; set; }
-        public List<int> AssetIds { get; set; } = new();
+        public List<Guid> AssetIds { get; set; } = new();
         public DateTime EarliestDate { get; set; }
         public DateTime LatestDate { get; set; }
         public bool HasThumbnail { get; set; }

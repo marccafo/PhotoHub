@@ -27,7 +27,7 @@ public class AssetDetailEndpoint : IEndpoint
 
     private async Task<IResult> Handle(
         [FromServices] ApplicationDbContext dbContext,
-        [FromRoute] int assetId,
+        [FromRoute] Guid assetId,
         CancellationToken cancellationToken)
     {
         try

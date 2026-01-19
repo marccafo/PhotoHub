@@ -2,7 +2,7 @@ namespace PhotoHub.Blazor.Shared.Models;
 
 public class TimelineItem
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; }
     public string FileName { get; set; } = string.Empty;
     public string FullPath { get; set; } = string.Empty;
     public long FileSize { get; set; }

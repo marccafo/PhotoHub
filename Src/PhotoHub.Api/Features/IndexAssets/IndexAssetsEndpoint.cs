@@ -1098,7 +1098,7 @@ public class IndexAssetsEndpoint : IEndpoint
         if (!duplicateGroups.Any())
             return;
         
-        var duplicatesToRemoveIds = new List<int>();
+        var duplicatesToRemoveIds = new List<Guid>();
         var assetsToUpdate = new List<Asset>();
         
         foreach (var group in duplicateGroups)
@@ -1251,11 +1251,11 @@ public class IndexAssetsEndpoint : IEndpoint
             .ToListAsync(cancellationToken);
         
         // Build a set of folder IDs that should be kept (have assets or are ancestors of folders with assets)
-        var foldersToKeep = new HashSet<int>();
+        var foldersToKeep = new HashSet<Guid>();
         foldersToKeep.UnionWith(foldersWithAssets);
         
         // Recursively add parent folders of folders with assets
-        void AddParentFolders(int folderId)
+        void AddParentFolders(Guid folderId)
         {
             var folder = allFolders.FirstOrDefault(f => f.Id == folderId);
             if (folder?.ParentFolderId != null && !foldersToKeep.Contains(folder.ParentFolderId.Value))

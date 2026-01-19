@@ -4,7 +4,7 @@ namespace PhotoHub.API.Shared.Models;
 
 public class Album
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
     
     [Required]
     [MaxLength(200)]
@@ -17,11 +17,11 @@ public class Album
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     
     // Cover image (thumbnail del primer asset o uno seleccionado)
-    public int? CoverAssetId { get; set; }
+    public Guid? CoverAssetId { get; set; }
     public Asset? CoverAsset { get; set; }
     
     // Propietario del álbum
-    public int OwnerId { get; set; }
+    public Guid OwnerId { get; set; }
     public User Owner { get; set; } = null!;
     
     // Navigation properties

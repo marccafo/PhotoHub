@@ -13,7 +13,7 @@ public class AlbumPermissionsEndpoint : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/albums/{albumId}/permissions")
+        var group = app.MapGroup("/api/albums/{albumId:guid}/permissions")
             .WithTags("Albums")
             .RequireAuthorization();
 
@@ -25,19 +25,19 @@ public class AlbumPermissionsEndpoint : IEndpoint
             .WithName("SetAlbumPermission")
             .WithDescription("Sets or updates album permissions for a user");
 
-        group.MapDelete("{userId:int}", RemoveAlbumPermission)
+        group.MapDelete("{userId:guid}", RemoveAlbumPermission)
             .WithName("RemoveAlbumPermission")
             .WithDescription("Removes album permission for a user");
     }
 
     private async Task<IResult> GetAlbumPermissions(
-        int albumId,
+        Guid albumId,
         [FromServices] ApplicationDbContext dbContext,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var currentUserId))
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var currentUserId))
         {
             return Results.Unauthorized();
         }
@@ -80,14 +80,14 @@ public class AlbumPermissionsEndpoint : IEndpoint
     }
 
     private async Task<IResult> SetAlbumPermission(
-        int albumId,
+        Guid albumId,
         [FromBody] SetAlbumPermissionRequest request,
         [FromServices] ApplicationDbContext dbContext,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var currentUserId))
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var currentUserId))
         {
             return Results.Unauthorized();
         }
@@ -187,14 +187,14 @@ public class AlbumPermissionsEndpoint : IEndpoint
     }
 
     private async Task<IResult> RemoveAlbumPermission(
-        int albumId,
-        int userId,
+        Guid albumId,
+        Guid userId,
         [FromServices] ApplicationDbContext dbContext,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var currentUserId))
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var currentUserId))
         {
             return Results.Unauthorized();
         }
@@ -243,7 +243,7 @@ public class AlbumPermissionsEndpoint : IEndpoint
 
 public class SetAlbumPermissionRequest
 {
-    public int UserId { get; set; }
+    public Guid UserId { get; set; }
     public bool CanView { get; set; }
     public bool CanEdit { get; set; }
     public bool CanDelete { get; set; }
@@ -252,8 +252,8 @@ public class SetAlbumPermissionRequest
 
 public class AlbumPermissionDto
 {
-    public int Id { get; set; }
-    public int UserId { get; set; }
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
     public string Username { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public bool CanView { get; set; }
@@ -261,5 +261,5 @@ public class AlbumPermissionDto
     public bool CanDelete { get; set; }
     public bool CanManagePermissions { get; set; }
     public DateTime GrantedAt { get; set; }
-    public int? GrantedByUserId { get; set; }
+    public Guid? GrantedByUserId { get; set; }
 }

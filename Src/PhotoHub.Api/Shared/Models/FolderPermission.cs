@@ -4,14 +4,14 @@ namespace PhotoHub.API.Shared.Models;
 
 public class FolderPermission
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
     
     [Required]
-    public int UserId { get; set; }
+    public Guid UserId { get; set; }
     public User User { get; set; } = null!;
     
     [Required]
-    public int FolderId { get; set; }
+    public Guid FolderId { get; set; }
     public Folder Folder { get; set; } = null!;
     
     // Permission flags
@@ -22,7 +22,7 @@ public class FolderPermission
     
     public DateTime GrantedAt { get; set; } = DateTime.UtcNow;
     
-    public int? GrantedByUserId { get; set; }
+    public Guid? GrantedByUserId { get; set; }
     public User? GrantedByUser { get; set; }
 }
 

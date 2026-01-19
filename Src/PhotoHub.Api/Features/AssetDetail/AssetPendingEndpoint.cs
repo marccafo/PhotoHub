@@ -74,7 +74,7 @@ public class AssetPendingEndpoint : IEndpoint
 
         var response = new AssetDetailResponse
         {
-            Id = 0,
+            Id = Guid.Empty,
             FileName = fileInfo.Name,
             FullPath = path, // Mantener la ruta original (podría ser virtual) para el cliente
             FileSize = fileInfo.Length,

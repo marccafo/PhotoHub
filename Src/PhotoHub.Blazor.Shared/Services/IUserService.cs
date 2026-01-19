@@ -3,17 +3,17 @@ namespace PhotoHub.Blazor.Shared.Services;
 public interface IUserService
 {
     Task<List<UserDto>> GetUsersAsync();
-    Task<UserDto> GetUserAsync(int id);
+    Task<UserDto> GetUserAsync(Guid id);
     Task<UserDto> GetCurrentUserAsync();
     Task<UserDto> CreateUserAsync(CreateUserRequest request);
-    Task<UserDto> UpdateUserAsync(int id, UpdateUserRequest request);
-    Task DeleteUserAsync(int id);
-    Task ResetPasswordAsync(int id, string newPassword);
+    Task<UserDto> UpdateUserAsync(Guid id, UpdateUserRequest request);
+    Task DeleteUserAsync(Guid id);
+    Task ResetPasswordAsync(Guid id, string newPassword);
 }
 
 public class UserDto
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; }
     public string Username { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string Role { get; set; } = string.Empty;

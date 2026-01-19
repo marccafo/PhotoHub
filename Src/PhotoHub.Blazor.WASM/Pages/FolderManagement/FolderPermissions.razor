@@ -1,4 +1,4 @@
-@page "/folders/{folderId:int}/permissions"
+@page "/folders/{folderId:guid}/permissions"
 @using PhotoHub.Blazor.Shared.Services
 @using MudBlazor
 @inject IFolderPermissionService FolderPermissionService
@@ -92,7 +92,7 @@
 </MudContainer>
 
 @code {
-    [Parameter] public int FolderId { get; set; }
+    [Parameter] public Guid FolderId { get; set; }
     
     private List<FolderPermissionDto> _permissions = new();
     private bool _loading = true;
@@ -205,7 +205,7 @@
         }
     }
 
-    private async Task RemovePermission(int userId)
+    private async Task RemovePermission(Guid userId)
     {
         var permission = _permissions.FirstOrDefault(p => p.UserId == userId);
         if (permission == null) return;

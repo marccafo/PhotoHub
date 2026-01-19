@@ -12,7 +12,7 @@ public class ThumbnailEndpoint : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/assets/{assetId}/thumbnail", Handle)
+        app.MapGet("/api/assets/{assetId:guid}/thumbnail", Handle)
             .CodeSample(
                 codeSample: "curl -X GET \"http://localhost:5000/api/assets/1/thumbnail?size=Medium\" -o thumbnail.jpg",
                 label: "cURL Example")
@@ -31,7 +31,7 @@ public class ThumbnailEndpoint : IEndpoint
         [FromServices] ApplicationDbContext dbContext,
         [FromServices] ThumbnailGeneratorService thumbnailService,
         [FromServices] SettingsService settingsService,
-        [FromRoute] int assetId,
+        [FromRoute] Guid assetId,
         [FromQuery] string size = "Medium",
         CancellationToken cancellationToken = default)
     {

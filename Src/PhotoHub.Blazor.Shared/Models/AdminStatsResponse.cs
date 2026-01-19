@@ -10,7 +10,7 @@ public class AdminStatsResponse
 
 public class AdminUserUsage
 {
-    public int UserId { get; set; }
+    public Guid UserId { get; set; }
     public string DisplayName { get; set; } = string.Empty;
     public string? Email { get; set; }
     public int Photos { get; set; }

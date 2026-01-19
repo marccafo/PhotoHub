@@ -152,7 +152,7 @@ else if (!_loading)
     private void OpenAsset(TimelineItem asset)
     {
         var encodedPath = System.Net.WebUtility.UrlEncode(asset.FullPath);
-        Navigation.NavigateTo($"/asset/0?path={encodedPath}");
+        Navigation.NavigateTo($"/asset/{Guid.Empty}?path={encodedPath}");
     }
 
     private async Task SyncAllPendingAssets()

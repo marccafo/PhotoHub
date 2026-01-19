@@ -1,4 +1,4 @@
-@page "/asset/{AssetId:int}"
+@page "/asset/{AssetId:guid}"
 @using PhotoHub.Blazor.WASM.Services
 @implements IDisposable
 @inject IAssetService AssetService
@@ -252,9 +252,9 @@ else
 }
 
 @code {
-    [Parameter] public int AssetId { get; set; }
+    [Parameter] public Guid AssetId { get; set; }
     [SupplyParameterFromQuery] public string? Path { get; set; }
-    [SupplyParameterFromQuery] public int? AlbumId { get; set; }
+    [SupplyParameterFromQuery] public Guid? AlbumId { get; set; }
     
     private PhotoHub.Blazor.Shared.Models.AssetDetail? _asset;
     private bool _loading = true;
@@ -291,7 +291,7 @@ else
                 <MudSpacer />
                 
                 <div class="d-flex align-center gap-1">
-                    @if (_asset != null && _asset.Id == 0 && _asset.SyncStatus == AssetSyncStatus.Pending)
+                    @if (_asset != null && _asset.Id == Guid.Empty && _asset.SyncStatus == AssetSyncStatus.Pending)
                     {
                         <MudTooltip Text="Sincronizar ahora">
                             <MudIconButton Icon="@Icons.Material.Filled.CloudUpload" 
@@ -300,7 +300,7 @@ else
                                            Disabled="@_syncing" />
                         </MudTooltip>
                     }
-                    else if (_asset != null && (_asset.Id == 0 && _asset.SyncStatus == AssetSyncStatus.Copied))
+                    else if (_asset != null && (_asset.Id == Guid.Empty && _asset.SyncStatus == AssetSyncStatus.Copied))
                     {
                         <MudTooltip Text="Pendiente de indexar">
                             <MudIconButton Icon="@Icons.Material.Outlined.Schedule" 
@@ -326,7 +326,7 @@ else
                                        Color="Color.Inherit" OnClick="ToggleInfo" />
                     </MudTooltip>
                     
-                    @if (_asset != null && _asset.Id > 0)
+                    @if (_asset != null && _asset.Id != Guid.Empty)
                     {
                         <MudTooltip Text="Favorito">
                             <MudToggleIconButton ToggledIcon="@Icons.Material.Filled.Favorite" 
@@ -339,7 +339,7 @@ else
                         <MudIconButton Icon="@Icons.Material.Outlined.Download" Color="Color.Inherit" />
                     </MudTooltip>
 
-                    @if (_asset is { Id: > 0 })
+                    @if (_asset is { Id: var assetId } && assetId != Guid.Empty)
                     {
                         <MudTooltip Text="Eliminar">
                             <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Inherit" />
@@ -362,7 +362,7 @@ else
         try
         {
             _loading = true;
-            if (AssetId > 0)
+            if (AssetId != Guid.Empty)
             {
                 _asset = await AssetService.GetAssetDetailAsync(AssetId);
             }
@@ -381,7 +381,7 @@ else
             
             if (_allAssets.Count == 0)
             {
-                if (AlbumId.HasValue && AlbumId.Value > 0)
+                if (AlbumId.HasValue && AlbumId.Value != Guid.Empty)
                 {
                     _allAssets = await AlbumService.GetAlbumAssetsAsync(AlbumId.Value);
                 }
@@ -406,7 +406,7 @@ else
     private void UpdateNavigation()
     {
         int currentIndex = -1;
-        if (AssetId > 0)
+        if (AssetId != Guid.Empty)
         {
             currentIndex = _allAssets.FindIndex(a => a.Id == AssetId);
         }
@@ -445,7 +445,7 @@ else
         else
         {
             var encodedPath = System.Net.WebUtility.UrlEncode(asset.FullPath);
-            Navigation.NavigateTo($"/asset/0?path={encodedPath}{albumQuery}");
+            Navigation.NavigateTo($"/asset/{Guid.Empty}?path={encodedPath}{albumQuery}");
         }
     }
 
@@ -458,7 +458,7 @@ else
 
     private void GoBack()
     {
-        if (AlbumId.HasValue && AlbumId.Value > 0)
+        if (AlbumId.HasValue && AlbumId.Value != Guid.Empty)
         {
             Navigation.NavigateTo($"/albums/{AlbumId.Value}");
         }
@@ -514,7 +514,7 @@ else
                     // Recargar el asset con la nueva ruta para obtener el estado actualizado
                     // El endpoint AssetPendingEndpoint determinará automáticamente que está en Copied
                     Path = result.TargetPath;
-                    AssetId = 0; // Asegurar que se use el path en lugar del ID
+                    AssetId = Guid.Empty; // Asegurar que se use el path en lugar del ID
                     await LoadAsset();
                     
                     // Asegurar que el navbar se actualice después de cargar completamente
@@ -567,14 +567,14 @@ else
     private bool _addToAlbumDialogVisible = false;
     private List<AlbumItem> _availableAlbums = new();
     private bool _loadingAlbums = false;
-    private int? _selectedAlbumId = null;
+    private Guid? _selectedAlbumId = null;
     private bool _showCreateAlbum = false;
     private string _newAlbumName = "";
     private string? _newAlbumDescription = "";
 
     private async Task OpenAddToAlbumDialog()
     {
-        if (_asset == null || _asset.Id == 0)
+        if (_asset == null || _asset.Id == Guid.Empty)
         {
             Snackbar.Add("Solo se pueden añadir fotos indexadas a álbumes", Severity.Info);
             return;
@@ -601,7 +601,7 @@ else
 
     private async Task AddToAlbum()
     {
-        if (_asset == null || _asset.Id == 0 || !_selectedAlbumId.HasValue)
+        if (_asset == null || _asset.Id == Guid.Empty || !_selectedAlbumId.HasValue)
             return;
 
         try
@@ -637,7 +637,7 @@ else
         }
 
         var album = await AlbumService.CreateAlbumAsync(_newAlbumName, _newAlbumDescription);
-        if (album != null && _asset != null && _asset.Id > 0)
+        if (album != null && _asset != null && _asset.Id != Guid.Empty)
         {
             try
             {
@@ -685,10 +685,10 @@ else
             }
             else if (_availableAlbums.Any())
             {
-                <MudRadioGroup T="int?" @bind-Value="_selectedAlbumId">
+                <MudRadioGroup T="Guid?" @bind-Value="_selectedAlbumId">
                     @foreach (var album in _availableAlbums)
                     {
-                        <MudRadio T="int?" Value="@album.Id">
+                        <MudRadio T="Guid?" Value="@album.Id">
                             <div class="d-flex align-center gap-2">
                                 @if (!string.IsNullOrEmpty(album.CoverThumbnailUrl))
                                 {

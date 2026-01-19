@@ -2,7 +2,7 @@ namespace PhotoHub.API.Features.AssetDetail;
 
 public class AssetDetailResponse
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; }
     public string FileName { get; set; } = string.Empty;
     public string FullPath { get; set; } = string.Empty;
     public long FileSize { get; set; }
@@ -14,7 +14,7 @@ public class AssetDetailResponse
     public string Checksum { get; set; } = string.Empty;
     public bool HasExif { get; set; }
     public bool HasThumbnails { get; set; }
-    public int? FolderId { get; set; }
+    public Guid? FolderId { get; set; }
     public string? FolderPath { get; set; }
     public ExifDataResponse? Exif { get; set; }
     public List<ThumbnailInfoResponse> Thumbnails { get; set; } = new();
@@ -44,9 +44,9 @@ public class ExifDataResponse
 
 public class ThumbnailInfoResponse
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; }
     public string Size { get; set; } = string.Empty;
     public int Width { get; set; }
     public int Height { get; set; }
-    public int AssetId { get; set; }
+    public Guid AssetId { get; set; }
 }

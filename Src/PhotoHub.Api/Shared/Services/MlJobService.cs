@@ -15,7 +15,7 @@ public class MlJobService : IMlJobService
         _logger = logger;
     }
     
-    public async Task EnqueueMlJobAsync(int assetId, MlJobType jobType, CancellationToken cancellationToken = default)
+    public async Task EnqueueMlJobAsync(Guid assetId, MlJobType jobType, CancellationToken cancellationToken = default)
     {
         // Check if a job already exists (pending or processing)
         var existingJob = await _dbContext.AssetMlJobs

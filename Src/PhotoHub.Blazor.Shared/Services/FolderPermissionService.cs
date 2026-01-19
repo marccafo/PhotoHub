@@ -42,7 +42,7 @@ public class FolderPermissionService : IFolderPermissionService
         }
     }
 
-    public async Task<List<FolderPermissionDto>> GetFolderPermissionsAsync(int folderId)
+    public async Task<List<FolderPermissionDto>> GetFolderPermissionsAsync(Guid folderId)
     {
         await SetAuthHeaderAsync();
         var response = await _httpClient.GetAsync($"/api/folders/{folderId}/permissions");
@@ -55,7 +55,7 @@ public class FolderPermissionService : IFolderPermissionService
         return await response.Content.ReadFromJsonAsync<List<FolderPermissionDto>>() ?? new List<FolderPermissionDto>();
     }
 
-    public async Task<FolderPermissionDto> SetFolderPermissionAsync(int folderId, SetFolderPermissionRequest request)
+    public async Task<FolderPermissionDto> SetFolderPermissionAsync(Guid folderId, SetFolderPermissionRequest request)
     {
         await SetAuthHeaderAsync();
         var response = await _httpClient.PostAsJsonAsync($"/api/folders/{folderId}/permissions", request);
@@ -69,7 +69,7 @@ public class FolderPermissionService : IFolderPermissionService
             ?? throw new Exception("Failed to set permission");
     }
 
-    public async Task DeleteFolderPermissionAsync(int folderId, int userId)
+    public async Task DeleteFolderPermissionAsync(Guid folderId, Guid userId)
     {
         await SetAuthHeaderAsync();
         var response = await _httpClient.DeleteAsync($"/api/folders/{folderId}/permissions/{userId}");

@@ -47,14 +47,14 @@ public class AssetService : IAssetService
         return response ?? new List<TimelineItem>();
     }
 
-    public async Task<TimelineItem?> GetAssetByIdAsync(int id)
+    public async Task<TimelineItem?> GetAssetByIdAsync(Guid id)
     {
         await SetAuthHeaderAsync();
         var timeline = await GetTimelineAsync();
         return timeline.FirstOrDefault(a => a.Id == id);
     }
 
-    public async Task<AssetDetail?> GetAssetDetailAsync(int id)
+    public async Task<AssetDetail?> GetAssetDetailAsync(Guid id)
     {
         try
         {
@@ -136,7 +136,7 @@ public class AssetService : IAssetService
         };
     }
 
-    public async Task<List<TimelineItem>> GetAssetsByFolderAsync(int? folderId)
+    public async Task<List<TimelineItem>> GetAssetsByFolderAsync(Guid? folderId)
     {
         try
         {

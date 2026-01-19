@@ -21,11 +21,11 @@ public class AlbumsEndpoint : IEndpoint
             .WithName("GetAllAlbums")
             .WithDescription("Gets all albums accessible by the current user");
 
-        group.MapGet("{albumId:int}", GetAlbumById)
+        group.MapGet("{albumId:guid}", GetAlbumById)
             .WithName("GetAlbumById")
             .WithDescription("Gets an album by ID");
 
-        group.MapGet("{albumId:int}/assets", GetAlbumAssets)
+        group.MapGet("{albumId:guid}/assets", GetAlbumAssets)
             .WithName("GetAlbumAssets")
             .WithDescription("Gets all assets in an album");
 
@@ -33,35 +33,35 @@ public class AlbumsEndpoint : IEndpoint
             .WithName("CreateAlbum")
             .WithDescription("Creates a new album");
 
-        group.MapPut("{albumId:int}", UpdateAlbum)
+        group.MapPut("{albumId:guid}", UpdateAlbum)
             .WithName("UpdateAlbum")
             .WithDescription("Updates an album");
 
-        group.MapDelete("{albumId:int}", DeleteAlbum)
+        group.MapDelete("{albumId:guid}", DeleteAlbum)
             .WithName("DeleteAlbum")
             .WithDescription("Deletes an album");
 
-        group.MapPost("{albumId:int}/leave", LeaveAlbum)
+        group.MapPost("{albumId:guid}/leave", LeaveAlbum)
             .WithName("LeaveAlbum")
             .WithDescription("Removes the current user from a shared album");
 
-        group.MapPost("{albumId:int}/assets", AddAssetToAlbum)
+        group.MapPost("{albumId:guid}/assets", AddAssetToAlbum)
             .WithName("AddAssetToAlbum")
             .WithDescription("Adds an asset to an album");
 
-        group.MapDelete("{albumId:int}/assets/{assetId:int}", RemoveAssetFromAlbum)
+        group.MapDelete("{albumId:guid}/assets/{assetId:guid}", RemoveAssetFromAlbum)
             .WithName("RemoveAssetFromAlbum")
             .WithDescription("Removes an asset from an album");
 
-        group.MapPut("{albumId:int}/cover", SetAlbumCover)
+        group.MapPut("{albumId:guid}/cover", SetAlbumCover)
             .WithName("SetAlbumCover")
             .WithDescription("Sets the cover image for an album");
     }
 
     private static async Task<(bool hasAccess, bool canEdit, bool canDelete, bool canManagePermissions)> CheckAlbumPermissionsAsync(
         ApplicationDbContext dbContext,
-        int albumId,
-        int userId,
+        Guid albumId,
+        Guid userId,
         CancellationToken cancellationToken)
     {
         var album = await dbContext.Albums
@@ -97,7 +97,7 @@ public class AlbumsEndpoint : IEndpoint
         try
         {
             var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
             {
                 return Results.Unauthorized();
             }
@@ -169,14 +169,14 @@ public class AlbumsEndpoint : IEndpoint
 
     private async Task<IResult> GetAlbumById(
         [FromServices] ApplicationDbContext dbContext,
-        [FromRoute] int albumId,
+        [FromRoute] Guid albumId,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         try
         {
             var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
             {
                 return Results.Unauthorized();
             }
@@ -253,14 +253,14 @@ public class AlbumsEndpoint : IEndpoint
 
     private async Task<IResult> GetAlbumAssets(
         [FromServices] ApplicationDbContext dbContext,
-        [FromRoute] int albumId,
+        [FromRoute] Guid albumId,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         try
         {
             var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
             {
                 return Results.Unauthorized();
             }
@@ -323,7 +323,7 @@ public class AlbumsEndpoint : IEndpoint
         try
         {
             var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
             {
                 return Results.Unauthorized();
             }
@@ -376,7 +376,7 @@ public class AlbumsEndpoint : IEndpoint
 
     private async Task<IResult> UpdateAlbum(
         [FromServices] ApplicationDbContext dbContext,
-        [FromRoute] int albumId,
+        [FromRoute] Guid albumId,
         [FromBody] UpdateAlbumRequest? request,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
@@ -384,7 +384,7 @@ public class AlbumsEndpoint : IEndpoint
         try
         {
             var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
             {
                 return Results.Unauthorized();
             }
@@ -447,14 +447,14 @@ public class AlbumsEndpoint : IEndpoint
 
     private async Task<IResult> DeleteAlbum(
         [FromServices] ApplicationDbContext dbContext,
-        [FromRoute] int albumId,
+        [FromRoute] Guid albumId,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         try
         {
             var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
             {
                 return Results.Unauthorized();
             }
@@ -493,14 +493,14 @@ public class AlbumsEndpoint : IEndpoint
 
     private async Task<IResult> LeaveAlbum(
         [FromServices] ApplicationDbContext dbContext,
-        [FromRoute] int albumId,
+        [FromRoute] Guid albumId,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         try
         {
             var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
             {
                 return Results.Unauthorized();
             }
@@ -545,7 +545,7 @@ public class AlbumsEndpoint : IEndpoint
 
     private async Task<IResult> AddAssetToAlbum(
         [FromServices] ApplicationDbContext dbContext,
-        [FromRoute] int albumId,
+        [FromRoute] Guid albumId,
         [FromBody] AddAssetRequest? request,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
@@ -553,7 +553,7 @@ public class AlbumsEndpoint : IEndpoint
         try
         {
             var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
             {
                 return Results.Unauthorized();
             }
@@ -639,15 +639,15 @@ public class AlbumsEndpoint : IEndpoint
 
     private async Task<IResult> RemoveAssetFromAlbum(
         [FromServices] ApplicationDbContext dbContext,
-        [FromRoute] int albumId,
-        [FromRoute] int assetId,
+        [FromRoute] Guid albumId,
+        [FromRoute] Guid assetId,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         try
         {
             var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
             {
                 return Results.Unauthorized();
             }
@@ -699,7 +699,7 @@ public class AlbumsEndpoint : IEndpoint
 
     private async Task<IResult> SetAlbumCover(
         [FromServices] ApplicationDbContext dbContext,
-        [FromRoute] int albumId,
+        [FromRoute] Guid albumId,
         [FromBody] SetCoverRequest? request,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
@@ -707,7 +707,7 @@ public class AlbumsEndpoint : IEndpoint
         try
         {
             var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
             {
                 return Results.Unauthorized();
             }
@@ -762,7 +762,7 @@ public class AlbumsEndpoint : IEndpoint
 
 public class AlbumResponse
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public DateTime CreatedAt { get; set; }
@@ -792,10 +792,10 @@ public class UpdateAlbumRequest
 
 public class AddAssetRequest
 {
-    public int AssetId { get; set; }
+    public Guid AssetId { get; set; }
 }
 
 public class SetCoverRequest
 {
-    public int AssetId { get; set; }
+    public Guid AssetId { get; set; }
 }

@@ -340,10 +340,10 @@
             }
             else if (_availableAlbums.Any())
             {
-                <MudRadioGroup T="int?" @bind-Value="_selectedAlbumId">
+                <MudRadioGroup T="Guid?" @bind-Value="_selectedAlbumId">
                     @foreach (var album in _availableAlbums)
                     {
-                        <MudRadio T="int?" Value="@album.Id">
+                        <MudRadio T="Guid?" Value="@album.Id">
                             <div class="d-flex flex-column">
                                 <MudText Typo="Typo.subtitle2">@album.Name</MudText>
                                 <MudText Typo="Typo.caption" Class="mud-text-secondary">@album.AssetCount fotos</MudText>
@@ -426,12 +426,12 @@
     private string _activeGroup = "";
     private DotNetObjectReference<Timeline>? _objRef;
     private bool _selectionMode = false;
-    private HashSet<int> _selectedAssetIds = new();
+    private HashSet<Guid> _selectedAssetIds = new();
     private bool _addToAlbumDialogVisible = false;
     private bool _deleteAssetsDialogVisible = false;
     private List<AlbumItem> _availableAlbums = new();
     private bool _loadingAlbums = false;
-    private int? _selectedAlbumId = null;
+    private Guid? _selectedAlbumId = null;
     private bool _showCreateAlbum = false;
     private string _newAlbumName = "";
     private string? _newAlbumDescription = "";
@@ -638,7 +638,7 @@
         else
         {
             var encodedPath = System.Net.WebUtility.UrlEncode(asset.FullPath);
-            Navigation.NavigateTo($"/asset/0?path={encodedPath}");
+            Navigation.NavigateTo($"/asset/{Guid.Empty}?path={encodedPath}");
         }
     }
 
@@ -653,7 +653,7 @@
         OpenAsset(asset);
     }
 
-    private void ToggleAssetSelection(int assetId, bool selected)
+    private void ToggleAssetSelection(Guid assetId, bool selected)
     {
         if (!_selectionMode)
         {
@@ -677,7 +677,7 @@
         UpdateSelectionNavbar();
     }
 
-    private bool IsAssetSelected(int assetId) => _selectedAssetIds.Contains(assetId);
+    private bool IsAssetSelected(Guid assetId) => _selectedAssetIds.Contains(assetId);
 
     private void ExitSelectionMode()
     {

@@ -11,9 +11,9 @@ public enum ThumbnailSize
 
 public class AssetThumbnail
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
     
-    public int AssetId { get; set; }
+    public Guid AssetId { get; set; }
     public Asset Asset { get; set; } = null!;
     
     public ThumbnailSize Size { get; set; }

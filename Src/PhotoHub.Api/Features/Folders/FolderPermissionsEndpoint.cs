@@ -13,7 +13,7 @@ public class FolderPermissionsEndpoint : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/folders/{folderId}/permissions")
+        var group = app.MapGroup("/api/folders/{folderId:guid}/permissions")
             .WithTags("Folders")
             .RequireAuthorization();
 
@@ -25,19 +25,19 @@ public class FolderPermissionsEndpoint : IEndpoint
             .WithName("SetFolderPermission")
             .WithDescription("Sets or updates folder permissions for a user");
 
-        group.MapDelete("{userId:int}", RemoveFolderPermission)
+        group.MapDelete("{userId:guid}", RemoveFolderPermission)
             .WithName("RemoveFolderPermission")
             .WithDescription("Removes folder permission for a user");
     }
 
     private async Task<IResult> GetFolderPermissions(
-        int folderId,
+        Guid folderId,
         [FromServices] ApplicationDbContext dbContext,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var currentUserId))
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var currentUserId))
         {
             return Results.Unauthorized();
         }
@@ -82,14 +82,14 @@ public class FolderPermissionsEndpoint : IEndpoint
     }
 
     private async Task<IResult> SetFolderPermission(
-        int folderId,
+        Guid folderId,
         [FromBody] SetFolderPermissionRequest request,
         [FromServices] ApplicationDbContext dbContext,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var currentUserId))
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var currentUserId))
         {
             return Results.Unauthorized();
         }
@@ -192,14 +192,14 @@ public class FolderPermissionsEndpoint : IEndpoint
     }
 
     private async Task<IResult> RemoveFolderPermission(
-        int folderId,
-        int userId,
+        Guid folderId,
+        Guid userId,
         [FromServices] ApplicationDbContext dbContext,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var currentUserId))
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var currentUserId))
         {
             return Results.Unauthorized();
         }
@@ -251,7 +251,7 @@ public class FolderPermissionsEndpoint : IEndpoint
 
 public class SetFolderPermissionRequest
 {
-    public int UserId { get; set; }
+    public Guid UserId { get; set; }
     public bool CanRead { get; set; }
     public bool CanWrite { get; set; }
     public bool CanDelete { get; set; }
@@ -260,8 +260,8 @@ public class SetFolderPermissionRequest
 
 public class FolderPermissionDto
 {
-    public int Id { get; set; }
-    public int UserId { get; set; }
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
     public string Username { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public bool CanRead { get; set; }
@@ -269,5 +269,5 @@ public class FolderPermissionDto
     public bool CanDelete { get; set; }
     public bool CanManagePermissions { get; set; }
     public DateTime GrantedAt { get; set; }
-    public int? GrantedByUserId { get; set; }
+    public Guid? GrantedByUserId { get; set; }
 }

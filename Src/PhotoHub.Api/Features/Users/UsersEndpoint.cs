@@ -24,7 +24,7 @@ public class UsersEndpoint : IEndpoint
             .WithDescription("Gets all users (Admin only)")
             .RequireAuthorization(policy => policy.RequireRole("Admin"));
 
-        group.MapGet("{id:int}", GetUser)
+        group.MapGet("{id:guid}", GetUser)
             .WithName("GetUser")
             .WithDescription("Gets a user by ID (Admin only)")
             .RequireAuthorization(policy => policy.RequireRole("Admin"));
@@ -38,17 +38,17 @@ public class UsersEndpoint : IEndpoint
             .WithDescription("Creates a new user (Admin only)")
             .RequireAuthorization(policy => policy.RequireRole("Admin"));
 
-        group.MapPut("{id:int}", UpdateUser)
+        group.MapPut("{id:guid}", UpdateUser)
             .WithName("UpdateUser")
             .WithDescription("Updates a user (Admin only)")
             .RequireAuthorization(policy => policy.RequireRole("Admin"));
 
-        group.MapDelete("{id:int}", DeleteUser)
+        group.MapDelete("{id:guid}", DeleteUser)
             .WithName("DeleteUser")
             .WithDescription("Deletes a user (Admin only)")
             .RequireAuthorization(policy => policy.RequireRole("Admin"));
 
-        group.MapPost("{id:int}/reset-password", ResetPassword)
+        group.MapPost("{id:guid}/reset-password", ResetPassword)
             .WithName("ResetPassword")
             .WithDescription("Resets a user's password (Admin only)")
             .RequireAuthorization(policy => policy.RequireRole("Admin"));
@@ -77,7 +77,7 @@ public class UsersEndpoint : IEndpoint
     }
 
     private async Task<IResult> GetUser(
-        int id,
+        Guid id,
         [FromServices] ApplicationDbContext dbContext,
         CancellationToken cancellationToken)
     {
@@ -108,7 +108,7 @@ public class UsersEndpoint : IEndpoint
         CancellationToken cancellationToken)
     {
         var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
         {
             return Results.Unauthorized();
         }
@@ -188,7 +188,7 @@ public class UsersEndpoint : IEndpoint
     }
 
     private async Task<IResult> UpdateUser(
-        int id,
+        Guid id,
         [FromBody] UpdateUserRequest request,
         [FromServices] ApplicationDbContext dbContext,
         CancellationToken cancellationToken)
@@ -233,7 +233,7 @@ public class UsersEndpoint : IEndpoint
     }
 
     private async Task<IResult> DeleteUser(
-        int id,
+        Guid id,
         [FromServices] ApplicationDbContext dbContext,
         CancellationToken cancellationToken)
     {
@@ -248,7 +248,7 @@ public class UsersEndpoint : IEndpoint
     }
 
     private async Task<IResult> ResetPassword(
-        int id,
+        Guid id,
         [FromBody] ResetPasswordRequest request,
         [FromServices] ApplicationDbContext dbContext,
         [FromServices] IAuthService authService,

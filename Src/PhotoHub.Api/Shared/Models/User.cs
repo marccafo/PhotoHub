@@ -4,7 +4,7 @@ namespace PhotoHub.API.Shared.Models;
 
 public class User
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
     
     [Required]
     [MaxLength(100)]

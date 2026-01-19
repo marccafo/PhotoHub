@@ -10,7 +10,7 @@ public enum AssetType
 
 public class Asset
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
     
     [Required]
     [MaxLength(500)]
@@ -38,16 +38,16 @@ public class Asset
     
     public DateTime ScannedAt { get; set; } = DateTime.UtcNow;
     
-    public int? OwnerId { get; set; }
+    public Guid? OwnerId { get; set; }
     public User? Owner { get; set; }
     
-    public int? FolderId { get; set; }
+    public Guid? FolderId { get; set; }
     public Folder? Folder { get; set; }
 
     public DateTime? DeletedAt { get; set; }
     [MaxLength(1000)]
     public string? DeletedFromPath { get; set; }
-    public int? DeletedFromFolderId { get; set; }
+    public Guid? DeletedFromFolderId { get; set; }
     
     // For videos
     public TimeSpan? Duration { get; set; }

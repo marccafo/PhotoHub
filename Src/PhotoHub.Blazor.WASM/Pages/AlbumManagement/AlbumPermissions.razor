@@ -1,4 +1,4 @@
-@page "/albums/{albumId:int}/permissions"
+@page "/albums/{albumId:guid}/permissions"
 @using PhotoHub.Blazor.Shared.Services
 @using MudBlazor
 @inject IAlbumPermissionService AlbumPermissionService
@@ -88,7 +88,7 @@
 </MudContainer>
 
 @code {
-    [Parameter] public int AlbumId { get; set; }
+    [Parameter] public Guid AlbumId { get; set; }
     
     private List<AlbumPermissionDto> _permissions = new();
     private bool _loading = true;
@@ -185,7 +185,7 @@
         }
     }
 
-    private async Task RemovePermission(int userId)
+    private async Task RemovePermission(Guid userId)
     {
         var permission = _permissions.FirstOrDefault(p => p.UserId == userId);
         if (permission == null) return;

@@ -2,7 +2,7 @@ namespace PhotoHub.Blazor.Shared.Models;
 
 public class AssetDetail
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; }
     public string FileName { get; set; } = string.Empty;
     public string FullPath { get; set; } = string.Empty;
     public long FileSize { get; set; }
@@ -14,17 +14,17 @@ public class AssetDetail
     public string Checksum { get; set; } = string.Empty;
     public bool HasExif { get; set; }
     public bool HasThumbnails { get; set; }
-    public int? FolderId { get; set; }
+    public Guid? FolderId { get; set; }
     public string? FolderPath { get; set; }
     public ExifData? Exif { get; set; }
     public List<ThumbnailInfo> Thumbnails { get; set; } = new();
     public List<string> Tags { get; set; } = new();
     public AssetSyncStatus SyncStatus { get; set; } = AssetSyncStatus.Pending;
     
-    public string ThumbnailUrl => Id > 0 
+    public string ThumbnailUrl => Id != Guid.Empty
         ? $"/api/assets/{Id}/thumbnail?size=Large" 
         : $"/api/assets/pending/content?path={System.Net.WebUtility.UrlEncode(FullPath)}";
-    public string ContentUrl => Id > 0 
+    public string ContentUrl => Id != Guid.Empty
         ? $"/api/assets/{Id}/content" 
         : $"/api/assets/pending/content?path={System.Net.WebUtility.UrlEncode(FullPath)}";
     public string DisplayDate => CreatedDate.ToString("dd MMM yyyy HH:mm");
@@ -66,10 +66,10 @@ public class ExifData
 
 public class ThumbnailInfo
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; }
     public string Size { get; set; } = string.Empty;
     public int Width { get; set; }
     public int Height { get; set; }
     public string Url => $"/api/assets/{AssetId}/thumbnail?size={Size}";
-    public int AssetId { get; set; }
+    public Guid AssetId { get; set; }
 }

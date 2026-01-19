@@ -2,12 +2,12 @@ namespace PhotoHub.API.Shared.Models;
 
 public class AlbumAsset
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
     
-    public int AlbumId { get; set; }
+    public Guid AlbumId { get; set; }
     public Album Album { get; set; } = null!;
     
-    public int AssetId { get; set; }
+    public Guid AssetId { get; set; }
     public Asset Asset { get; set; } = null!;
     
     // Orden personalizado dentro del álbum

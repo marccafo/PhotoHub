@@ -39,7 +39,7 @@ public class UserService : IUserService
         return response ?? new List<UserDto>();
     }
 
-    public async Task<UserDto> GetUserAsync(int id)
+    public async Task<UserDto> GetUserAsync(Guid id)
     {
         await SetAuthHeaderAsync();
         var response = await _httpClient.GetFromJsonAsync<UserDto>($"/api/users/{id}");
@@ -61,7 +61,7 @@ public class UserService : IUserService
         return await response.Content.ReadFromJsonAsync<UserDto>() ?? throw new Exception("Failed to create user");
     }
 
-    public async Task<UserDto> UpdateUserAsync(int id, UpdateUserRequest request)
+    public async Task<UserDto> UpdateUserAsync(Guid id, UpdateUserRequest request)
     {
         await SetAuthHeaderAsync();
         var response = await _httpClient.PutAsJsonAsync($"/api/users/{id}", request);
@@ -69,14 +69,14 @@ public class UserService : IUserService
         return await response.Content.ReadFromJsonAsync<UserDto>() ?? throw new Exception("Failed to update user");
     }
 
-    public async Task DeleteUserAsync(int id)
+    public async Task DeleteUserAsync(Guid id)
     {
         await SetAuthHeaderAsync();
         var response = await _httpClient.DeleteAsync($"/api/users/{id}");
         response.EnsureSuccessStatusCode();
     }
 
-    public async Task ResetPasswordAsync(int id, string newPassword)
+    public async Task ResetPasswordAsync(Guid id, string newPassword)
     {
         await SetAuthHeaderAsync();
         var request = new ResetPasswordRequest { NewPassword = newPassword };

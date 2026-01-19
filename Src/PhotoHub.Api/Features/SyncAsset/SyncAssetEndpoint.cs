@@ -34,7 +34,7 @@ public class SyncAssetEndpoint : IEndpoint
         try
         {
             var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+            if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
             {
                 return Results.Unauthorized();
             }
@@ -192,7 +192,7 @@ public class SyncAssetEndpoint : IEndpoint
 
     private static async Task EnsureFolderRecordAsync(
         ApplicationDbContext dbContext,
-        int userId,
+        Guid userId,
         string folderPath,
         CancellationToken cancellationToken)
     {
@@ -246,8 +246,8 @@ public class SyncAssetEndpoint : IEndpoint
 
     private static async Task EnsureFolderPermissionAsync(
         ApplicationDbContext dbContext,
-        int userId,
-        int folderId,
+        Guid userId,
+        Guid folderId,
         CancellationToken cancellationToken)
     {
         var exists = await dbContext.FolderPermissions

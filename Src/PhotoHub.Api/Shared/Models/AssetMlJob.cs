@@ -20,9 +20,9 @@ public enum MlJobStatus
 
 public class AssetMlJob
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
     
-    public int AssetId { get; set; }
+    public Guid AssetId { get; set; }
     public Asset Asset { get; set; } = null!;
     
     public MlJobType JobType { get; set; }

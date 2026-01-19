@@ -65,7 +65,7 @@ public class DeviceEndpoint : IEndpoint
                 {
                     deviceItems.Add(new TimelineResponse
                     {
-                        Id = 0,
+                        Id = Guid.Empty,
                         FileName = file.FileName,
                         FullPath = file.FullPath,
                         FileSize = file.FileSize,

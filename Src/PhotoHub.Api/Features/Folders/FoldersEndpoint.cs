@@ -119,9 +119,7 @@ public class FoldersEndpoint : IEndpoint
                 {
                     FolderId = g.Key,
                     // Contamos todos los que NO son el dueño de la carpeta
-                    Count = g.Count(p => p.UserId != (p.Folder.Path.Contains("/assets/users/") 
-                        ? int.Parse(p.Folder.Path.Split('/')[3]) 
-                        : 0))
+                    Count = g.Count(p => !TryGetUserIdFromPath(p.Folder.Path, out var ownerId) || p.UserId != ownerId)
                 })
                 .ToDictionary(x => x.FolderId, x => x.Count);
 
@@ -161,7 +159,7 @@ public class FoldersEndpoint : IEndpoint
 
     private async Task<IResult> GetFolderById(
         [FromServices] ApplicationDbContext dbContext,
-        [FromRoute] int folderId,
+        [FromRoute] Guid folderId,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
@@ -188,10 +186,14 @@ public class FoldersEndpoint : IEndpoint
             }
 
             var isAdmin = user.IsInRole("Admin");
+            var ownerIdFromPath = TryGetUserIdFromPath(folder.Path, out var parsedOwnerId)
+                ? parsedOwnerId
+                : (Guid?)null;
+
             var sharedCount = await dbContext.FolderPermissions
-                .CountAsync(p => p.FolderId == folderId && p.CanRead && p.UserId != (folder.Path.Contains("/assets/users/") 
-                    ? int.Parse(folder.Path.Split('/')[3]) 
-                    : 0), cancellationToken) + 1;
+                .CountAsync(p => p.FolderId == folderId && p.CanRead &&
+                                 (!ownerIdFromPath.HasValue || p.UserId != ownerIdFromPath.Value),
+                    cancellationToken) + 1;
 
             var userPermission = await dbContext.FolderPermissions
                 .FirstOrDefaultAsync(p => p.FolderId == folderId && p.UserId == userId, cancellationToken);
@@ -233,7 +235,7 @@ public class FoldersEndpoint : IEndpoint
 
     private async Task<IResult> GetFolderAssets(
         [FromServices] ApplicationDbContext dbContext,
-        [FromRoute] int folderId,
+        [FromRoute] Guid folderId,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
@@ -320,9 +322,7 @@ public class FoldersEndpoint : IEndpoint
                 .Select(g => new
                 {
                     FolderId = g.Key,
-                    Count = g.Count(p => p.UserId != (p.Folder.Path.Contains("/assets/users/") 
-                        ? int.Parse(p.Folder.Path.Split('/')[3]) 
-                        : 0))
+                    Count = g.Count(p => !TryGetUserIdFromPath(p.Folder.Path, out var ownerId) || p.UserId != ownerId)
                 })
                 .ToDictionary(x => x.FolderId, x => x.Count);
 
@@ -465,7 +465,7 @@ public class FoldersEndpoint : IEndpoint
     private async Task<IResult> UpdateFolder(
         [FromServices] ApplicationDbContext dbContext,
         [FromServices] SettingsService settingsService,
-        [FromRoute] int folderId,
+        [FromRoute] Guid folderId,
         [FromBody] UpdateFolderRequest request,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
@@ -573,7 +573,7 @@ public class FoldersEndpoint : IEndpoint
     private async Task<IResult> DeleteFolder(
         [FromServices] ApplicationDbContext dbContext,
         [FromServices] SettingsService settingsService,
-        [FromRoute] int folderId,
+        [FromRoute] Guid folderId,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
@@ -750,14 +750,14 @@ public class FoldersEndpoint : IEndpoint
         return Results.NoContent();
     }
 
-    private static bool TryGetUserId(ClaimsPrincipal user, out int userId)
+    private static bool TryGetUserId(ClaimsPrincipal user, out Guid userId)
     {
-        userId = 0;
+        userId = Guid.Empty;
         var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-        return userIdClaim != null && int.TryParse(userIdClaim.Value, out userId);
+        return userIdClaim != null && Guid.TryParse(userIdClaim.Value, out userId);
     }
 
-    private static async Task<bool> CanReadFolderAsync(ApplicationDbContext dbContext, int userId, bool isAdmin, int folderId, CancellationToken ct)
+    private static async Task<bool> CanReadFolderAsync(ApplicationDbContext dbContext, Guid userId, bool isAdmin, Guid folderId, CancellationToken ct)
     {
         if (isAdmin)
         {
@@ -784,7 +784,7 @@ public class FoldersEndpoint : IEndpoint
             .AnyAsync(p => p.UserId == userId && p.FolderId == folderId && p.CanRead, ct);
     }
 
-    private static async Task<bool> CanWriteFolderAsync(ApplicationDbContext dbContext, int userId, bool isAdmin, int folderId, CancellationToken ct)
+    private static async Task<bool> CanWriteFolderAsync(ApplicationDbContext dbContext, Guid userId, bool isAdmin, Guid folderId, CancellationToken ct)
     {
         if (isAdmin)
         {
@@ -811,7 +811,7 @@ public class FoldersEndpoint : IEndpoint
             .AnyAsync(p => p.UserId == userId && p.FolderId == folderId && p.CanWrite, ct);
     }
 
-    private static async Task<bool> CanDeleteFolderAsync(ApplicationDbContext dbContext, int userId, bool isAdmin, int folderId, CancellationToken ct)
+    private static async Task<bool> CanDeleteFolderAsync(ApplicationDbContext dbContext, Guid userId, bool isAdmin, Guid folderId, CancellationToken ct)
     {
         if (isAdmin)
         {
@@ -840,7 +840,7 @@ public class FoldersEndpoint : IEndpoint
 
     private static async Task<List<Folder>> GetFoldersForUserAsync(
         ApplicationDbContext dbContext,
-        int userId,
+        Guid userId,
         bool isAdmin,
         bool includeAssets,
         CancellationToken ct)
@@ -868,7 +868,7 @@ public class FoldersEndpoint : IEndpoint
             .Select(p => p.FolderId)
             .ToHashSet();
 
-        var allowedIds = new HashSet<int>(readableIds);
+        var allowedIds = new HashSet<Guid>(readableIds);
 
         foreach (var folder in allFolders)
         {
@@ -888,7 +888,7 @@ public class FoldersEndpoint : IEndpoint
         return allFolders.Where(f => allowedIds.Contains(f.Id)).ToList();
     }
 
-    private static void AddAncestorFolders(List<Folder> allFolders, HashSet<int> allowedIds)
+    private static void AddAncestorFolders(List<Folder> allFolders, HashSet<Guid> allowedIds)
     {
         var lookup = allFolders.ToDictionary(f => f.Id, f => f);
 
@@ -917,7 +917,7 @@ public class FoldersEndpoint : IEndpoint
         }
     }
 
-    private static bool IsDescendantFolder(Folder potentialParent, int folderId, ApplicationDbContext dbContext)
+    private static bool IsDescendantFolder(Folder potentialParent, Guid folderId, ApplicationDbContext dbContext)
     {
         var currentParentId = potentialParent.Id;
         while (true)
@@ -939,7 +939,7 @@ public class FoldersEndpoint : IEndpoint
 
     private static async Task UpdateSubfolderPathsAsync(
         ApplicationDbContext dbContext,
-        int folderId,
+        Guid folderId,
         string oldPath,
         string newPath,
         CancellationToken ct)
@@ -976,9 +976,9 @@ public class FoldersEndpoint : IEndpoint
         }
     }
 
-    private static async Task<HashSet<int>> GetFolderSubtreeIdsAsync(
+    private static async Task<HashSet<Guid>> GetFolderSubtreeIdsAsync(
         ApplicationDbContext dbContext,
-        int folderId,
+        Guid folderId,
         CancellationToken ct)
     {
         var allFolders = await dbContext.Folders
@@ -991,8 +991,8 @@ public class FoldersEndpoint : IEndpoint
             .GroupBy(f => f.ParentFolderId!.Value)
             .ToDictionary(g => g.Key, g => g.Select(x => x.Id).ToList());
 
-        var result = new HashSet<int>();
-        var stack = new Stack<int>();
+        var result = new HashSet<Guid>();
+        var stack = new Stack<Guid>();
         stack.Push(folderId);
 
         while (stack.Count > 0)
@@ -1020,7 +1020,26 @@ public class FoldersEndpoint : IEndpoint
         return path.Replace('\\', '/').TrimEnd('/');
     }
 
-    private static string GetUserRootPath(int userId)
+    private static bool TryGetUserIdFromPath(string path, out Guid userId)
+    {
+        userId = Guid.Empty;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        var normalized = path.Replace('\\', '/');
+        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var usersIndex = Array.FindIndex(parts, part => part.Equals("users", StringComparison.OrdinalIgnoreCase));
+        if (usersIndex < 0 || usersIndex + 1 >= parts.Length)
+        {
+            return false;
+        }
+
+        return Guid.TryParse(parts[usersIndex + 1], out userId);
+    }
+
+    private static string GetUserRootPath(Guid userId)
     {
         return $"/assets/users/{userId}";
     }
@@ -1078,25 +1097,25 @@ public class FoldersEndpoint : IEndpoint
 public class CreateFolderRequest
 {
     public string Name { get; set; } = string.Empty;
-    public int? ParentFolderId { get; set; }
+    public Guid? ParentFolderId { get; set; }
     public bool IsSharedSpace { get; set; }
 }
 
 public class UpdateFolderRequest
 {
     public string Name { get; set; } = string.Empty;
-    public int? ParentFolderId { get; set; }
+    public Guid? ParentFolderId { get; set; }
 }
 
 public class MoveFolderAssetsRequest
 {
-    public int? SourceFolderId { get; set; }
-    public int TargetFolderId { get; set; }
-    public List<int> AssetIds { get; set; } = new();
+    public Guid? SourceFolderId { get; set; }
+    public Guid TargetFolderId { get; set; }
+    public List<Guid> AssetIds { get; set; } = new();
 }
 
 public class RemoveFolderAssetsRequest
 {
-    public int FolderId { get; set; }
-    public List<int> AssetIds { get; set; } = new();
+    public Guid FolderId { get; set; }
+    public List<Guid> AssetIds { get; set; } = new();
 }

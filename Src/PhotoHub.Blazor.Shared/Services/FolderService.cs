@@ -47,7 +47,7 @@ public class FolderService : IFolderService
         }
     }
 
-    public async Task<FolderItem?> GetFolderByIdAsync(int id)
+    public async Task<FolderItem?> GetFolderByIdAsync(Guid id)
     {
         try
         {
@@ -75,7 +75,7 @@ public class FolderService : IFolderService
         }
     }
 
-    public async Task<List<TimelineItem>> GetFolderAssetsAsync(int folderId)
+    public async Task<List<TimelineItem>> GetFolderAssetsAsync(Guid folderId)
     {
         try
         {
@@ -97,7 +97,7 @@ public class FolderService : IFolderService
         return await response.Content.ReadFromJsonAsync<FolderItem>() ?? throw new Exception("Failed to create folder");
     }
 
-    public async Task<FolderItem> UpdateFolderAsync(int folderId, UpdateFolderRequest request)
+    public async Task<FolderItem> UpdateFolderAsync(Guid folderId, UpdateFolderRequest request)
     {
         await SetAuthHeaderAsync();
         var response = await _httpClient.PutAsJsonAsync($"/api/folders/{folderId}", request);
@@ -105,7 +105,7 @@ public class FolderService : IFolderService
         return await response.Content.ReadFromJsonAsync<FolderItem>() ?? throw new Exception("Failed to update folder");
     }
 
-    public async Task DeleteFolderAsync(int folderId)
+    public async Task DeleteFolderAsync(Guid folderId)
     {
         await SetAuthHeaderAsync();
         var response = await _httpClient.DeleteAsync($"/api/folders/{folderId}");

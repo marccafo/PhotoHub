@@ -12,9 +12,9 @@ public enum AssetTagType
 
 public class AssetTag
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
     
-    public int AssetId { get; set; }
+    public Guid AssetId { get; set; }
     public Asset Asset { get; set; } = null!;
     
     public AssetTagType TagType { get; set; }

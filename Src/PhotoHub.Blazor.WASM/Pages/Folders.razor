@@ -1,6 +1,6 @@
 @page "/folders"
 @page "/folders/{Space}"
-@page "/folders/{FolderId:int}"
+@page "/folders/{FolderId:guid}"
 @using PhotoHub.Blazor.Shared.Models
 @using PhotoHub.Blazor.WASM.Services
 @inject IFolderService FolderService
@@ -351,7 +351,7 @@ else
     </TitleContent>
     <DialogContent>
         <MudTextField @bind-Value="_folderNameInput" Label="Nombre" Variant="Variant.Outlined" FullWidth="true" Class="mb-3" />
-        <MudAutocomplete T="int?"
+        <MudAutocomplete T="Guid?"
                          Label="Carpeta padre"
                          Variant="Variant.Outlined"
                          @bind-Value="_editParentFolderId"
@@ -386,7 +386,7 @@ else
         <MudText Typo="Typo.h6">Mover archivos</MudText>
     </TitleContent>
     <DialogContent>
-        <MudAutocomplete T="int?"
+        <MudAutocomplete T="Guid?"
                          Label="Destino"
                          Variant="Variant.Outlined"
                          @bind-Value="_moveTargetFolderId"
@@ -434,7 +434,7 @@ else
 
 @code {
     [Parameter] public string? Space { get; set; }
-    [Parameter] public int? FolderId { get; set; }
+    [Parameter] public Guid? FolderId { get; set; }
     [SupplyParameterFromQuery(Name = "trash")] public bool? Trash { get; set; }
     
     private bool IsAtRoot => _selectedFolder == null || (Space != null && !FolderId.HasValue) ||
@@ -475,13 +475,13 @@ else
     private string _folderNameInput = string.Empty;
     private string _searchQuery = string.Empty;
     private FolderSort _folderSort = FolderSort.Name;
-    private int? _editParentFolderId;
-    private int? _moveTargetFolderId;
-    private HashSet<int> _selectedAssetIds = new();
+    private Guid? _editParentFolderId;
+    private Guid? _moveTargetFolderId;
+    private HashSet<Guid> _selectedAssetIds = new();
     private bool _selectionMode = false;
     private bool _folderSelectionMode = false;
-    private HashSet<int> _selectedFolderIds = new();
-    private int? _userId;
+    private HashSet<Guid> _selectedFolderIds = new();
+    private Guid? _userId;
     private string _userRootPrefix = string.Empty;
     private string _userRootPhysicalPrefix = string.Empty;
 
@@ -905,7 +905,7 @@ else
         return _allFolders.FirstOrDefault(folder => IsBinPath(folder.Path));
     }
     
-    private FolderItem? FindFolderInTreeById(int folderId, List<FolderItem> tree)
+    private FolderItem? FindFolderInTreeById(Guid folderId, List<FolderItem> tree)
     {
         foreach (var folder in tree)
         {
@@ -1066,7 +1066,7 @@ else
         }
     }
 
-    private async Task<TimelineItem?> GetFolderFirstAssetThumbnail(int folderId)
+    private async Task<TimelineItem?> GetFolderFirstAssetThumbnail(Guid folderId)
     {
         var assets = await FolderService.GetFolderAssetsAsync(folderId);
         return assets?.FirstOrDefault();
@@ -1083,7 +1083,7 @@ else
         StateHasChanged();
     }
 
-    private async Task RefreshFoldersViewAsync(int? targetFolderId = null)
+    private async Task RefreshFoldersViewAsync(Guid? targetFolderId = null)
     {
         await LoadFolders();
 
@@ -1158,7 +1158,7 @@ else
         await OnFolderSelected(folder);
     }
 
-    private async Task LoadFolderAssets(int folderId)
+    private async Task LoadFolderAssets(Guid folderId)
     {
         try
         {
@@ -1295,7 +1295,7 @@ else
     {
         var path = new List<FolderItem>();
         var currentFolder = folder;
-        var visited = new HashSet<int>(); // Para evitar ciclos
+        var visited = new HashSet<Guid>(); // Para evitar ciclos
         
         // Construir la ruta desde la carpeta actual hacia arriba
         while (currentFolder != null && !visited.Contains(currentFolder.Id))
@@ -1356,7 +1356,7 @@ else
         return null;
     }
     
-    private List<FolderItem>? FindFolderInTree(int folderId, List<FolderItem> tree, List<FolderItem>? currentPath = null)
+    private List<FolderItem>? FindFolderInTree(Guid folderId, List<FolderItem> tree, List<FolderItem>? currentPath = null)
     {
         if (currentPath == null)
         {
@@ -1686,7 +1686,7 @@ else
         _restoreAssetsDialogVisible = false;
     }
 
-    private void ToggleAssetSelection(int assetId, bool selected)
+    private void ToggleAssetSelection(Guid assetId, bool selected)
     {
         if (!_selectionMode)
         {
@@ -1713,7 +1713,7 @@ else
         StateHasChanged();
     }
 
-    private bool IsAssetSelected(int assetId) => _selectedAssetIds.Contains(assetId);
+    private bool IsAssetSelected(Guid assetId) => _selectedAssetIds.Contains(assetId);
 
     private bool IsTrashFolderSelected
         => _selectedFolder != null && _selectedFolder.Path.Replace('\\', '/').Contains("/_trash", StringComparison.OrdinalIgnoreCase);
@@ -1900,7 +1900,7 @@ else
         }
     }
 
-    private void ToggleFolderSelection(int folderId, bool selected)
+    private void ToggleFolderSelection(Guid folderId, bool selected)
     {
         if (!_folderSelectionMode)
         {
@@ -1927,7 +1927,7 @@ else
         StateHasChanged();
     }
 
-    private bool IsFolderSelected(int folderId) => _selectedFolderIds.Contains(folderId);
+    private bool IsFolderSelected(Guid folderId) => _selectedFolderIds.Contains(folderId);
 
     private FolderItem? GetSelectedFolderForEdit()
     {
@@ -1940,7 +1940,7 @@ else
         return _allFolders.FirstOrDefault(f => f.Id == folderId) ?? _selectedFolder;
     }
 
-    private Task<IEnumerable<int?>> SearchMoveFolderAsync(string value, CancellationToken cancellationToken)
+    private Task<IEnumerable<Guid?>> SearchMoveFolderAsync(string value, CancellationToken cancellationToken)
     {
         var query = string.IsNullOrWhiteSpace(value)
             ? _allFolders.AsEnumerable()
@@ -1951,13 +1951,13 @@ else
         var results = query
             .Where(f => _selectedFolder == null || f.Id != _selectedFolder.Id)
             .OrderBy(f => f.Path)
-            .Select(f => (int?)f.Id)
+            .Select(f => (Guid?)f.Id)
             .ToList();
 
-        return Task.FromResult<IEnumerable<int?>>(results);
+        return Task.FromResult<IEnumerable<Guid?>>(results);
     }
 
-    private string MoveFolderToString(int? folderId)
+    private string MoveFolderToString(Guid? folderId)
     {
         if (!folderId.HasValue)
         {
@@ -1968,7 +1968,7 @@ else
         return folder == null ? string.Empty : GetDisplayPath(folder);
     }
 
-    private Task<IEnumerable<int?>> SearchEditParentFolderAsync(string value, CancellationToken cancellationToken)
+    private Task<IEnumerable<Guid?>> SearchEditParentFolderAsync(string value, CancellationToken cancellationToken)
     {
         var query = string.IsNullOrWhiteSpace(value)
             ? GetEditableParentFolders()
@@ -1978,13 +1978,13 @@ else
 
         var results = query
             .OrderBy(f => f.Path)
-            .Select(f => (int?)f.Id)
+            .Select(f => (Guid?)f.Id)
             .ToList();
 
-        return Task.FromResult<IEnumerable<int?>>(results);
+        return Task.FromResult<IEnumerable<Guid?>>(results);
     }
 
-    private string EditParentFolderToString(int? folderId)
+    private string EditParentFolderToString(Guid? folderId)
     {
         if (!folderId.HasValue)
         {

@@ -19,7 +19,7 @@ public class AssetContentEndpoint : IEndpoint
     private async Task<IResult> Handle(
         [FromServices] ApplicationDbContext dbContext,
         [FromServices] SettingsService settingsService,
-        [FromRoute] int assetId,
+        [FromRoute] Guid assetId,
         CancellationToken cancellationToken)
     {
         var asset = await dbContext.Assets.FindAsync(new object[] { assetId }, cancellationToken);

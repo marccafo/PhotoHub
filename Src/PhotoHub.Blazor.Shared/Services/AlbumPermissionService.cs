@@ -42,7 +42,7 @@ public class AlbumPermissionService : IAlbumPermissionService
         }
     }
 
-    public async Task<List<AlbumPermissionDto>> GetAlbumPermissionsAsync(int albumId)
+    public async Task<List<AlbumPermissionDto>> GetAlbumPermissionsAsync(Guid albumId)
     {
         await SetAuthHeaderAsync();
         var response = await _httpClient.GetAsync($"/api/albums/{albumId}/permissions");
@@ -55,7 +55,7 @@ public class AlbumPermissionService : IAlbumPermissionService
         return await response.Content.ReadFromJsonAsync<List<AlbumPermissionDto>>() ?? new List<AlbumPermissionDto>();
     }
 
-    public async Task<AlbumPermissionDto> SetAlbumPermissionAsync(int albumId, SetAlbumPermissionRequest request)
+    public async Task<AlbumPermissionDto> SetAlbumPermissionAsync(Guid albumId, SetAlbumPermissionRequest request)
     {
         await SetAuthHeaderAsync();
         var response = await _httpClient.PostAsJsonAsync($"/api/albums/{albumId}/permissions", request);
@@ -69,7 +69,7 @@ public class AlbumPermissionService : IAlbumPermissionService
             ?? throw new Exception("Failed to set permission");
     }
 
-    public async Task DeleteAlbumPermissionAsync(int albumId, int userId)
+    public async Task DeleteAlbumPermissionAsync(Guid albumId, Guid userId)
     {
         await SetAuthHeaderAsync();
         var response = await _httpClient.DeleteAsync($"/api/albums/{albumId}/permissions/{userId}");

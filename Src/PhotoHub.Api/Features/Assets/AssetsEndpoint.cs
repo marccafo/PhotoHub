@@ -191,7 +191,7 @@ public class AssetsEndpoint : IEndpoint
         ApplicationDbContext dbContext,
         SettingsService settingsService,
         List<Asset> assets,
-        int userId,
+        Guid userId,
         CancellationToken ct)
     {
         var userRootVirtual = $"/assets/users/{userId}";
@@ -338,14 +338,14 @@ public class AssetsEndpoint : IEndpoint
         await dbContext.SaveChangesAsync(ct);
     }
 
-    private static bool TryGetUserId(ClaimsPrincipal user, out int userId)
+    private static bool TryGetUserId(ClaimsPrincipal user, out Guid userId)
     {
-        userId = 0;
+        userId = Guid.Empty;
         var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-        return userIdClaim != null && int.TryParse(userIdClaim.Value, out userId);
+        return userIdClaim != null && Guid.TryParse(userIdClaim.Value, out userId);
     }
 
-    private static bool IsAssetInUserRoot(string assetPath, int userId)
+    private static bool IsAssetInUserRoot(string assetPath, Guid userId)
     {
         var normalized = assetPath.Replace('\\', '/');
         var virtualRoot = $"/assets/users/{userId}/";
@@ -359,10 +359,10 @@ public class AssetsEndpoint : IEndpoint
 
     private static async Task<Folder?> EnsureFolderRecordAsync(
         ApplicationDbContext dbContext,
-        int userId,
+        Guid userId,
         string folderPath,
         CancellationToken ct,
-        int? parentFolderId = null)
+        Guid? parentFolderId = null)
     {
         var normalizedPath = folderPath.Replace('\\', '/').TrimEnd('/');
         var existing = await dbContext.Folders.FirstOrDefaultAsync(f => f.Path == normalizedPath, ct);
@@ -404,15 +404,15 @@ public class AssetsEndpoint : IEndpoint
 
 public class DeleteAssetsRequest
 {
-    public List<int> AssetIds { get; set; } = new();
+    public List<Guid> AssetIds { get; set; } = new();
 }
 
 public class RestoreAssetsRequest
 {
-    public List<int> AssetIds { get; set; } = new();
+    public List<Guid> AssetIds { get; set; } = new();
 }
 
 public class PurgeAssetsRequest
 {
-    public List<int> AssetIds { get; set; } = new();
+    public List<Guid> AssetIds { get; set; } = new();
 }

@@ -12,7 +12,7 @@ using PhotoHub.API.Shared.Data;
 namespace PhotoHub.Api.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260116184002_InitialCreate")]
+    [Migration("20260119155302_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -27,14 +27,12 @@ namespace PhotoHub.Api.Migrations
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.Album", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("uuid");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int?>("CoverAssetId")
-                        .HasColumnType("integer");
+                    b.Property<Guid?>("CoverAssetId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
@@ -48,8 +46,8 @@ namespace PhotoHub.Api.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<int>("OwnerId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp without time zone");
@@ -65,20 +63,18 @@ namespace PhotoHub.Api.Migrations
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.AlbumAsset", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("AddedAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int>("AlbumId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("AlbumId")
+                        .HasColumnType("uuid");
 
-                    b.Property<int>("AssetId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
 
                     b.Property<int>("Order")
                         .HasColumnType("integer");
@@ -97,14 +93,12 @@ namespace PhotoHub.Api.Migrations
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.AlbumPermission", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("uuid");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("AlbumId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("AlbumId")
+                        .HasColumnType("uuid");
 
                     b.Property<bool>("CanDelete")
                         .HasColumnType("boolean");
@@ -121,11 +115,11 @@ namespace PhotoHub.Api.Migrations
                     b.Property<DateTime>("GrantedAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int?>("GrantedByUserId")
-                        .HasColumnType("integer");
+                    b.Property<Guid?>("GrantedByUserId")
+                        .HasColumnType("uuid");
 
-                    b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
@@ -143,11 +137,9 @@ namespace PhotoHub.Api.Migrations
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.Asset", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Checksum")
                         .IsRequired()
@@ -160,8 +152,8 @@ namespace PhotoHub.Api.Migrations
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int?>("DeletedFromFolderId")
-                        .HasColumnType("integer");
+                    b.Property<Guid?>("DeletedFromFolderId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("DeletedFromPath")
                         .HasMaxLength(1000)
@@ -183,8 +175,8 @@ namespace PhotoHub.Api.Migrations
                     b.Property<long>("FileSize")
                         .HasColumnType("bigint");
 
-                    b.Property<int?>("FolderId")
-                        .HasColumnType("integer");
+                    b.Property<Guid?>("FolderId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("FullPath")
                         .IsRequired()
@@ -194,8 +186,8 @@ namespace PhotoHub.Api.Migrations
                     b.Property<DateTime>("ModifiedDate")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int?>("OwnerId")
-                        .HasColumnType("integer");
+                    b.Property<Guid?>("OwnerId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("ScannedAt")
                         .HasColumnType("timestamp without time zone");
@@ -221,11 +213,9 @@ namespace PhotoHub.Api.Migrations
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.AssetExif", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("uuid");
 
                     b.Property<double?>("Altitude")
                         .HasColumnType("double precision");
@@ -233,8 +223,8 @@ namespace PhotoHub.Api.Migrations
                     b.Property<double?>("Aperture")
                         .HasColumnType("double precision");
 
-                    b.Property<int>("AssetId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("CameraMake")
                         .HasMaxLength(200)
@@ -292,14 +282,12 @@ namespace PhotoHub.Api.Migrations
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.AssetMlJob", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("uuid");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("AssetId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("timestamp without time zone");
@@ -334,14 +322,12 @@ namespace PhotoHub.Api.Migrations
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.AssetTag", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("uuid");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("AssetId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
 
                     b.Property<double?>("Confidence")
                         .HasColumnType("double precision");
@@ -364,14 +350,12 @@ namespace PhotoHub.Api.Migrations
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.AssetThumbnail", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("uuid");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("AssetId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
@@ -410,11 +394,9 @@ namespace PhotoHub.Api.Migrations
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.Folder", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
@@ -424,8 +406,8 @@ namespace PhotoHub.Api.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
-                    b.Property<int?>("ParentFolderId")
-                        .HasColumnType("integer");
+                    b.Property<Guid?>("ParentFolderId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Path")
                         .IsRequired()
@@ -444,11 +426,9 @@ namespace PhotoHub.Api.Migrations
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.FolderPermission", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("uuid");
 
                     b.Property<bool>("CanDelete")
                         .HasColumnType("boolean");
@@ -462,17 +442,17 @@ namespace PhotoHub.Api.Migrations
                     b.Property<bool>("CanWrite")
                         .HasColumnType("boolean");
 
-                    b.Property<int>("FolderId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("FolderId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("GrantedAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int?>("GrantedByUserId")
-                        .HasColumnType("integer");
+                    b.Property<Guid?>("GrantedByUserId")
+                        .HasColumnType("uuid");
 
-                    b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
@@ -488,11 +468,9 @@ namespace PhotoHub.Api.Migrations
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.RefreshToken", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
@@ -513,8 +491,8 @@ namespace PhotoHub.Api.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
-                    b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
@@ -549,11 +527,9 @@ namespace PhotoHub.Api.Migrations
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.User", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");

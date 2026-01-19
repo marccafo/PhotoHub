@@ -62,7 +62,7 @@ public class AlbumService : IAlbumService
         }
     }
 
-    public async Task<AlbumItem?> GetAlbumByIdAsync(int id)
+    public async Task<AlbumItem?> GetAlbumByIdAsync(Guid id)
     {
         try
         {
@@ -86,7 +86,7 @@ public class AlbumService : IAlbumService
         }
     }
 
-    public async Task<List<TimelineItem>> GetAlbumAssetsAsync(int albumId)
+    public async Task<List<TimelineItem>> GetAlbumAssetsAsync(Guid albumId)
     {
         try
         {
@@ -135,7 +135,7 @@ public class AlbumService : IAlbumService
         }
     }
 
-    public async Task<bool> UpdateAlbumAsync(int id, string name, string? description)
+    public async Task<bool> UpdateAlbumAsync(Guid id, string name, string? description)
     {
         try
         {
@@ -155,7 +155,7 @@ public class AlbumService : IAlbumService
         }
     }
 
-    public async Task<bool> DeleteAlbumAsync(int id)
+    public async Task<bool> DeleteAlbumAsync(Guid id)
     {
         try
         {
@@ -174,7 +174,7 @@ public class AlbumService : IAlbumService
         }
     }
 
-    public async Task<bool> LeaveAlbumAsync(int albumId)
+    public async Task<bool> LeaveAlbumAsync(Guid albumId)
     {
         try
         {
@@ -193,7 +193,7 @@ public class AlbumService : IAlbumService
         }
     }
 
-    public async Task<bool> AddAssetToAlbumAsync(int albumId, int assetId)
+    public async Task<bool> AddAssetToAlbumAsync(Guid albumId, Guid assetId)
     {
         try
         {
@@ -224,7 +224,7 @@ public class AlbumService : IAlbumService
         }
     }
 
-    public async Task<bool> RemoveAssetFromAlbumAsync(int albumId, int assetId)
+    public async Task<bool> RemoveAssetFromAlbumAsync(Guid albumId, Guid assetId)
     {
         try
         {
@@ -243,7 +243,7 @@ public class AlbumService : IAlbumService
         }
     }
 
-    public async Task<bool> SetAlbumCoverAsync(int albumId, int assetId)
+    public async Task<bool> SetAlbumCoverAsync(Guid albumId, Guid assetId)
     {
         try
         {

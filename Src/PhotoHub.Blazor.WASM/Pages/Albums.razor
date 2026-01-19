@@ -1,6 +1,6 @@
 @page "/albums"
 @page "/albums/{Filter}"
-@page "/albums/{AlbumId:int}"
+@page "/albums/{AlbumId:guid}"
 @using PhotoHub.Blazor.WASM.Services
 @inject IAlbumService AlbumService
 @inject ISnackbar Snackbar
@@ -601,7 +601,7 @@ else
 </MudDialog>
 
 @code {
-    [Parameter] public int AlbumId { get; set; }
+    [Parameter] public Guid AlbumId { get; set; }
     [Parameter] public string? Filter { get; set; }
 
     private string PageHeader => Filter?.ToLower() switch
@@ -638,8 +638,8 @@ else
     private bool _loadingAssets = false;
     private bool _albumSelectionMode = false;
     private bool _assetSelectionMode = false;
-    private HashSet<int> _selectedAlbumIds = new();
-    private HashSet<int> _selectedAlbumAssetIds = new();
+    private HashSet<Guid> _selectedAlbumIds = new();
+    private HashSet<Guid> _selectedAlbumAssetIds = new();
     private string _albumSearch = string.Empty;
     private AlbumFilter _albumFilter = AlbumFilter.All;
     private AlbumViewMode _albumViewMode = AlbumViewMode.Grid;
@@ -655,8 +655,8 @@ else
     private string? _newAlbumDescription = "";
     private string _editAlbumName = "";
     private string? _editAlbumDescription = "";
-    private int? _editTargetAlbumId;
-    private int? _deleteTargetAlbumId;
+    private Guid? _editTargetAlbumId;
+    private Guid? _deleteTargetAlbumId;
     private string _deleteTargetAlbumName = "";
 
     private List<BreadcrumbItem> _breadcrumbs = new();
@@ -678,7 +678,7 @@ else
         _albumViewMode = mode;
     }
 
-    private void OpenPermissionsDialog(int albumId)
+    private void OpenPermissionsDialog(Guid albumId)
     {
         _selectedAlbumIds.Clear();
         _selectedAlbumIds.Add(albumId);
@@ -689,7 +689,7 @@ else
     {
         await LoadAlbums();
         
-        if (AlbumId > 0)
+        if (AlbumId != Guid.Empty)
         {
             await LoadAlbum(AlbumId);
         }
@@ -706,12 +706,12 @@ else
                 _ => AlbumFilter.All
             };
         }
-        else if (AlbumId == 0)
+        else if (AlbumId == Guid.Empty)
         {
             _albumFilter = AlbumFilter.All;
         }
 
-        if (AlbumId > 0)
+        if (AlbumId != Guid.Empty)
         {
             _albumSelectionMode = false;
             _selectedAlbumIds.Clear();
@@ -744,7 +744,7 @@ else
         }
     }
 
-    private async Task LoadAlbum(int albumId)
+    private async Task LoadAlbum(Guid albumId)
     {
         try
         {
@@ -828,7 +828,7 @@ else
         return query.ToList();
     }
 
-    private void OpenAlbum(int albumId)
+    private void OpenAlbum(Guid albumId)
     {
         Navigation.NavigateTo($"/albums/{albumId}");
     }
@@ -1028,7 +1028,7 @@ else
         }
     }
 
-    private void OnAlbumCardClick(int albumId)
+    private void OnAlbumCardClick(Guid albumId)
     {
         if (_albumSelectionMode)
         {
@@ -1054,7 +1054,7 @@ else
         UpdateSelectionNavbar();
     }
 
-    private void ToggleAlbumSelection(int albumId, bool selected)
+    private void ToggleAlbumSelection(Guid albumId, bool selected)
     {
         if (!_albumSelectionMode)
         {
@@ -1080,7 +1080,7 @@ else
         UpdateSelectionNavbar();
     }
 
-    private bool IsAlbumSelected(int albumId) => _selectedAlbumIds.Contains(albumId);
+    private bool IsAlbumSelected(Guid albumId) => _selectedAlbumIds.Contains(albumId);
 
     private AlbumItem? GetSingleSelectedAlbum()
     {
@@ -1219,7 +1219,7 @@ else
         UpdateSelectionNavbar();
     }
 
-    private void ToggleAlbumAssetSelection(int assetId, bool selected)
+    private void ToggleAlbumAssetSelection(Guid assetId, bool selected)
     {
         if (!_assetSelectionMode)
         {
@@ -1245,7 +1245,7 @@ else
         UpdateSelectionNavbar();
     }
 
-    private bool IsAlbumAssetSelected(int assetId) => _selectedAlbumAssetIds.Contains(assetId);
+    private bool IsAlbumAssetSelected(Guid assetId) => _selectedAlbumAssetIds.Contains(assetId);
 
     private bool CanEditAlbumAssets()
     {

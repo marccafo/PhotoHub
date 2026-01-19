@@ -214,7 +214,7 @@ else
         }
     }
 
-    private async Task DeleteUser(int id)
+    private async Task DeleteUser(Guid id)
     {
         var user = _users.FirstOrDefault(u => u.Id == id);
         if (user == null) return;

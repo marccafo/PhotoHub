@@ -78,7 +78,7 @@ public class AdminStatsEndpoint : IEndpoint
 
                 return new AdminUserUsage
                 {
-                    UserId = 0,
+                    UserId = Guid.Empty,
                     DisplayName = "Sin propietario",
                     Email = null,
                     Photos = photoCount,

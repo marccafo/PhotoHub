@@ -31,7 +31,7 @@ public class ThumbnailGeneratorService
     /// </summary>
     public async Task<List<AssetThumbnail>> GenerateThumbnailsAsync(
         string sourceFilePath, 
-        int assetId,
+        Guid assetId,
         CancellationToken cancellationToken = default)
     {
         var thumbnails = new List<AssetThumbnail>();
@@ -237,7 +237,7 @@ public class ThumbnailGeneratorService
         }
     }
 
-    private async Task GenerateHeicThumbnailsAsync(string sourceFilePath, int assetId, List<AssetThumbnail> thumbnails, CancellationToken cancellationToken)
+    private async Task GenerateHeicThumbnailsAsync(string sourceFilePath, Guid assetId, List<AssetThumbnail> thumbnails, CancellationToken cancellationToken)
     {
         try
         {
@@ -286,7 +286,7 @@ public class ThumbnailGeneratorService
     
     private async Task<AssetThumbnail?> GenerateThumbnailAsync(
         Image sourceImage,
-        int assetId,
+        Guid assetId,
         ThumbnailSize size,
         int orientation,
         CancellationToken cancellationToken)
@@ -438,7 +438,7 @@ public class ThumbnailGeneratorService
         }
     }
     
-    private string GetThumbnailPath(int assetId, ThumbnailSize size)
+    private string GetThumbnailPath(Guid assetId, ThumbnailSize size)
     {
         // Organize thumbnails by asset ID: thumbnails/{assetId}/{size}.jpg
         var sizeName = size.ToString().ToLowerInvariant();
@@ -448,7 +448,7 @@ public class ThumbnailGeneratorService
     /// <summary>
     /// Checks if a thumbnail file exists physically on disk
     /// </summary>
-    public bool ThumbnailExists(int assetId, ThumbnailSize size)
+    public bool ThumbnailExists(Guid assetId, ThumbnailSize size)
     {
         var thumbnailPath = GetThumbnailPath(assetId, size);
         return File.Exists(thumbnailPath);
@@ -457,7 +457,7 @@ public class ThumbnailGeneratorService
     /// <summary>
     /// Verifies all thumbnails for an asset exist, returns missing sizes
     /// </summary>
-    public List<ThumbnailSize> GetMissingThumbnailSizes(int assetId)
+    public List<ThumbnailSize> GetMissingThumbnailSizes(Guid assetId)
     {
         var sizes = new[] { ThumbnailSize.Small, ThumbnailSize.Medium, ThumbnailSize.Large };
         var missing = new List<ThumbnailSize>();

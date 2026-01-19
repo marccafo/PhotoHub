@@ -163,7 +163,7 @@ public class TimelineEndpoint : IEndpoint
                             copiedCount++;
                             timelineItems.Add(new TimelineResponse
                             {
-                                Id = 0,
+                                Id = Guid.Empty,
                                 FileName = fileName,
                                 FullPath = virtualizedPath,
                                 FileSize = file.FileSize,
@@ -202,20 +202,20 @@ public class TimelineEndpoint : IEndpoint
         }
     }
 
-    private bool TryGetUserId(ClaimsPrincipal user, out int userId)
+    private bool TryGetUserId(ClaimsPrincipal user, out Guid userId)
     {
         var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-        return int.TryParse(userIdClaim?.Value, out userId);
+        return Guid.TryParse(userIdClaim?.Value, out userId);
     }
 
-    private string GetUserRootPath(int userId)
+    private string GetUserRootPath(Guid userId)
     {
         return $"/assets/users/{userId}";
     }
 
-    private async Task<HashSet<int>> GetAllowedFolderIdsForUserAsync(
+    private async Task<HashSet<Guid>> GetAllowedFolderIdsForUserAsync(
         ApplicationDbContext dbContext,
-        int userId,
+        Guid userId,
         string userRootPath,
         CancellationToken ct)
     {
@@ -251,7 +251,7 @@ public class TimelineEndpoint : IEndpoint
 
     private async Task<HashSet<string>> GetAllowedFolderPathsForUserAsync(
         ApplicationDbContext dbContext,
-        int userId,
+        Guid userId,
         string userRootPath,
         CancellationToken ct)
     {

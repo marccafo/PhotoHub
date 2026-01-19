@@ -106,7 +106,7 @@ else
         else
         {
             var encodedPath = System.Net.WebUtility.UrlEncode(asset.FullPath);
-            Navigation.NavigateTo($"/asset/0?path={encodedPath}");
+            Navigation.NavigateTo($"/asset/{Guid.Empty}?path={encodedPath}");
         }
     }
 }

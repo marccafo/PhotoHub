@@ -4,7 +4,7 @@ namespace PhotoHub.API.Shared.Models;
 
 public class Folder
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
     
     [Required]
     [MaxLength(1000)]
@@ -14,7 +14,7 @@ public class Folder
     [MaxLength(500)]
     public string Name { get; set; } = string.Empty;
     
-    public int? ParentFolderId { get; set; }
+    public Guid? ParentFolderId { get; set; }
     public Folder? ParentFolder { get; set; }
     public ICollection<Folder> SubFolders { get; set; } = new List<Folder>();
     

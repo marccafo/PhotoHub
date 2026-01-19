@@ -1,6 +1,5 @@
 ﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
-using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
@@ -16,11 +15,10 @@ namespace PhotoHub.Api.Migrations
                 name: "Folders",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Path = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: false),
                     Name = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
-                    ParentFolderId = table.Column<int>(type: "integer", nullable: true),
+                    ParentFolderId = table.Column<Guid>(type: "uuid", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false)
                 },
                 constraints: table =>
@@ -51,8 +49,7 @@ namespace PhotoHub.Api.Migrations
                 name: "Users",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Username = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     Email = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
                     PasswordHash = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
@@ -73,8 +70,7 @@ namespace PhotoHub.Api.Migrations
                 name: "Assets",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
                     FileName = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
                     FullPath = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: false),
                     FileSize = table.Column<long>(type: "bigint", nullable: false),
@@ -84,11 +80,11 @@ namespace PhotoHub.Api.Migrations
                     ModifiedDate = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     Extension = table.Column<string>(type: "character varying(10)", maxLength: 10, nullable: false),
                     ScannedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
-                    OwnerId = table.Column<int>(type: "integer", nullable: true),
-                    FolderId = table.Column<int>(type: "integer", nullable: true),
+                    OwnerId = table.Column<Guid>(type: "uuid", nullable: true),
+                    FolderId = table.Column<Guid>(type: "uuid", nullable: true),
                     DeletedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     DeletedFromPath = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
-                    DeletedFromFolderId = table.Column<int>(type: "integer", nullable: true),
+                    DeletedFromFolderId = table.Column<Guid>(type: "uuid", nullable: true),
                     Duration = table.Column<TimeSpan>(type: "interval", nullable: true)
                 },
                 constraints: table =>
@@ -112,16 +108,15 @@ namespace PhotoHub.Api.Migrations
                 name: "FolderPermissions",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    UserId = table.Column<int>(type: "integer", nullable: false),
-                    FolderId = table.Column<int>(type: "integer", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    FolderId = table.Column<Guid>(type: "uuid", nullable: false),
                     CanRead = table.Column<bool>(type: "boolean", nullable: false),
                     CanWrite = table.Column<bool>(type: "boolean", nullable: false),
                     CanDelete = table.Column<bool>(type: "boolean", nullable: false),
                     CanManagePermissions = table.Column<bool>(type: "boolean", nullable: false),
                     GrantedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
-                    GrantedByUserId = table.Column<int>(type: "integer", nullable: true)
+                    GrantedByUserId = table.Column<Guid>(type: "uuid", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -150,11 +145,10 @@ namespace PhotoHub.Api.Migrations
                 name: "RefreshTokens",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
                     TokenHash = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
                     DeviceId = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
-                    UserId = table.Column<int>(type: "integer", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     ExpiresAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     RevokedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: true)
@@ -174,14 +168,13 @@ namespace PhotoHub.Api.Migrations
                 name: "Albums",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     Description = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
-                    CoverAssetId = table.Column<int>(type: "integer", nullable: true),
-                    OwnerId = table.Column<int>(type: "integer", nullable: false)
+                    CoverAssetId = table.Column<Guid>(type: "uuid", nullable: true),
+                    OwnerId = table.Column<Guid>(type: "uuid", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -204,9 +197,8 @@ namespace PhotoHub.Api.Migrations
                 name: "AssetExifs",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    AssetId = table.Column<int>(type: "integer", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    AssetId = table.Column<Guid>(type: "uuid", nullable: false),
                     DateTimeOriginal = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
                     Latitude = table.Column<double>(type: "double precision", nullable: true),
                     Longitude = table.Column<double>(type: "double precision", nullable: true),
@@ -239,9 +231,8 @@ namespace PhotoHub.Api.Migrations
                 name: "AssetMlJobs",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    AssetId = table.Column<int>(type: "integer", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    AssetId = table.Column<Guid>(type: "uuid", nullable: false),
                     JobType = table.Column<int>(type: "integer", nullable: false),
                     Status = table.Column<int>(type: "integer", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
@@ -265,9 +256,8 @@ namespace PhotoHub.Api.Migrations
                 name: "AssetTags",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    AssetId = table.Column<int>(type: "integer", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    AssetId = table.Column<Guid>(type: "uuid", nullable: false),
                     TagType = table.Column<int>(type: "integer", nullable: false),
                     Confidence = table.Column<double>(type: "double precision", nullable: true),
                     DetectedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false)
@@ -287,9 +277,8 @@ namespace PhotoHub.Api.Migrations
                 name: "AssetThumbnails",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    AssetId = table.Column<int>(type: "integer", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    AssetId = table.Column<Guid>(type: "uuid", nullable: false),
                     Size = table.Column<int>(type: "integer", nullable: false),
                     FilePath = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: false),
                     Width = table.Column<int>(type: "integer", nullable: false),
@@ -313,10 +302,9 @@ namespace PhotoHub.Api.Migrations
                 name: "AlbumAssets",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    AlbumId = table.Column<int>(type: "integer", nullable: false),
-                    AssetId = table.Column<int>(type: "integer", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    AlbumId = table.Column<Guid>(type: "uuid", nullable: false),
+                    AssetId = table.Column<Guid>(type: "uuid", nullable: false),
                     Order = table.Column<int>(type: "integer", nullable: false),
                     AddedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false)
                 },
@@ -341,16 +329,15 @@ namespace PhotoHub.Api.Migrations
                 name: "AlbumPermissions",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    AlbumId = table.Column<int>(type: "integer", nullable: false),
-                    UserId = table.Column<int>(type: "integer", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    AlbumId = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
                     CanView = table.Column<bool>(type: "boolean", nullable: false),
                     CanEdit = table.Column<bool>(type: "boolean", nullable: false),
                     CanDelete = table.Column<bool>(type: "boolean", nullable: false),
                     CanManagePermissions = table.Column<bool>(type: "boolean", nullable: false),
                     GrantedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
-                    GrantedByUserId = table.Column<int>(type: "integer", nullable: true)
+                    GrantedByUserId = table.Column<Guid>(type: "uuid", nullable: true)
                 },
                 constraints: table =>
                 {

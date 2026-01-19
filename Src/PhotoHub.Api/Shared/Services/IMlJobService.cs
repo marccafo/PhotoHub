@@ -4,6 +4,6 @@ namespace PhotoHub.API.Shared.Services;
 
 public interface IMlJobService
 {
-    Task EnqueueMlJobAsync(int assetId, MlJobType jobType, CancellationToken cancellationToken = default);
+    Task EnqueueMlJobAsync(Guid assetId, MlJobType jobType, CancellationToken cancellationToken = default);
     Task<List<AssetMlJob>> GetPendingJobsAsync(CancellationToken cancellationToken = default);
 }
