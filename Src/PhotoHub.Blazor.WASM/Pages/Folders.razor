@@ -1653,8 +1653,9 @@ else
         if (!_selectionMode)
         {
             _selectionMode = true;
+            // No limpiar _selectedFolderIds aquí para permitir selecciones mixtas si fuera necesario,
+            // aunque usualmente _folderSelectionMode y _selectionMode son excluyentes en la UI.
             _folderSelectionMode = false;
-            _selectedFolderIds.Clear();
         }
 
         if (selected)
@@ -1755,7 +1756,7 @@ else
 
     private async Task MoveAssetsAsync()
     {
-        if (_selectedFolder == null || !_moveTargetFolderId.HasValue || !_selectedAssetIds.Any())
+        if (!_moveTargetFolderId.HasValue || !_selectedAssetIds.Any())
         {
             return;
         }
@@ -1764,7 +1765,7 @@ else
         {
             var request = new MoveFolderAssetsRequest
             {
-                SourceFolderId = _selectedFolder.Id,
+                SourceFolderId = null, // Permitir mover desde múltiples carpetas
                 TargetFolderId = _moveTargetFolderId.Value,
                 AssetIds = _selectedAssetIds.ToList()
             };
@@ -1782,7 +1783,7 @@ else
 
     private async Task DeleteAssetsAsync()
     {
-        if (_selectedFolder == null || !_selectedAssetIds.Any())
+        if (!_selectedAssetIds.Any())
         {
             return;
         }
@@ -1807,7 +1808,7 @@ else
 
     private async Task RestoreAssetsAsync()
     {
-        if (_selectedFolder == null || !_selectedAssetIds.Any())
+        if (!_selectedAssetIds.Any())
         {
             return;
         }

@@ -604,15 +604,33 @@ public class FoldersEndpoint : IEndpoint
             return Results.BadRequest(new { error = "Debes seleccionar al menos un asset." });
         }
 
-        if (!await CanWriteFolderAsync(dbContext, userId, user.IsInRole("Admin"), request.SourceFolderId, cancellationToken) ||
+        if ((request.SourceFolderId.HasValue && !await CanWriteFolderAsync(dbContext, userId, user.IsInRole("Admin"), request.SourceFolderId.Value, cancellationToken)) ||
             !await CanWriteFolderAsync(dbContext, userId, user.IsInRole("Admin"), request.TargetFolderId, cancellationToken))
         {
             return Results.Forbid();
         }
 
-        var assets = await dbContext.Assets
-            .Where(a => request.AssetIds.Contains(a.Id) && a.FolderId == request.SourceFolderId && a.DeletedAt == null)
-            .ToListAsync(cancellationToken);
+        var assetsQuery = dbContext.Assets
+            .Where(a => request.AssetIds.Contains(a.Id) && a.DeletedAt == null);
+
+        if (request.SourceFolderId.HasValue)
+        {
+            assetsQuery = assetsQuery.Where(a => a.FolderId == request.SourceFolderId.Value);
+        }
+
+        var assets = await assetsQuery.ToListAsync(cancellationToken);
+
+        // Si no se proporcionó SourceFolderId, debemos verificar permiso de escritura para cada asset
+        if (!request.SourceFolderId.HasValue)
+        {
+            foreach (var asset in assets)
+            {
+                if (asset.FolderId.HasValue && !await CanWriteFolderAsync(dbContext, userId, user.IsInRole("Admin"), asset.FolderId.Value, cancellationToken))
+                {
+                    return Results.Forbid();
+                }
+            }
+        }
 
         var targetFolder = await dbContext.Folders
             .FirstOrDefaultAsync(f => f.Id == request.TargetFolderId, cancellationToken);
@@ -1027,7 +1045,7 @@ public class UpdateFolderRequest
 
 public class MoveFolderAssetsRequest
 {
-    public int SourceFolderId { get; set; }
+    public int? SourceFolderId { get; set; }
     public int TargetFolderId { get; set; }
     public List<int> AssetIds { get; set; } = new();
 }

@@ -15,7 +15,7 @@ public class UpdateFolderRequest
 
 public class MoveFolderAssetsRequest
 {
-    public int SourceFolderId { get; set; }
+    public int? SourceFolderId { get; set; }
     public int TargetFolderId { get; set; }
     public List<int> AssetIds { get; set; } = new();
 }
