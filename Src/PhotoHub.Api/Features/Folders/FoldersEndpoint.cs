@@ -107,6 +107,13 @@ public class FoldersEndpoint : IEndpoint
             var isAdmin = user.IsInRole("Admin");
             var folders = await GetFoldersForUserAsync(dbContext, userId, isAdmin, includeAssets: true, cancellationToken);
 
+            var folderIds = folders.Select(f => f.Id).ToList();
+            var sharedCounts = await dbContext.FolderPermissions
+                .Where(p => folderIds.Contains(p.FolderId) && p.CanRead)
+                .GroupBy(p => p.FolderId)
+                .Select(g => new { FolderId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.FolderId, x => x.Count, cancellationToken);
+
             var permissions = await dbContext.FolderPermissions
                 .Where(p => p.UserId == userId)
                 .ToListAsync(cancellationToken);
@@ -123,7 +130,8 @@ public class FoldersEndpoint : IEndpoint
                     CreatedAt = f.CreatedAt,
                     AssetCount = f.Assets.Count(a => IsBinPath(f.Path) ? a.DeletedAt != null : a.DeletedAt == null),
                     IsOwner = userPerm?.CanManagePermissions ?? isAdmin,
-                    IsShared = f.Path.StartsWith("/assets/shared", StringComparison.OrdinalIgnoreCase)
+                    IsShared = f.Path.StartsWith("/assets/shared", StringComparison.OrdinalIgnoreCase),
+                    SharedWithCount = sharedCounts.TryGetValue(f.Id, out var count) ? count : 0
                 };
             }).ToList();
 
@@ -168,6 +176,13 @@ public class FoldersEndpoint : IEndpoint
                 return Results.Forbid();
             }
 
+            var isAdmin = user.IsInRole("Admin");
+            var sharedCount = await dbContext.FolderPermissions
+                .CountAsync(p => p.FolderId == folderId && p.CanRead, cancellationToken);
+
+            var userPermission = await dbContext.FolderPermissions
+                .FirstOrDefaultAsync(p => p.FolderId == folderId && p.UserId == userId, cancellationToken);
+
             var response = new FolderResponse
             {
                 Id = folder.Id,
@@ -176,6 +191,9 @@ public class FoldersEndpoint : IEndpoint
                 ParentFolderId = folder.ParentFolderId,
                 CreatedAt = folder.CreatedAt,
                 AssetCount = folder.Assets.Count(a => IsBinPath(folder.Path) ? a.DeletedAt != null : a.DeletedAt == null),
+                IsOwner = userPermission?.CanManagePermissions ?? isAdmin,
+                IsShared = folder.Path.StartsWith("/assets/shared", StringComparison.OrdinalIgnoreCase),
+                SharedWithCount = sharedCount,
                 SubFolders = folder.SubFolders.Select(sf => new FolderResponse
                 {
                     Id = sf.Id,
@@ -183,7 +201,9 @@ public class FoldersEndpoint : IEndpoint
                     Name = sf.Name,
                     ParentFolderId = sf.ParentFolderId,
                     CreatedAt = sf.CreatedAt,
-                    AssetCount = 0 // Don't load assets for subfolders in this query
+                    AssetCount = 0, // Don't load assets for subfolders in this query
+                    IsShared = sf.Path.StartsWith("/assets/shared", StringComparison.OrdinalIgnoreCase)
+                    // Note: shared count for subfolders not loaded here for performance
                 }).ToList()
             };
 
@@ -276,16 +296,34 @@ public class FoldersEndpoint : IEndpoint
             var isAdmin = user.IsInRole("Admin");
             var allFolders = await GetFoldersForUserAsync(dbContext, userId, isAdmin, includeAssets: true, cancellationToken);
 
+            var folderIds = allFolders.Select(f => f.Id).ToList();
+            var sharedCounts = await dbContext.FolderPermissions
+                .Where(p => folderIds.Contains(p.FolderId) && p.CanRead)
+                .GroupBy(p => p.FolderId)
+                .Select(g => new { FolderId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.FolderId, x => x.Count, cancellationToken);
+
+            var permissions = await dbContext.FolderPermissions
+                .Where(p => p.UserId == userId)
+                .ToListAsync(cancellationToken);
+
             // Build tree structure
-            var folderDict = allFolders.ToDictionary(f => f.Id, f => new FolderResponse
+            var folderDict = allFolders.ToDictionary(f => f.Id, f =>
             {
-                Id = f.Id,
-                Path = f.Path,
-                Name = f.Name,
-                ParentFolderId = f.ParentFolderId,
-                CreatedAt = f.CreatedAt,
-                AssetCount = f.Assets.Count(a => IsBinPath(f.Path) ? a.DeletedAt != null : a.DeletedAt == null),
-                SubFolders = new List<FolderResponse>()
+                var userPerm = permissions.FirstOrDefault(p => p.FolderId == f.Id);
+                return new FolderResponse
+                {
+                    Id = f.Id,
+                    Path = f.Path,
+                    Name = f.Name,
+                    ParentFolderId = f.ParentFolderId,
+                    CreatedAt = f.CreatedAt,
+                    AssetCount = f.Assets.Count(a => IsBinPath(f.Path) ? a.DeletedAt != null : a.DeletedAt == null),
+                    IsOwner = userPerm?.CanManagePermissions ?? isAdmin,
+                    IsShared = f.Path.StartsWith("/assets/shared", StringComparison.OrdinalIgnoreCase),
+                    SharedWithCount = sharedCounts.TryGetValue(f.Id, out var count) ? count : 0,
+                    SubFolders = new List<FolderResponse>()
+                };
             });
 
             var rootFolders = new List<FolderResponse>();
@@ -727,18 +765,14 @@ public class FoldersEndpoint : IEndpoint
 
         if (folder == null) return false;
 
-        // Comprobación rápida para carpetas compartidas
-        if (folder.Path.Replace('\\', '/').StartsWith("/assets/shared", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
         var hasPermissions = await dbContext.FolderPermissions
             .AnyAsync(p => p.FolderId == folderId, ct);
 
         if (!hasPermissions)
         {
-            return true;
+            // Si no tiene permisos definidos, solo es accesible si es espacio personal
+            var userRootPath = GetUserRootPath(userId);
+            return folder.Path.Replace('\\', '/').StartsWith(userRootPath, StringComparison.OrdinalIgnoreCase);
         }
 
         return await dbContext.FolderPermissions
@@ -758,15 +792,14 @@ public class FoldersEndpoint : IEndpoint
 
         if (folder == null) return false;
 
-        // Si es una carpeta compartida, por defecto permitimos escribir si no hay permisos específicos que lo prohíban
-        // O si preferimos ser restrictivos, comprobamos si el usuario tiene permiso explícito.
-        // Dado que GetFoldersForUserAsync permite ver carpetas sin permisos, CanWrite debería ser similar.
         var hasPermissions = await dbContext.FolderPermissions
             .AnyAsync(p => p.FolderId == folderId, ct);
 
         if (!hasPermissions)
         {
-            return true;
+            // Si no tiene permisos definidos, solo es escribible si es espacio personal
+            var userRootPath = GetUserRootPath(userId);
+            return folder.Path.Replace('\\', '/').StartsWith(userRootPath, StringComparison.OrdinalIgnoreCase);
         }
 
         return await dbContext.FolderPermissions
@@ -791,7 +824,9 @@ public class FoldersEndpoint : IEndpoint
 
         if (!hasPermissions)
         {
-            return true;
+            // Si no tiene permisos definidos, solo es eliminable si es espacio personal
+            var userRootPath = GetUserRootPath(userId);
+            return folder.Path.Replace('\\', '/').StartsWith(userRootPath, StringComparison.OrdinalIgnoreCase);
         }
 
         return await dbContext.FolderPermissions
@@ -834,7 +869,12 @@ public class FoldersEndpoint : IEndpoint
         {
             if (!foldersWithPermissions.Contains(folder.Id))
             {
-                allowedIds.Add(folder.Id);
+                // Si la carpeta no tiene permisos definidos, solo es accesible si está en el espacio personal del usuario
+                var userRootPath = GetUserRootPath(userId);
+                if (folder.Path.Replace('\\', '/').StartsWith(userRootPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    allowedIds.Add(folder.Id);
+                }
             }
         }
 

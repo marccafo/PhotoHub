@@ -65,6 +65,26 @@
     .folder-card-overlay-count {
         color: rgba(255,255,255,0.9);
     }
+    .folder-shared-badge {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        background: rgba(0,0,0,0.5);
+        color: white;
+        padding: 2px 6px;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        z-index: 5;
+    }
+    .folder-list-shared-badge {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        color: var(--mud-palette-text-secondary);
+        font-size: 0.875rem;
+    }
     .folder-list {
         display: flex;
         flex-direction: column;
@@ -646,13 +666,22 @@ else
     {
         <div class="folder-card-container @(_folderSelectionMode ? "selection-mode" : "") @(IsFolderSelected(folderData.Folder.Id) ? "selected" : "")"
              @onclick="@(() => OnFolderCardClick(folderData.Folder))">
-            <div class="folder-select-checkbox" @onclick:stopPropagation="true">
-                <MudCheckBox T="bool"
-                             Value="@IsFolderSelected(folderData.Folder.Id)"
-                             ValueChanged="@(EventCallback.Factory.Create<bool>(this, value => ToggleFolderSelection(folderData.Folder.Id, value)))" />
-            </div>
             
             <div class="folder-thumbnail-wrapper">
+                <div class="folder-select-checkbox" @onclick:stopPropagation="true">
+                    <MudCheckBox T="bool"
+                                 Value="@IsFolderSelected(folderData.Folder.Id)"
+                                 ValueChanged="@(EventCallback.Factory.Create<bool>(this, value => ToggleFolderSelection(folderData.Folder.Id, value)))" />
+                </div>
+
+                @if (folderData.Folder.SharedWithCount > 1)
+                {
+                    <div class="folder-shared-badge" title="Compartida con @folderData.Folder.SharedWithCount usuarios">
+                        <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" />
+                        <span>@folderData.Folder.SharedWithCount</span>
+                    </div>
+                }
+                
                 @if (folderData.FirstAsset != null && !string.IsNullOrEmpty(folderData.FirstAsset.ThumbnailUrl))
                 {
                     <img src="@folderData.FirstAsset.ThumbnailUrl" alt="@folderData.Folder.Name" class="folder-card-thumbnail" loading="lazy" />
@@ -698,7 +727,16 @@ else
             </div>
 
             <div class="folder-list-info">
-                <MudText Typo="Typo.subtitle1" Class="folder-list-name">@GetDisplayFolderName(folderData.Folder)</MudText>
+                <div class="d-flex align-center gap-2">
+                    <MudText Typo="Typo.subtitle1" Class="folder-list-name">@GetDisplayFolderName(folderData.Folder)</MudText>
+                    @if (folderData.Folder.SharedWithCount > 1)
+                    {
+                        <div class="folder-list-shared-badge" title="Compartida con @folderData.Folder.SharedWithCount usuarios">
+                            <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" />
+                            <span>@folderData.Folder.SharedWithCount</span>
+                        </div>
+                    }
+                </div>
                 <MudText Typo="Typo.body2" Class="folder-list-meta">
                     @folderData.Folder.AssetCount @(folderData.Folder.AssetCount == 1 ? "archivo" : "archivos")
                 </MudText>

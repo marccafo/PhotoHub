@@ -10,5 +10,6 @@ public class FolderResponse
     public int AssetCount { get; set; }
     public bool IsShared { get; set; }
     public bool IsOwner { get; set; }
+    public int SharedWithCount { get; set; }
     public List<FolderResponse> SubFolders { get; set; } = new();
 }

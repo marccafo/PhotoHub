@@ -1,7 +1,9 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PhotoHub.API.Shared.Data;
 using PhotoHub.API.Shared.Interfaces;
+using PhotoHub.API.Shared.Models;
 using PhotoHub.API.Shared.Services;
 using PhotoHub.Blazor.Shared.Models;
 using Scalar.AspNetCore;
@@ -31,17 +33,43 @@ public class TimelineEndpoint : IEndpoint
         [FromServices] ApplicationDbContext dbContext,
         [FromServices] DirectoryScanner directoryScanner,
         [FromServices] SettingsService settingsService,
+        ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         try
         {
-            var assets = await dbContext.Assets
+            if (!TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var isAdmin = user.IsInRole("Admin");
+            var userRootPath = GetUserRootPath(userId);
+
+            var query = dbContext.Assets
                 .Include(a => a.Exif)
                 .Include(a => a.Thumbnails)
-                .Where(a => a.DeletedAt == null)
+                .Where(a => a.DeletedAt == null);
+
+            if (!isAdmin)
+            {
+                // Filtrar por permisos de carpeta
+                var allowedFolderIds = await GetAllowedFolderIdsForUserAsync(dbContext, userId, userRootPath, cancellationToken);
+                
+                query = query.Where(a => a.FolderId.HasValue && allowedFolderIds.Contains(a.FolderId.Value));
+            }
+
+            var assets = await query
                 .OrderByDescending(a => a.ScannedAt)
                 .ThenByDescending(a => a.ModifiedDate)
                 .ToListAsync(cancellationToken);
+
+            // Obtener rutas de carpetas permitidas para filtrar assets no indexados
+            var allowedFolderPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!isAdmin)
+            {
+                allowedFolderPaths = await GetAllowedFolderPathsForUserAsync(dbContext, userId, userRootPath, cancellationToken);
+            }
 
             var timelineItems = assets.Select(asset => new TimelineResponse
             {
@@ -115,6 +143,22 @@ public class TimelineEndpoint : IEndpoint
                             // Virtualizar la ruta para mostrarla en el timeline
                             var virtualizedPath = await settingsService.VirtualizePathAsync(file.FullPath);
                             
+                            // Si no es admin, filtrar por rutas de carpetas permitidas
+                            if (!isAdmin)
+                            {
+                                var isAllowed = false;
+                                foreach (var allowedPath in allowedFolderPaths)
+                                {
+                                    if (virtualizedPath.StartsWith(allowedPath, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        isAllowed = true;
+                                        break;
+                                    }
+                                }
+                                
+                                if (!isAllowed) continue;
+                            }
+
                             copiedFileNames.Add(fileName);
                             copiedCount++;
                             timelineItems.Add(new TimelineResponse
@@ -156,6 +200,95 @@ public class TimelineEndpoint : IEndpoint
                 statusCode: StatusCodes.Status500InternalServerError
             );
         }
+    }
+
+    private bool TryGetUserId(ClaimsPrincipal user, out int userId)
+    {
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+        return int.TryParse(userIdClaim?.Value, out userId);
+    }
+
+    private string GetUserRootPath(int userId)
+    {
+        return $"/assets/users/{userId}";
+    }
+
+    private async Task<HashSet<int>> GetAllowedFolderIdsForUserAsync(
+        ApplicationDbContext dbContext,
+        int userId,
+        string userRootPath,
+        CancellationToken ct)
+    {
+        var allFolders = await dbContext.Folders.ToListAsync(ct);
+        var permissions = await dbContext.FolderPermissions
+            .Where(p => p.UserId == userId && p.CanRead)
+            .ToListAsync(ct);
+
+        var foldersWithPermissions = await dbContext.FolderPermissions
+            .Select(p => p.FolderId)
+            .Distinct()
+            .ToListAsync(ct);
+        
+        var foldersWithPermissionsSet = foldersWithPermissions.ToHashSet();
+
+        var allowedIds = permissions.Select(p => p.FolderId).ToHashSet();
+
+        foreach (var folder in allFolders)
+        {
+            if (!foldersWithPermissionsSet.Contains(folder.Id))
+            {
+                if (folder.Path.Replace('\\', '/').StartsWith(userRootPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    allowedIds.Add(folder.Id);
+                }
+            }
+        }
+
+        // Añadir ancestros para consistencia, aunque para assets quizás no es estrictamente necesario 
+        // si solo queremos assets de carpetas finales permitidas.
+        return allowedIds;
+    }
+
+    private async Task<HashSet<string>> GetAllowedFolderPathsForUserAsync(
+        ApplicationDbContext dbContext,
+        int userId,
+        string userRootPath,
+        CancellationToken ct)
+    {
+        var allFolders = await dbContext.Folders.ToListAsync(ct);
+        var permissions = await dbContext.FolderPermissions
+            .Where(p => p.UserId == userId && p.CanRead)
+            .ToListAsync(ct);
+
+        var foldersWithPermissionsSet = await dbContext.FolderPermissions
+            .Select(p => p.FolderId)
+            .Distinct()
+            .ToHashSetAsync(ct);
+
+        var allowedPaths = permissions
+            .Select(p => allFolders.FirstOrDefault(f => f.Id == p.FolderId)?.Path)
+            .Where(p => p != null)
+            .Select(p => p!.Replace('\\', '/').TrimEnd('/') + "/")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // Añadir espacio personal
+        allowedPaths.Add(userRootPath.TrimEnd('/') + "/");
+
+        // Añadir carpetas que no tienen permisos explícitos pero están en espacio personal (ya cubierto por userRootPath)
+        // Pero por si acaso hay carpetas sin permisos en shared (que no deberían verse), el bucle asegura que solo las del usuario se añadan si no tienen permisos.
+        foreach (var folder in allFolders)
+        {
+            if (!foldersWithPermissionsSet.Contains(folder.Id))
+            {
+                var normalizedPath = folder.Path.Replace('\\', '/').TrimEnd('/') + "/";
+                if (normalizedPath.StartsWith(userRootPath.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase))
+                {
+                    allowedPaths.Add(normalizedPath);
+                }
+            }
+        }
+
+        return allowedPaths;
     }
 }
 
