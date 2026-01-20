@@ -106,13 +106,17 @@ public class DirectoryScanner
                             
                             var assetType = ImageExtensions.Contains(normalizedExtension) ? AssetType.IMAGE : AssetType.VIDEO;
                             
+                            var createdUtc = fileInfo.CreationTimeUtc;
+                            var modifiedUtc = fileInfo.LastWriteTimeUtc;
+                            var effectiveCreatedUtc = createdUtc > modifiedUtc ? modifiedUtc : createdUtc;
+                            
                             files.Add(new ScannedFile
                             {
                                 FileName = fileInfo.Name,
                                 FullPath = fileInfo.FullName,
                                 FileSize = fileInfo.Length,
-                                CreatedDate = fileInfo.CreationTimeUtc,
-                                ModifiedDate = fileInfo.LastWriteTimeUtc,
+                                CreatedDate = effectiveCreatedUtc,
+                                ModifiedDate = modifiedUtc,
                                 Extension = normalizedExtension, // Usar la extensión normalizada
                                 AssetType = assetType
                             });

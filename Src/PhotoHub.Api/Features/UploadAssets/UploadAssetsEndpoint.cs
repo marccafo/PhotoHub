@@ -87,7 +87,7 @@ public class UploadAssetsEndpoint : IEndpoint
                 Checksum = checksum,
                 Type = assetType,
                 Extension = extension,
-                CreatedDate = DateTime.UtcNow,
+                CreatedDate = fileInfo.CreationTimeUtc,
                 ModifiedDate = fileInfo.LastWriteTimeUtc,
                 ScannedAt = DateTime.UtcNow
             };
@@ -97,6 +97,14 @@ public class UploadAssetsEndpoint : IEndpoint
             if (exif != null)
             {
                 asset.Exif = exif;
+                if (exif.DateTimeOriginal != null)
+                {
+                    asset.CreatedDate = exif.DateTimeOriginal.Value;
+                    if (asset.ModifiedDate < asset.CreatedDate)
+                    {
+                        asset.ModifiedDate = asset.CreatedDate;
+                    }
+                }
                 var tags = await mediaRecognitionService.DetectMediaTypeAsync(targetPath, exif, cancellationToken);
                 if (tags.Any())
                 {

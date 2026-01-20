@@ -573,6 +573,15 @@ public class IndexAssetsEndpoint : IEndpoint
                     exifService,
                     stats,
                     cancellationToken);
+                
+                if (asset.Exif?.DateTimeOriginal != null)
+                {
+                    asset.CreatedDate = asset.Exif.DateTimeOriginal.Value;
+                    if (asset.ModifiedDate == default || asset.ModifiedDate < asset.CreatedDate)
+                    {
+                        asset.ModifiedDate = asset.CreatedDate;
+                    }
+                }
             }
             
             // STEP 3b: Basic recognition - Detect media type tags (only if EXIF exists)
