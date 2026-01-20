@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PhotoHub.API.Shared.Data;
@@ -15,7 +16,8 @@ public class UploadAssetsEndpoint : IEndpoint
             .DisableAntiforgery()
             .WithName("UploadAsset")
             .WithTags("Assets")
-            .WithDescription("Uploads an asset to the internal storage and indexes it");
+            .WithDescription("Uploads an asset to the internal storage and indexes it")
+            .RequireAuthorization();
     }
 
     private async Task<IResult> Handle(
@@ -27,16 +29,26 @@ public class UploadAssetsEndpoint : IEndpoint
         [FromServices] MediaRecognitionService mediaRecognitionService,
         [FromServices] IMlJobService mlJobService,
         [FromServices] SettingsService settingsService,
+        ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         if (file == null || file.Length == 0)
             return Results.BadRequest("No file uploaded");
 
-        // Determinar la ruta interna de la biblioteca (Managed Library) - siempre usar la ruta del NAS
-        var managedLibraryPath = settingsService.GetInternalAssetsPath();
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        {
+            return Results.Unauthorized();
+        }
 
-        if (!Directory.Exists(managedLibraryPath))
-            Directory.CreateDirectory(managedLibraryPath);
+        // Guardar los uploads del usuario en su carpeta dedicada dentro del NAS
+        var uploadsVirtualPath = $"/assets/users/{userId}/Uploads";
+        var uploadsRootPath = await settingsService.ResolvePhysicalPathAsync(uploadsVirtualPath);
+
+        var uploadsFolder = await EnsureFolderRecordAsync(dbContext, userId, uploadsVirtualPath, cancellationToken);
+
+        if (!Directory.Exists(uploadsRootPath))
+            Directory.CreateDirectory(uploadsRootPath);
 
         // 1. Save file to temporary location to calculate hash
         var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString() + Path.GetExtension(file.FileName));
@@ -60,13 +72,13 @@ public class UploadAssetsEndpoint : IEndpoint
 
             // 4. Move to final destination (Managed Library)
             var finalFileName = file.FileName;
-            var targetPath = Path.Combine(managedLibraryPath, finalFileName);
+            var targetPath = Path.Combine(uploadsRootPath, finalFileName);
 
             // Handle filename collisions
             if (File.Exists(targetPath))
             {
                 finalFileName = $"{Guid.NewGuid()}_{file.FileName}";
-                targetPath = Path.Combine(managedLibraryPath, finalFileName);
+                targetPath = Path.Combine(uploadsRootPath, finalFileName);
             }
 
             File.Move(tempPath, targetPath);
@@ -89,7 +101,8 @@ public class UploadAssetsEndpoint : IEndpoint
                 Extension = extension,
                 CreatedDate = fileInfo.CreationTimeUtc,
                 ModifiedDate = fileInfo.LastWriteTimeUtc,
-                ScannedAt = DateTime.UtcNow
+                ScannedAt = DateTime.UtcNow,
+                FolderId = uploadsFolder?.Id
             };
 
             // 6. Extract Metadata & Recognition
@@ -152,5 +165,87 @@ public class UploadAssetsEndpoint : IEndpoint
     {
         var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".gif", ".webp", ".heic", ".heif" };
         return imageExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase) ? AssetType.IMAGE : AssetType.VIDEO;
+    }
+
+    private static async Task<Folder?> EnsureFolderRecordAsync(
+        ApplicationDbContext dbContext,
+        Guid userId,
+        string folderPath,
+        CancellationToken cancellationToken)
+    {
+        var normalizedPath = folderPath.Replace('\\', '/').TrimEnd('/');
+        if (string.IsNullOrEmpty(normalizedPath))
+        {
+            return null;
+        }
+
+        var existing = await dbContext.Folders
+            .FirstOrDefaultAsync(f => f.Path == normalizedPath, cancellationToken);
+        if (existing != null)
+        {
+            await EnsureFolderPermissionAsync(dbContext, userId, existing.Id, cancellationToken);
+            return existing;
+        }
+
+        var parentPath = Path.GetDirectoryName(normalizedPath)?.Replace('\\', '/').TrimEnd('/');
+        Folder? parentFolder = null;
+        if (!string.IsNullOrEmpty(parentPath))
+        {
+            parentFolder = await dbContext.Folders
+                .FirstOrDefaultAsync(f => f.Path == parentPath, cancellationToken);
+
+            if (parentFolder == null)
+            {
+                parentFolder = new Folder
+                {
+                    Path = parentPath,
+                    Name = Path.GetFileName(parentPath),
+                    ParentFolderId = null
+                };
+                dbContext.Folders.Add(parentFolder);
+                await dbContext.SaveChangesAsync(cancellationToken);
+
+                await EnsureFolderPermissionAsync(dbContext, userId, parentFolder.Id, cancellationToken);
+            }
+        }
+
+        var folder = new Folder
+        {
+            Path = normalizedPath,
+            Name = Path.GetFileName(normalizedPath),
+            ParentFolderId = parentFolder?.Id
+        };
+
+        dbContext.Folders.Add(folder);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await EnsureFolderPermissionAsync(dbContext, userId, folder.Id, cancellationToken);
+        return folder;
+    }
+
+    private static async Task EnsureFolderPermissionAsync(
+        ApplicationDbContext dbContext,
+        Guid userId,
+        Guid folderId,
+        CancellationToken cancellationToken)
+    {
+        var exists = await dbContext.FolderPermissions
+            .AnyAsync(p => p.UserId == userId && p.FolderId == folderId, cancellationToken);
+        if (exists)
+        {
+            return;
+        }
+
+        dbContext.FolderPermissions.Add(new FolderPermission
+        {
+            UserId = userId,
+            FolderId = folderId,
+            CanRead = true,
+            CanWrite = true,
+            CanDelete = true,
+            CanManagePermissions = true,
+            GrantedByUserId = userId
+        });
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 }

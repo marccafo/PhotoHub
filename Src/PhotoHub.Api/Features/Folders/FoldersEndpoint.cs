@@ -259,6 +259,30 @@ public class FoldersEndpoint : IEndpoint
                 return Results.Forbid();
             }
 
+            var normalizedFolderPath = NormalizeVirtualPath(folder.Path);
+            var unassignedAssets = await dbContext.Assets
+                .Where(a => a.FolderId == null)
+                .Where(a => EF.Functions.Like(a.FullPath, normalizedFolderPath + "/%"))
+                .Where(a => IsBinPath(folder.Path) ? a.DeletedAt != null : a.DeletedAt == null)
+                .ToListAsync(cancellationToken);
+
+            if (unassignedAssets.Any())
+            {
+                var assetsToAssign = unassignedAssets
+                    .Where(a => string.Equals(GetVirtualDirectory(a.FullPath), normalizedFolderPath, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (assetsToAssign.Any())
+                {
+                    foreach (var asset in assetsToAssign)
+                    {
+                        asset.FolderId = folderId;
+                    }
+
+                    await dbContext.SaveChangesAsync(cancellationToken);
+                }
+            }
+
             var assets = await dbContext.Assets
                 .Include(a => a.Exif)
                 .Include(a => a.Thumbnails)
@@ -935,6 +959,23 @@ public class FoldersEndpoint : IEndpoint
 
             currentParentId = parent.ParentFolderId.Value;
         }
+    }
+
+    private static string NormalizeVirtualPath(string path)
+    {
+        return path.Replace('\\', '/').TrimEnd('/');
+    }
+
+    private static string GetVirtualDirectory(string path)
+    {
+        var normalized = NormalizeVirtualPath(path);
+        var lastSlash = normalized.LastIndexOf('/');
+        if (lastSlash <= 0)
+        {
+            return string.Empty;
+        }
+
+        return normalized.Substring(0, lastSlash);
     }
 
     private static async Task UpdateSubfolderPathsAsync(
