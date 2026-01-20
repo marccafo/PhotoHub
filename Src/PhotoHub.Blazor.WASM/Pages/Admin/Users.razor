@@ -103,7 +103,8 @@ else
         // Verificar autenticación y rol
         if (!await AuthService.IsAuthenticatedAsync())
         {
-            Navigation.NavigateTo("/login");
+            var returnUrl = Uri.EscapeDataString(new Uri(Navigation.Uri).PathAndQuery);
+            Navigation.NavigateTo($"/login?returnUrl={returnUrl}");
             return;
         }
 

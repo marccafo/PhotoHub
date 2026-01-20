@@ -33,6 +33,7 @@ public sealed class AuthRefreshHandler : DelegatingHandler
         var refreshed = await authService.TryRefreshTokenAsync();
         if (!refreshed)
         {
+            await authService.LogoutAsync();
             return response;
         }
 

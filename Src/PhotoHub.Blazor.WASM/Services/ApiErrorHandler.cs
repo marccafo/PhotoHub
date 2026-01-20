@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -21,7 +22,11 @@ public sealed class ApiErrorHandler : DelegatingHandler
         {
             var response = await base.SendAsync(request, cancellationToken);
 
-            if (!response.IsSuccessStatusCode && (int)response.StatusCode >= 500)
+            var statusCode = (int)response.StatusCode;
+            if (!response.IsSuccessStatusCode &&
+                (statusCode >= 500 ||
+                 response.StatusCode == HttpStatusCode.Unauthorized ||
+                 response.StatusCode == HttpStatusCode.Forbidden))
             {
                 var content = await ReadContentAsync(response);
                 var (message, traceId) = ExtractMessageAndTraceId(content);
@@ -29,7 +34,7 @@ public sealed class ApiErrorHandler : DelegatingHandler
                 {
                     Title = "Error: algo salió mal",
                     Message = message ?? "La API devolvió un error.",
-                    StatusCode = (int)response.StatusCode,
+                    StatusCode = statusCode,
                     ReasonPhrase = response.ReasonPhrase,
                     Url = request.RequestUri?.ToString(),
                     Method = request.Method.Method,

@@ -42,7 +42,19 @@
 
         if (!await AuthService.IsAuthenticatedAsync())
         {
-            Navigation.NavigateTo("/login", forceLoad: true);
+            var returnUrl = new Uri(Navigation.Uri).PathAndQuery;
+            var loginUrl = BuildLoginUrl(returnUrl);
+            Navigation.NavigateTo(loginUrl);
         }
+    }
+
+    private static string BuildLoginUrl(string? returnUrl)
+    {
+        if (string.IsNullOrWhiteSpace(returnUrl))
+        {
+            return "/login";
+        }
+
+        return $"/login?returnUrl={Uri.EscapeDataString(returnUrl)}";
     }
 }

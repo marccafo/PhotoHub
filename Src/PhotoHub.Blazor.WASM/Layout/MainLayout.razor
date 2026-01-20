@@ -224,6 +224,17 @@
     private async void HandleAuthStateChanged()
     {
         await LoadCurrentUserAsync();
+
+        if (!await AuthService.IsAuthenticatedAsync())
+        {
+            var path = new Uri(Navigation.Uri).AbsolutePath.Trim('/').ToLowerInvariant();
+            if (!path.StartsWith("login"))
+            {
+                var loginUrl = BuildLoginUrl(new Uri(Navigation.Uri).PathAndQuery);
+                Navigation.NavigateTo(loginUrl);
+            }
+        }
+
         StateHasChanged();
     }
 
@@ -292,8 +303,20 @@
 
     private void HandleApiError(ApiErrorInfo info)
     {
-        _ = InvokeAsync(() =>
+        _ = InvokeAsync(async () =>
         {
+            if (ShouldForceLogin(info))
+            {
+                await AuthService.LogoutAsync();
+                var path = new Uri(Navigation.Uri).AbsolutePath.Trim('/').ToLowerInvariant();
+                if (!path.StartsWith("login"))
+                {
+                    var loginUrl = BuildLoginUrl(new Uri(Navigation.Uri).PathAndQuery);
+                    Navigation.NavigateTo(loginUrl);
+                }
+                return;
+            }
+
             var parameters = new DialogParameters
             {
                 ["Error"] = info
@@ -310,6 +333,26 @@
 
             DialogService.Show<ApiErrorDialog>(info.Title, parameters, options);
         });
+    }
+
+    private static bool ShouldForceLogin(ApiErrorInfo info)
+    {
+        if (info.StatusCode is null)
+        {
+            return false;
+        }
+
+        return info.StatusCode >= 500 || info.StatusCode == 401 || info.StatusCode == 403;
+    }
+
+    private static string BuildLoginUrl(string? returnUrl)
+    {
+        if (string.IsNullOrWhiteSpace(returnUrl))
+        {
+            return "/login";
+        }
+
+        return $"/login?returnUrl={Uri.EscapeDataString(returnUrl)}";
     }
 
     private void MarkAllNotificationsRead()
