@@ -56,6 +56,7 @@ public class Asset
     public AssetExif? Exif { get; set; }
     public ICollection<AssetThumbnail> Thumbnails { get; set; } = new List<AssetThumbnail>();
     public ICollection<AssetTag> Tags { get; set; } = new List<AssetTag>();
+    public ICollection<AssetUserTag> UserTags { get; set; } = new List<AssetUserTag>();
     public ICollection<AssetMlJob> MlJobs { get; set; } = new List<AssetMlJob>();
 }
 

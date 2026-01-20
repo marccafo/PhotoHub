@@ -14,6 +14,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<AssetExif> AssetExifs { get; set; }
     public DbSet<AssetThumbnail> AssetThumbnails { get; set; }
     public DbSet<AssetTag> AssetTags { get; set; }
+    public DbSet<UserTag> UserTags { get; set; }
+    public DbSet<AssetUserTag> AssetUserTags { get; set; }
     public DbSet<AssetMlJob> AssetMlJobs { get; set; }
     public DbSet<User> Users { get; set; }
     public DbSet<Folder> Folders { get; set; }
@@ -225,6 +227,47 @@ public class ApplicationDbContext : DbContext
                 .HasConversion(
                     v => v.Kind == DateTimeKind.Utc ? DateTime.SpecifyKind(v, DateTimeKind.Unspecified) : v,
                     v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+        });
+
+        // Configure UserTag entity
+        modelBuilder.Entity<UserTag>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(80);
+            entity.Property(e => e.NormalizedName).IsRequired().HasMaxLength(80);
+
+            entity.HasOne(e => e.Owner)
+                .WithMany(u => u.Tags)
+                .HasForeignKey(e => e.OwnerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.OwnerId);
+            entity.HasIndex(e => new { e.OwnerId, e.NormalizedName }).IsUnique();
+
+            entity.Property(e => e.CreatedAt)
+                .HasColumnType("timestamp without time zone")
+                .HasConversion(
+                    v => v.Kind == DateTimeKind.Utc ? DateTime.SpecifyKind(v, DateTimeKind.Unspecified) : v,
+                    v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+        });
+
+        // Configure AssetUserTag entity
+        modelBuilder.Entity<AssetUserTag>(entity =>
+        {
+            entity.HasKey(e => new { e.AssetId, e.UserTagId });
+
+            entity.HasOne(e => e.Asset)
+                .WithMany(a => a.UserTags)
+                .HasForeignKey(e => e.AssetId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.UserTag)
+                .WithMany(t => t.AssetLinks)
+                .HasForeignKey(e => e.UserTagId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.AssetId);
+            entity.HasIndex(e => e.UserTagId);
         });
         
         // Configure AssetMlJob entity

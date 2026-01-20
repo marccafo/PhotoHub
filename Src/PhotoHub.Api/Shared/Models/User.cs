@@ -41,5 +41,6 @@ public class User
     public ICollection<AlbumPermission> AlbumPermissions { get; set; } = new List<AlbumPermission>();
     public ICollection<Album> OwnedAlbums { get; set; } = new List<Album>();
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
+    public ICollection<UserTag> Tags { get; set; } = new List<UserTag>();
 }
 

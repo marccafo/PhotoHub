@@ -233,15 +233,45 @@ else if (_asset != null)
                     }
                 }
 
-                @if (_asset.Tags.Any())
-                {
-                    <MudDivider Class="my-4" Style="background-color: #333;" />
-                    <MudText Typo="Typo.subtitle1" Class="font-weight-bold mb-2">Etiquetas</MudText>
-                    <div class="d-flex flex-wrap gap-2">
+                <MudDivider Class="my-4" Style="background-color: #333;" />
+                <MudText Typo="Typo.subtitle1" Class="font-weight-bold mb-2">Etiquetas</MudText>
+                <div class="d-flex flex-wrap gap-2">
+                    @if (_asset.Tags.Any())
+                    {
                         @foreach (var tag in _asset.Tags)
                         {
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Primary">@tag</MudChip>
+                            <MudChip T="string"
+                                     Size="Size.Small"
+                                     Variant="Variant.Text"
+                                     Color="Color.Primary"
+                                     Closable="@CanEditTags"
+                                     OnClose="() => RemoveTagAsync(tag)">
+                                @tag
+                            </MudChip>
                         }
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Sin etiquetas</MudText>
+                    }
+                </div>
+                @if (CanEditTags)
+                {
+                    <div class="d-flex align-center gap-2 mt-3">
+                        <MudTextField @bind-Value="_newTag"
+                                      Placeholder="Añadir etiqueta"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Dense="true"
+                                      Immediate="true"
+                                      Disabled="@_tagBusy"
+                                      Class="flex-grow-1" />
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   Disabled="@_tagBusy"
+                                   OnClick="AddTagAsync">
+                            Añadir
+                        </MudButton>
                     </div>
                 }
             </div>
@@ -266,10 +296,14 @@ else
     private bool _infoOpen = false;
     private bool _toolbarVisible = true;
     private bool _syncing = false;
+    private bool _tagBusy = false;
+    private string _newTag = string.Empty;
     
     private TimelineItem? _prevAsset;
     private TimelineItem? _nextAsset;
     private List<TimelineItem> _allAssets = new();
+
+    private bool CanEditTags => _asset != null && _asset.Id != Guid.Empty && _asset.SyncStatus == AssetSyncStatus.Synced;
 
     protected override async Task OnInitializedAsync()
     {
@@ -523,6 +557,59 @@ else
     private void ToggleToolbar()
     {
         _toolbarVisible = !_toolbarVisible;
+    }
+
+    private async Task AddTagAsync()
+    {
+        if (!CanEditTags || _asset == null || _tagBusy)
+        {
+            return;
+        }
+
+        var tag = _newTag.Trim();
+        if (string.IsNullOrWhiteSpace(tag))
+        {
+            return;
+        }
+
+        try
+        {
+            _tagBusy = true;
+            var tags = await AssetService.AddAssetTagsAsync(_asset.Id, new List<string> { tag });
+            _asset.Tags = tags;
+            _newTag = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"No se pudo añadir la etiqueta: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _tagBusy = false;
+        }
+    }
+
+    private async Task RemoveTagAsync(string tag)
+    {
+        if (!CanEditTags || _asset == null || _tagBusy)
+        {
+            return;
+        }
+
+        try
+        {
+            _tagBusy = true;
+            var tags = await AssetService.RemoveAssetTagAsync(_asset.Id, tag);
+            _asset.Tags = tags;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"No se pudo eliminar la etiqueta: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _tagBusy = false;
+        }
     }
 
     private async Task SyncAsset()

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PhotoHub.API.Shared.Data;
 using PhotoHub.API.Shared.Interfaces;
+using PhotoHub.API.Shared.Models;
 using Scalar.AspNetCore;
 
 namespace PhotoHub.API.Features.AssetDetail;
@@ -36,6 +37,8 @@ public class AssetDetailEndpoint : IEndpoint
                 .Include(a => a.Exif)
                 .Include(a => a.Thumbnails)
                 .Include(a => a.Tags)
+                .Include(a => a.UserTags)
+                .ThenInclude(ut => ut.UserTag)
                 .Include(a => a.Folder)
                 .FirstOrDefaultAsync(a => a.Id == assetId, cancellationToken);
 
@@ -87,7 +90,7 @@ public class AssetDetailEndpoint : IEndpoint
                     Height = t.Height,
                     AssetId = t.AssetId
                 }).ToList(),
-                Tags = asset.Tags.Select(t => t.TagType.ToString()).ToList(),
+                Tags = BuildTagList(asset),
                 SyncStatus = PhotoHub.Blazor.Shared.Models.AssetSyncStatus.Synced
             };
 
@@ -100,5 +103,15 @@ public class AssetDetailEndpoint : IEndpoint
                 statusCode: StatusCodes.Status500InternalServerError
             );
         }
+    }
+
+    private static List<string> BuildTagList(Asset asset)
+    {
+        var autoTags = asset.Tags.Select(t => t.TagType.ToString());
+        var userTags = asset.UserTags.Select(t => t.UserTag.Name);
+        return autoTags.Concat(userTags)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(t => t)
+            .ToList();
     }
 }

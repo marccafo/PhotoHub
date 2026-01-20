@@ -18,6 +18,7 @@ public class TimelineItem
     public DateTime? DeletedAt { get; set; }
     public int? Width { get; set; }
     public int? Height { get; set; }
+    public List<string> Tags { get; set; } = new();
     
     public double AspectRatio => Width.HasValue && Height.HasValue && Height.Value > 0 
         ? (double)Width.Value / Height.Value 

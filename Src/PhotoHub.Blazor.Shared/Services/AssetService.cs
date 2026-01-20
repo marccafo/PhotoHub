@@ -257,6 +257,27 @@ public class AssetService : IAssetService
         response.EnsureSuccessStatusCode();
     }
 
+    public async Task<List<string>> AddAssetTagsAsync(Guid assetId, List<string> tags)
+    {
+        await SetAuthHeaderAsync();
+        var response = await _httpClient.PostAsJsonAsync($"/api/assets/{assetId}/tags", new AddTagsRequest { Tags = tags });
+        response.EnsureSuccessStatusCode();
+
+        var result = await response.Content.ReadFromJsonAsync<TagUpdateResponse>();
+        return result?.Tags ?? new List<string>();
+    }
+
+    public async Task<List<string>> RemoveAssetTagAsync(Guid assetId, string tag)
+    {
+        await SetAuthHeaderAsync();
+        var encodedTag = System.Net.WebUtility.UrlEncode(tag);
+        var response = await _httpClient.DeleteAsync($"/api/assets/{assetId}/tags/{encodedTag}");
+        response.EnsureSuccessStatusCode();
+
+        var result = await response.Content.ReadFromJsonAsync<TagUpdateResponse>();
+        return result?.Tags ?? new List<string>();
+    }
+
     public async Task RestoreTrashAsync()
     {
         await SetAuthHeaderAsync();

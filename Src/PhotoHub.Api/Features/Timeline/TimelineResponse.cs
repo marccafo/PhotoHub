@@ -20,5 +20,6 @@ public class TimelineResponse
     public int? Width { get; set; }
     public int? Height { get; set; }
     public DateTime? DeletedAt { get; set; }
+    public List<string> Tags { get; set; } = new();
 }
 

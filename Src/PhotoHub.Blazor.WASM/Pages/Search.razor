@@ -16,7 +16,7 @@ else
 {
     @if (string.IsNullOrWhiteSpace(_searchTerm))
     {
-        <MudAlert Severity="Severity.Info" Class="mt-4">Escribe un nombre de archivo para buscar.</MudAlert>
+        <MudAlert Severity="Severity.Info" Class="mt-4">Escribe un nombre o una etiqueta (ej. #paisaje) para buscar.</MudAlert>
     }
     else if (!_results.Any())
     {
@@ -92,8 +92,32 @@ else
             return;
         }
 
+        var term = _searchTerm.Trim();
+        var tagsOnly = false;
+
+        if (term.StartsWith("#", StringComparison.Ordinal))
+        {
+            tagsOnly = true;
+            term = term[1..].Trim();
+        }
+        else if (term.StartsWith("tag:", StringComparison.OrdinalIgnoreCase))
+        {
+            tagsOnly = true;
+            term = term[4..].Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(term))
+        {
+            _results = new List<TimelineItem>();
+            return;
+        }
+
         _results = _allAssets
-            .Where(a => a.FileName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase))
+            .Where(a =>
+                tagsOnly
+                    ? a.Tags.Any(t => t.Contains(term, StringComparison.OrdinalIgnoreCase))
+                    : a.FileName.Contains(term, StringComparison.OrdinalIgnoreCase)
+                      || a.Tags.Any(t => t.Contains(term, StringComparison.OrdinalIgnoreCase)))
             .ToList();
     }
 

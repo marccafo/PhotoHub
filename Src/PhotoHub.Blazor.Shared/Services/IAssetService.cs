@@ -18,6 +18,8 @@ public interface IAssetService
     Task PurgeAssetsAsync(PurgeAssetsRequest request);
     Task RestoreTrashAsync();
     Task EmptyTrashAsync();
+    Task<List<string>> AddAssetTagsAsync(Guid assetId, List<string> tags);
+    Task<List<string>> RemoveAssetTagAsync(Guid assetId, string tag);
 }
 
 public class UploadResponse
@@ -32,3 +34,4 @@ public class SyncAssetResponse
     public Guid? AssetId { get; set; } // Opcional: solo se devuelve si el asset ya estaba indexado
     public string? TargetPath { get; set; } // Ruta donde se copió el archivo
 }
+

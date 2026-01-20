@@ -49,6 +49,9 @@ public class TimelineEndpoint : IEndpoint
             var query = dbContext.Assets
                 .Include(a => a.Exif)
                 .Include(a => a.Thumbnails)
+                .Include(a => a.Tags)
+                .Include(a => a.UserTags)
+                .ThenInclude(ut => ut.UserTag)
                 .Where(a => a.DeletedAt == null);
 
             if (!isAdmin)
@@ -88,7 +91,8 @@ public class TimelineEndpoint : IEndpoint
                 SyncStatus = AssetSyncStatus.Synced,
                 Width = asset.Exif?.Width,
                 Height = asset.Exif?.Height,
-                DeletedAt = asset.DeletedAt
+                DeletedAt = asset.DeletedAt,
+                Tags = BuildTagList(asset)
             }).ToList();
 
             // Normalizar rutas existentes en BD para comparación
@@ -174,7 +178,8 @@ public class TimelineEndpoint : IEndpoint
                                 Type = file.AssetType.ToString(),
                                 SyncStatus = AssetSyncStatus.Copied,
                                 Width = null, // Se puede obtener más tarde si es necesario
-                                Height = null
+                                Height = null,
+                                Tags = new List<string>()
                             });
                         }
                     }
@@ -206,6 +211,16 @@ public class TimelineEndpoint : IEndpoint
     {
         var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
         return Guid.TryParse(userIdClaim?.Value, out userId);
+    }
+
+    private static List<string> BuildTagList(Asset asset)
+    {
+        var autoTags = asset.Tags.Select(t => t.TagType.ToString());
+        var userTags = asset.UserTags.Select(t => t.UserTag.Name);
+        return autoTags.Concat(userTags)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(t => t)
+            .ToList();
     }
 
     private string GetUserRootPath(Guid userId)
