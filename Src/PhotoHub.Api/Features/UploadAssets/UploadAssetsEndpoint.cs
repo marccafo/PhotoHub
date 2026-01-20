@@ -100,16 +100,23 @@ public class UploadAssetsEndpoint : IEndpoint
                 if (exif.DateTimeOriginal != null)
                 {
                     asset.CreatedDate = exif.DateTimeOriginal.Value;
-                    if (asset.ModifiedDate < asset.CreatedDate)
-                    {
-                        asset.ModifiedDate = asset.CreatedDate;
-                    }
+                    asset.ModifiedDate = asset.CreatedDate;
                 }
                 var tags = await mediaRecognitionService.DetectMediaTypeAsync(targetPath, exif, cancellationToken);
                 if (tags.Any())
                 {
                     asset.Tags = tags.Select(t => new AssetTag { TagType = t, DetectedAt = DateTime.UtcNow }).ToList();
                 }
+            }
+
+            try
+            {
+                File.SetCreationTimeUtc(targetPath, asset.CreatedDate);
+                File.SetLastWriteTimeUtc(targetPath, asset.ModifiedDate);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[WARN] No se pudieron actualizar timestamps del archivo {targetPath}: {ex.Message}");
             }
 
             // 7. Save to DB

@@ -100,6 +100,7 @@ public class IndexAssetsEndpoint : IEndpoint
                 // Load existing assets for differential comparison
                 // Manejar duplicados: si hay múltiples assets con el mismo checksum, tomar el más reciente
                 var allAssets = await dbContext.Assets
+                    .Include(a => a.Exif)
                     .Where(a => a.DeletedAt == null)
                     .ToListAsync(cancellationToken);
                 var existingAssetsByChecksum = allAssets
@@ -430,6 +431,7 @@ public class IndexAssetsEndpoint : IEndpoint
             // Load existing assets for differential comparison
             // Manejar duplicados: si hay múltiples assets con el mismo checksum, tomar el más reciente
             var allAssets = await dbContext.Assets
+                .Include(a => a.Exif)
                 .Where(a => a.DeletedAt == null)
                 .ToListAsync(cancellationToken);
             var existingAssetsByChecksum = allAssets
@@ -573,15 +575,6 @@ public class IndexAssetsEndpoint : IEndpoint
                     exifService,
                     stats,
                     cancellationToken);
-                
-                if (asset.Exif?.DateTimeOriginal != null)
-                {
-                    asset.CreatedDate = asset.Exif.DateTimeOriginal.Value;
-                    if (asset.ModifiedDate == default || asset.ModifiedDate < asset.CreatedDate)
-                    {
-                        asset.ModifiedDate = asset.CreatedDate;
-                    }
-                }
             }
             
             // STEP 3b: Basic recognition - Detect media type tags (only if EXIF exists)
@@ -709,7 +702,13 @@ public class IndexAssetsEndpoint : IEndpoint
     // Método separado para decidir si debe extraerse EXIF
     private static bool ShouldExtractExif(Asset asset, bool isNew)
     {
-        return (asset.Type == AssetType.IMAGE || asset.Type == AssetType.VIDEO) && isNew;
+        if (asset.Type != AssetType.IMAGE && asset.Type != AssetType.VIDEO)
+            return false;
+        
+        if (isNew)
+            return true;
+        
+        return asset.Exif == null || asset.Exif.DateTimeOriginal == null;
     }
 
     // Método que SOLO extrae EXIF (sin lógica de decisión)

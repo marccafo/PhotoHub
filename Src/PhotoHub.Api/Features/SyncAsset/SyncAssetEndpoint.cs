@@ -24,6 +24,7 @@ public class SyncAssetEndpoint : IEndpoint
         [FromQuery] string path,
         [FromServices] SettingsService settingsService,
         [FromServices] FileHashService hashService,
+        [FromServices] ExifExtractorService exifService,
         [FromServices] ApplicationDbContext dbContext,
         ClaimsPrincipal user,
         CancellationToken cancellationToken)
@@ -149,9 +150,22 @@ public class SyncAssetEndpoint : IEndpoint
                 targetPath = Path.Combine(deviceBackupRoot, $"{Guid.NewGuid()}_{fileName}");
             }
 
-            // Preservar fechas originales
+            // Preservar fechas originales (priorizar EXIF DateTimeOriginal si existe)
             var originalCreation = currentFileInfo.CreationTimeUtc;
             var originalLastWrite = currentFileInfo.LastWriteTimeUtc;
+            try
+            {
+                var exif = await exifService.ExtractExifAsync(path, cancellationToken);
+                if (exif?.DateTimeOriginal != null)
+                {
+                    originalCreation = exif.DateTimeOriginal.Value;
+                    originalLastWrite = exif.DateTimeOriginal.Value;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SYNC] Warning: No se pudo extraer EXIF de {path}: {ex.Message}");
+            }
 
             // Copiar el archivo
             Console.WriteLine($"[SYNC] Copying file from {path} to {targetPath}");
