@@ -51,6 +51,7 @@ builder.Services.AddScoped<IFolderService>(sp =>
     var authService = sp.GetRequiredService<PhotoHub.Blazor.WASM.Services.AuthService>();
     return new FolderService(httpClient, async () => await authService.GetTokenAsync());
 });
+builder.Services.AddScoped<IPendingAssetsProvider, WebPendingAssetsProvider>();
 builder.Services.AddScoped<IMapService, MapService>();
 builder.Services.AddScoped<IAlbumService>(sp =>
 {
@@ -58,7 +59,12 @@ builder.Services.AddScoped<IAlbumService>(sp =>
     var authService = sp.GetRequiredService<PhotoHub.Blazor.WASM.Services.AuthService>();
     return new AlbumService(httpClient, async () => await authService.GetTokenAsync());
 });
-builder.Services.AddScoped<ISettingsService, PhotoHub.Blazor.Shared.Services.SettingsService>();
+builder.Services.AddScoped<ISettingsService>(sp =>
+{
+    var httpClient = sp.GetRequiredService<HttpClient>();
+    var authService = sp.GetRequiredService<PhotoHub.Blazor.WASM.Services.AuthService>();
+    return new PhotoHub.Blazor.Shared.Services.SettingsService(httpClient, async () => await authService.GetTokenAsync());
+});
 builder.Services.AddScoped<IUserService>(sp =>
 {
     var httpClient = sp.GetRequiredService<HttpClient>();

@@ -271,7 +271,8 @@ public class ApplicationDbContext : DbContext
         // Configure Setting entity
         modelBuilder.Entity<Setting>(entity =>
         {
-            entity.HasKey(e => e.Key);
+            entity.HasKey(e => new { e.UserId, e.Key });
+            entity.Property(e => e.UserId);
             entity.Property(e => e.Key).HasMaxLength(100);
             entity.Property(e => e.Value).HasMaxLength(1000);
             entity.Property(e => e.UpdatedAt)

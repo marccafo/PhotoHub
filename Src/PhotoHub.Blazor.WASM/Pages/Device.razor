@@ -1,5 +1,6 @@
 @page "/device"
 @inject IAssetService AssetService
+@inject IPendingAssetsProvider PendingAssetsProvider
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @implements IDisposable
@@ -126,7 +127,7 @@ else if (!_loading)
         try
         {
             _loading = true;
-            _assets = await AssetService.GetDeviceAssetsAsync();
+            _assets = await PendingAssetsProvider.GetPendingAssetsAsync();
             GroupAssets();
         }
         catch (Exception ex)

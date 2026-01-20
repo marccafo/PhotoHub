@@ -505,6 +505,9 @@ namespace PhotoHub.Api.Migrations
 
             modelBuilder.Entity("PhotoHub.API.Shared.Models.Setting", b =>
                 {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Key")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -517,7 +520,7 @@ namespace PhotoHub.Api.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
-                    b.HasKey("Key");
+                    b.HasKey("UserId", "Key");
 
                     b.ToTable("Settings");
                 });

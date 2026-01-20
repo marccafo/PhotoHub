@@ -40,7 +40,7 @@ public class SyncAssetEndpoint : IEndpoint
             }
 
             // Validar que el archivo proviene de la ruta configurada por el usuario
-            var userConfiguredPath = await settingsService.GetAssetsPathAsync();
+            var userConfiguredPath = await settingsService.GetAssetsPathAsync(userId);
             if (!IsPathSafe(path, userConfiguredPath))
                 return Results.Forbid();
 

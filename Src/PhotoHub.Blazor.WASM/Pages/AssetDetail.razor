@@ -1,7 +1,10 @@
 @page "/asset/{AssetId:guid}"
 @using PhotoHub.Blazor.WASM.Services
+@using PhotoHub.Blazor.Shared.Services
 @implements IDisposable
 @inject IAssetService AssetService
+@inject IPendingAssetsProvider PendingAssetsProvider
+@inject IAuthService AuthService
 @inject IAlbumService AlbumService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
@@ -116,13 +119,13 @@ else if (_asset != null)
             @if (_asset.Type == "VIDEO")
             {
                 <video controls autoplay class="asset-detail-image">
-                    <source src="@_asset.ContentUrl" type="video/mp4">
+                    <source src="@_displayContentUrl" type="video/mp4">
                     Tu navegador no soporta la reproducción de videos.
                 </video>
             }
             else if (_asset.HasThumbnails || _asset.Type == "IMAGE")
             {
-                <img src="@(_asset.Type == "IMAGE" ? _asset.ContentUrl : _asset.ThumbnailUrl)" 
+                <img src="@(_asset.Type == "IMAGE" ? _displayContentUrl : _displayThumbnailUrl)" 
                      alt="@_asset.FileName" class="asset-detail-image" />
             }
             else
@@ -257,6 +260,8 @@ else
     [SupplyParameterFromQuery] public Guid? AlbumId { get; set; }
     
     private PhotoHub.Blazor.Shared.Models.AssetDetail? _asset;
+    private string _displayContentUrl = string.Empty;
+    private string _displayThumbnailUrl = string.Empty;
     private bool _loading = true;
     private bool _infoOpen = false;
     private bool _toolbarVisible = true;
@@ -368,13 +373,14 @@ else
             }
             else if (!string.IsNullOrEmpty(Path))
             {
-                _asset = await AssetService.GetPendingAssetDetailAsync(Path);
+                _asset = await PendingAssetsProvider.GetPendingAssetDetailAsync(Path);
             }
             
             // Actualizar el navbar una vez cargado el asset para habilitar botones
             // Asegurar que se actualice después de cargar el asset
             if (_asset != null)
             {
+                await UpdateAssetDisplayUrlsAsync();
                 UpdateNavbar();
                 StateHasChanged();
             }
@@ -420,6 +426,40 @@ else
             _prevAsset = currentIndex > 0 ? _allAssets[currentIndex - 1] : null;
             _nextAsset = currentIndex < _allAssets.Count - 1 ? _allAssets[currentIndex + 1] : null;
         }
+    }
+
+    private async Task UpdateAssetDisplayUrlsAsync()
+    {
+        if (_asset == null)
+        {
+            _displayContentUrl = string.Empty;
+            _displayThumbnailUrl = string.Empty;
+            return;
+        }
+
+        var contentUrl = _asset.ContentUrl;
+        var thumbnailUrl = _asset.ThumbnailUrl;
+
+        if (_asset.Id == Guid.Empty)
+        {
+            var token = await AuthService.GetTokenAsync();
+            contentUrl = AppendAccessToken(contentUrl, token);
+            thumbnailUrl = AppendAccessToken(thumbnailUrl, token);
+        }
+
+        _displayContentUrl = contentUrl;
+        _displayThumbnailUrl = thumbnailUrl;
+    }
+
+    private static string AppendAccessToken(string url, string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token) || url.Contains("access_token=", StringComparison.OrdinalIgnoreCase))
+        {
+            return url;
+        }
+
+        var separator = url.Contains('?') ? "&" : "?";
+        return $"{url}{separator}access_token={Uri.EscapeDataString(token)}";
     }
 
     private void NavigatePrev()

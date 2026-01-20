@@ -9,6 +9,7 @@ public class SettingsService
     private readonly ApplicationDbContext _dbContext;
     private readonly IConfiguration _configuration;
     public const string AssetsPathKey = "AssetsPath";
+    private static readonly Guid GlobalUserId = Guid.Empty;
 
     public SettingsService(ApplicationDbContext dbContext, IConfiguration configuration)
     {
@@ -16,18 +17,33 @@ public class SettingsService
         _configuration = configuration;
     }
 
-    public async Task<string> GetSettingAsync(string key, string defaultValue = "")
+    public async Task<string> GetSettingAsync(string key, Guid userId, string defaultValue = "")
     {
-        var setting = await _dbContext.Settings.FirstOrDefaultAsync(s => s.Key == key);
+        var setting = await _dbContext.Settings
+            .FirstOrDefaultAsync(s => s.UserId == userId && s.Key == key);
+
+        if (setting == null && userId != GlobalUserId)
+        {
+            setting = await _dbContext.Settings
+                .FirstOrDefaultAsync(s => s.UserId == GlobalUserId && s.Key == key);
+        }
+
         return setting?.Value ?? defaultValue;
     }
 
-    public async Task SetSettingAsync(string key, string value)
+    public async Task SetSettingAsync(string key, string value, Guid userId)
     {
-        var setting = await _dbContext.Settings.FirstOrDefaultAsync(s => s.Key == key);
+        var setting = await _dbContext.Settings
+            .FirstOrDefaultAsync(s => s.UserId == userId && s.Key == key);
         if (setting == null)
         {
-            setting = new Setting { Key = key, Value = value, UpdatedAt = DateTime.UtcNow };
+            setting = new Setting
+            {
+                UserId = userId,
+                Key = key,
+                Value = value,
+                UpdatedAt = DateTime.UtcNow
+            };
             _dbContext.Settings.Add(setting);
         }
         else
@@ -39,9 +55,9 @@ public class SettingsService
         await _dbContext.SaveChangesAsync();
     }
 
-    public async Task<string> GetAssetsPathAsync()
+    public async Task<string> GetAssetsPathAsync(Guid userId)
     {
-        var path = await GetSettingAsync(AssetsPathKey);
+        var path = await GetSettingAsync(AssetsPathKey, userId);
         
         if (string.IsNullOrEmpty(path))
         {

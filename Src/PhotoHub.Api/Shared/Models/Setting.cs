@@ -4,7 +4,8 @@ namespace PhotoHub.API.Shared.Models;
 
 public class Setting
 {
-    [Key]
+    public Guid UserId { get; set; }
+
     [MaxLength(100)]
     public string Key { get; set; } = string.Empty;
     

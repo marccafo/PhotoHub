@@ -33,6 +33,23 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidAudience = jwtAudience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(accessToken))
+                {
+                    var path = context.HttpContext.Request.Path;
+                    if (path.StartsWithSegments("/api/assets/pending", StringComparison.OrdinalIgnoreCase))
+                    {
+                        context.Token = accessToken;
+                    }
+                }
+
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddAuthorization();

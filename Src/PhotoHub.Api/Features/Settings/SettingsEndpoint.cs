@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using PhotoHub.API.Shared.Interfaces;
 using PhotoHub.API.Shared.Services;
@@ -8,46 +9,71 @@ public class SettingsEndpoint : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/settings/{key}", GetSetting)
-            .WithName("GetSetting")
+        var group = app.MapGroup("/api/settings")
             .WithTags("Settings")
+            .RequireAuthorization();
+
+        group.MapGet("/{key}", GetSetting)
+            .WithName("GetSetting")
             .WithDescription("Gets a setting value by key");
 
-        app.MapPost("/api/settings", SaveSetting)
+        group.MapPost("", SaveSetting)
             .WithName("SaveSetting")
-            .WithTags("Settings")
             .WithDescription("Saves or updates a setting");
             
-        app.MapGet("/api/settings/assets-path", GetAssetsPath)
+        group.MapGet("/assets-path", GetAssetsPath)
             .WithName("GetAssetsPath")
-            .WithTags("Settings")
             .WithDescription("Gets the current configured assets path");
     }
 
     private async Task<IResult> GetSetting(
         [FromRoute] string key,
-        [FromServices] SettingsService settingsService)
+        [FromServices] SettingsService settingsService,
+        ClaimsPrincipal user)
     {
-        var value = await settingsService.GetSettingAsync(key);
+        if (!TryGetUserId(user, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var value = await settingsService.GetSettingAsync(key, userId);
         return Results.Ok(new { key, value });
     }
 
     private async Task<IResult> SaveSetting(
         [FromBody] SaveSettingRequest request,
-        [FromServices] SettingsService settingsService)
+        [FromServices] SettingsService settingsService,
+        ClaimsPrincipal user)
     {
         if (string.IsNullOrWhiteSpace(request.Key))
             return Results.BadRequest("Key is required");
 
-        await settingsService.SetSettingAsync(request.Key, request.Value ?? "");
+        if (!TryGetUserId(user, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        await settingsService.SetSettingAsync(request.Key, request.Value ?? "", userId);
         return Results.Ok(new { message = "Setting saved successfully" });
     }
 
     private async Task<IResult> GetAssetsPath(
-        [FromServices] SettingsService settingsService)
+        [FromServices] SettingsService settingsService,
+        ClaimsPrincipal user)
     {
-        var path = await settingsService.GetAssetsPathAsync();
+        if (!TryGetUserId(user, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var path = await settingsService.GetAssetsPathAsync(userId);
         return Results.Ok(new { path });
+    }
+
+    private static bool TryGetUserId(ClaimsPrincipal user, out Guid userId)
+    {
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(userIdClaim?.Value, out userId);
     }
 }
 

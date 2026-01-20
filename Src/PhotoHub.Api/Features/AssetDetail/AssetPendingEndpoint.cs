@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using PhotoHub.API.Shared.Interfaces;
 using PhotoHub.API.Shared.Models;
@@ -16,30 +17,39 @@ public class AssetPendingEndpoint : IEndpoint
         app.MapGet("/api/assets/pending/detail", HandleDetail)
             .WithName("GetPendingAssetDetail")
             .WithTags("Assets")
-            .WithDescription("Gets detailed information about a pending asset from the filesystem");
+            .WithDescription("Gets detailed information about a pending asset from the filesystem")
+            .RequireAuthorization();
 
         app.MapGet("/api/assets/pending/content", HandleContent)
             .WithName("GetPendingAssetContent")
             .WithTags("Assets")
-            .WithDescription("Gets the original content of a pending asset (image or video)");
+            .WithDescription("Gets the original content of a pending asset (image or video)")
+            .RequireAuthorization();
 
         app.MapGet("/api/assets/pending/thumbnail", HandleThumbnail)
             .WithName("GetPendingAssetThumbnail")
             .WithTags("Assets")
-            .WithDescription("Gets a thumbnail for a pending asset (image or video)");
+            .WithDescription("Gets a thumbnail for a pending asset (image or video)")
+            .RequireAuthorization();
     }
 
     private async Task<IResult> HandleDetail(
         [FromQuery] string path,
         [FromServices] SettingsService settingsService,
         [FromServices] ExifExtractorService exifService,
+        ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(path))
             return Results.BadRequest("Path is required");
 
         var physicalPath = await settingsService.ResolvePhysicalPathAsync(path);
-        var userAssetsPath = await settingsService.GetAssetsPathAsync();
+        if (!TryGetUserId(user, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var userAssetsPath = await settingsService.GetAssetsPathAsync(userId);
         var internalAssetsPath = settingsService.GetInternalAssetsPath();
         
         // Determinar si el archivo está en el directorio del usuario o en el interno
@@ -113,13 +123,19 @@ public class AssetPendingEndpoint : IEndpoint
     private async Task<IResult> HandleContent(
         [FromQuery] string path,
         [FromServices] SettingsService settingsService,
+        ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(path))
             return Results.BadRequest("Path is required");
 
         var physicalPath = await settingsService.ResolvePhysicalPathAsync(path);
-        var userAssetsPath = await settingsService.GetAssetsPathAsync();
+        if (!TryGetUserId(user, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var userAssetsPath = await settingsService.GetAssetsPathAsync(userId);
         var internalAssetsPath = settingsService.GetInternalAssetsPath();
         
         // Verificar que el path es seguro (está en el directorio del usuario o interno)
@@ -146,6 +162,7 @@ public class AssetPendingEndpoint : IEndpoint
     private async Task<IResult> HandleThumbnail(
         [FromQuery] string path,
         [FromServices] SettingsService settingsService,
+        ClaimsPrincipal user,
         [FromQuery] string size = "Medium",
         CancellationToken cancellationToken = default)
     {
@@ -153,7 +170,12 @@ public class AssetPendingEndpoint : IEndpoint
             return Results.BadRequest("Path is required");
 
         var physicalPath = await settingsService.ResolvePhysicalPathAsync(path);
-        var userAssetsPath = await settingsService.GetAssetsPathAsync();
+        if (!TryGetUserId(user, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var userAssetsPath = await settingsService.GetAssetsPathAsync(userId);
         var internalAssetsPath = settingsService.GetInternalAssetsPath();
         
         // Verificar que el path es seguro (está en el directorio del usuario o interno)
@@ -298,5 +320,11 @@ public class AssetPendingEndpoint : IEndpoint
             ".mkv" => "video/x-matroska",
             _ => type == AssetType.VIDEO ? "video/mp4" : "application/octet-stream"
         };
+    }
+
+    private static bool TryGetUserId(ClaimsPrincipal user, out Guid userId)
+    {
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(userIdClaim?.Value, out userId);
     }
 }

@@ -88,13 +88,13 @@
             @if (Asset.Type == "VIDEO")
             {
                 <div class="video-preview-container">
-                    <img src="@Asset.ThumbnailUrl" alt="@Asset.FileName" class="asset-card-image thumbnail" loading="lazy" />
-                    <video @ref="_videoRef" src="@Asset.ContentUrl" muted loop class="asset-card-image preview-video" preload="metadata" playsinline></video>
+                    <img src="@_thumbnailUrl" alt="@Asset.FileName" class="asset-card-image thumbnail" loading="lazy" />
+                    <video @ref="_videoRef" src="@_contentUrl" muted loop class="asset-card-image preview-video" preload="metadata" playsinline></video>
                 </div>
             }
             else
             {
-                <img src="@Asset.ThumbnailUrl" alt="@Asset.FileName" class="asset-card-image" loading="lazy" />
+                <img src="@_thumbnailUrl" alt="@Asset.FileName" class="asset-card-image" loading="lazy" />
             }
         }
         else
@@ -146,11 +146,35 @@
 @code {
     [Parameter] public TimelineItem Asset { get; set; } = null!;
     [Parameter] public EventCallback<TimelineItem> OnAssetClick { get; set; }
+    [Inject] private IAuthService AuthService { get; set; } = null!;
     [Inject] private IJSRuntime JS { get; set; } = null!;
     [Inject] private IAssetService AssetService { get; set; } = null!;
     [Inject] private ISnackbar Snackbar { get; set; } = null!;
 
     private ElementReference _videoRef;
+    private string _thumbnailUrl = string.Empty;
+    private string _contentUrl = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await UpdateAssetUrlsAsync();
+    }
+
+    private async Task UpdateAssetUrlsAsync()
+    {
+        var thumbnailUrl = Asset.ThumbnailUrl;
+        var contentUrl = Asset.ContentUrl;
+
+        if (Asset.SyncStatus != AssetSyncStatus.Synced)
+        {
+            var token = await AuthService.GetTokenAsync();
+            thumbnailUrl = AppendAccessToken(thumbnailUrl, token);
+            contentUrl = AppendAccessToken(contentUrl, token);
+        }
+
+        _thumbnailUrl = thumbnailUrl;
+        _contentUrl = contentUrl;
+    }
 
     private async Task OnClick()
     {
@@ -196,6 +220,17 @@
         {
             await JS.InvokeVoidAsync("videoHelpers.play", _videoRef);
         }
+    }
+
+    private static string AppendAccessToken(string url, string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token) || url.Contains("access_token=", StringComparison.OrdinalIgnoreCase))
+        {
+            return url;
+        }
+
+        var separator = url.Contains('?') ? "&" : "?";
+        return $"{url}{separator}access_token={Uri.EscapeDataString(token)}";
     }
 
     private async Task HandleMouseLeave()

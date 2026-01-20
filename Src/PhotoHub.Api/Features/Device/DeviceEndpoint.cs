@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using PhotoHub.API.Features.Timeline;
 using PhotoHub.API.Shared.Interfaces;
@@ -14,6 +15,7 @@ public class DeviceEndpoint : IEndpoint
             .WithName("GetDeviceAssets")
             .WithTags("Assets")
             .WithDescription("Gets pending assets from the user's device directory")
+            .RequireAuthorization()
             .AddOpenApiOperationTransformer((operation, context, ct) =>
             {
                 operation.Summary = "Gets device assets";
@@ -25,11 +27,17 @@ public class DeviceEndpoint : IEndpoint
     private async Task<IResult> Handle(
         [FromServices] DirectoryScanner directoryScanner,
         [FromServices] SettingsService settingsService,
+        ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
         try
         {
-            var userAssetsPath = await settingsService.GetAssetsPathAsync();
+            if (!TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var userAssetsPath = await settingsService.GetAssetsPathAsync(userId);
             var internalAssetsPath = settingsService.GetInternalAssetsPath();
             
             if (!Directory.Exists(userAssetsPath))
@@ -100,5 +108,11 @@ public class DeviceEndpoint : IEndpoint
                 statusCode: StatusCodes.Status500InternalServerError
             );
         }
+    }
+
+    private static bool TryGetUserId(ClaimsPrincipal user, out Guid userId)
+    {
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(userIdClaim?.Value, out userId);
     }
 }
