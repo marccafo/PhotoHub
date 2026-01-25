@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace PhotoHub.Blazor.WASM.Services;
+namespace PhotoHub.Blazor.Shared.Services;
 
 public sealed class ApiErrorInfo
 {

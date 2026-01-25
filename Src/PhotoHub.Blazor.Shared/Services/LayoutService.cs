@@ -31,17 +31,31 @@ public class LayoutService
 
     public async Task InitializeAsync()
     {
-        var storedValue = await _jsRuntime.InvokeAsync<string>("localStorage.getItem", DarkModeKey);
-        if (bool.TryParse(storedValue, out var isDark))
+        try
         {
-            IsDarkMode = isDark;
+            var storedValue = await _jsRuntime.InvokeAsync<string>("localStorage.getItem", DarkModeKey);
+            if (bool.TryParse(storedValue, out var isDark))
+            {
+                IsDarkMode = isDark;
+            }
+        }
+        catch
+        {
+            // Fallback for environments where localStorage is not available (like early stage MAUI)
         }
     }
 
     public async Task ToggleDarkModeAsync()
     {
         IsDarkMode = !IsDarkMode;
-        await _jsRuntime.InvokeVoidAsync("localStorage.setItem", DarkModeKey, IsDarkMode.ToString().ToLower());
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync("localStorage.setItem", DarkModeKey, IsDarkMode.ToString().ToLower());
+        }
+        catch
+        {
+            // Fallback
+        }
     }
 
     private bool _isNavbarCustom;

@@ -4,7 +4,7 @@ using System.Text;
 using System.Text.Json;
 using PhotoHub.Blazor.Shared.Services;
 
-namespace PhotoHub.Blazor.WASM.Services;
+namespace PhotoHub.Blazor.MAUI.Services;
 
 public sealed class ApiErrorHandler : DelegatingHandler
 {
