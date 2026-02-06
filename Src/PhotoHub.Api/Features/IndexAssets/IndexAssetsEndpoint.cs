@@ -538,7 +538,8 @@ public class IndexAssetsEndpoint : IEndpoint
         {
             cancellationToken.ThrowIfCancellationRequested();
             
-            context.AssetsToDelete.Add(file.FullPath);
+            var deletePath = await settingsService.VirtualizePathAsync(file.FullPath);
+            context.AssetsToDelete.Add(deletePath);
             
             // Ensure folder structure exists
             await EnsureFolderStructureForFileAsync(dbContext, settingsService, file.FullPath, context.ProcessedDirectories, cancellationToken);
@@ -635,6 +636,8 @@ public class IndexAssetsEndpoint : IEndpoint
         var dbPath = await settingsService.VirtualizePathAsync(file.FullPath);
 
         var existingByPath = existingAssetsByPath.GetValueOrDefault(dbPath);
+        Guid? ownerId = TryGetOwnerIdFromVirtualPath(dbPath, out var parsedOwnerId) ? parsedOwnerId : null;
+        var fileDirectory = Path.GetDirectoryName(file.FullPath);
         var needsFullCheck = existingByPath == null || 
             hashService.HasFileChanged(file.FullPath, existingByPath.FileSize, existingByPath.ModifiedDate);
         
@@ -661,6 +664,9 @@ public class IndexAssetsEndpoint : IEndpoint
             existingByChecksum.FileName = file.FileName;
             existingByChecksum.ModifiedDate = file.ModifiedDate;
             existingByChecksum.FileSize = file.FileSize;
+            existingByChecksum.OwnerId = ownerId;
+            var movedFolder = await GetOrCreateFolderForPathAsync(dbContext, settingsService, fileDirectory, cancellationToken);
+            existingByChecksum.FolderId = movedFolder?.Id;
             asset = existingByChecksum;
             stats.MovedFiles++;
         }
@@ -670,13 +676,18 @@ public class IndexAssetsEndpoint : IEndpoint
             existingByPath.Checksum = checksum;
             existingByPath.FileSize = file.FileSize;
             existingByPath.ModifiedDate = file.ModifiedDate;
+            existingByPath.OwnerId = ownerId;
+            if (existingByPath.FolderId == null)
+            {
+                var existingFolder = await GetOrCreateFolderForPathAsync(dbContext, settingsService, fileDirectory, cancellationToken);
+                existingByPath.FolderId = existingFolder?.Id;
+            }
             asset = existingByPath;
             stats.UpdatedFiles++;
         }
         else
         {
             // New file
-            var fileDirectory = Path.GetDirectoryName(file.FullPath);
             var folder = await GetOrCreateFolderForPathAsync(dbContext, settingsService, fileDirectory, cancellationToken);
             
             asset = new Asset
@@ -689,7 +700,8 @@ public class IndexAssetsEndpoint : IEndpoint
                 Extension = file.Extension,
                 CreatedDate = file.CreatedDate,
                 ModifiedDate = file.ModifiedDate,
-                FolderId = folder?.Id
+                FolderId = folder?.Id,
+                OwnerId = ownerId
             };
             
             isNew = true;
@@ -1099,7 +1111,12 @@ public class IndexAssetsEndpoint : IEndpoint
             .ToListAsync(cancellationToken);
         
         var duplicateGroups = allAssets
-            .GroupBy(a => a.Checksum)
+            .Select(a => new
+            {
+                Asset = a,
+                OwnerId = TryGetOwnerIdFromVirtualPath(a.FullPath, out var parsedOwnerId) ? parsedOwnerId : (Guid?)null
+            })
+            .GroupBy(a => new { a.Asset.Checksum, a.OwnerId })
             .Where(g => g.Count() > 1)
             .ToList();
         
@@ -1112,7 +1129,11 @@ public class IndexAssetsEndpoint : IEndpoint
         foreach (var group in duplicateGroups)
         {
             // Mantener el más reciente (por ScannedAt) o el que tiene ID más bajo si no tienen ScannedAt
-            var assetsInGroup = group.OrderByDescending(a => a.ScannedAt).ThenBy(a => a.Id).ToList();
+            var assetsInGroup = group
+                .Select(g => g.Asset)
+                .OrderByDescending(a => a.ScannedAt)
+                .ThenBy(a => a.Id)
+                .ToList();
             var assetToKeep = assetsInGroup.First();
             var duplicates = assetsInGroup.Skip(1).ToList();
             
@@ -1164,6 +1185,7 @@ public class IndexAssetsEndpoint : IEndpoint
                 {
                     dbAssetToKeep.FullPath = mostRecentPath;
                     dbAssetToKeep.FileName = Path.GetFileName(mostRecentPath);
+                    dbAssetToKeep.OwnerId = TryGetOwnerIdFromVirtualPath(mostRecentPath, out var ownerId) ? ownerId : null;
                     assetsToUpdate.Add(dbAssetToKeep);
                 }
             }
@@ -1386,6 +1408,29 @@ public class IndexAssetsEndpoint : IEndpoint
     private static string NormalizeVirtualPath(string path)
     {
         return path.Replace('\\', '/').TrimEnd('/');
+    }
+
+    private static bool TryGetOwnerIdFromVirtualPath(string path, out Guid ownerId)
+    {
+        ownerId = Guid.Empty;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        var normalized = path.Replace('\\', '/').TrimStart('/');
+        if (!normalized.StartsWith("assets/users/", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 3)
+        {
+            return false;
+        }
+
+        return Guid.TryParse(parts[2], out ownerId);
     }
 
     private static string GetParentVirtualPath(string path)

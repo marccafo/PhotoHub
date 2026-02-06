@@ -69,9 +69,13 @@ public class TimelineEndpoint : IEndpoint
 
             // Obtener rutas de carpetas permitidas para filtrar assets no indexados
             var allowedFolderPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            List<string> normalizedAllowedFolderPaths = new();
             if (!isAdmin)
             {
                 allowedFolderPaths = await GetAllowedFolderPathsForUserAsync(dbContext, userId, userRootPath, cancellationToken);
+                normalizedAllowedFolderPaths = allowedFolderPaths
+                    .Select(NormalizePathForPrefix)
+                    .ToList();
             }
 
             var timelineItems = assets.Select(asset => new TimelineResponse
@@ -148,18 +152,40 @@ public class TimelineEndpoint : IEndpoint
                             var virtualizedPath = await settingsService.VirtualizePathAsync(file.FullPath);
                             
                             // Si no es admin, filtrar por rutas de carpetas permitidas
+                            if (TryGetOwnerUserIdFromInternalPath(normalizedFilePath, internalAssetsPath, out var ownerUserId) &&
+                                ownerUserId != userId)
+                            {
+                                continue;
+                            }
+
+                            if (TryGetOwnerUserIdFromVirtualPath(virtualizedPath, out var virtualOwnerUserId) &&
+                                virtualOwnerUserId != userId)
+                            {
+                                continue;
+                            }
+
                             if (!isAdmin)
                             {
-                                var isAllowed = false;
-                                foreach (var allowedPath in allowedFolderPaths)
+                                var normalizedVirtualPath = NormalizePathForPrefix(virtualizedPath);
+                                var normalizedUserRootPath = NormalizePathForPrefix(userRootPath);
+
+                                // Si es una ruta de /assets/users/, debe pertenecer al usuario actual
+                                if (normalizedVirtualPath.StartsWith("/assets/users/", StringComparison.OrdinalIgnoreCase) &&
+                                    !normalizedVirtualPath.StartsWith(normalizedUserRootPath, StringComparison.OrdinalIgnoreCase))
                                 {
-                                    if (virtualizedPath.StartsWith(allowedPath, StringComparison.OrdinalIgnoreCase))
+                                    continue;
+                                }
+
+                                var isAllowed = false;
+                                foreach (var allowedPath in normalizedAllowedFolderPaths)
+                                {
+                                    if (normalizedVirtualPath.StartsWith(allowedPath, StringComparison.OrdinalIgnoreCase))
                                     {
                                         isAllowed = true;
                                         break;
                                     }
                                 }
-                                
+
                                 if (!isAllowed) continue;
                             }
 
@@ -205,6 +231,71 @@ public class TimelineEndpoint : IEndpoint
                 statusCode: StatusCodes.Status500InternalServerError
             );
         }
+    }
+
+    private static string NormalizePathForPrefix(string path)
+    {
+        return path.Replace('\\', '/').TrimEnd('/') + "/";
+    }
+
+    private static bool TryGetOwnerUserIdFromInternalPath(
+        string physicalPath,
+        string internalAssetsPath,
+        out Guid ownerUserId)
+    {
+        ownerUserId = Guid.Empty;
+        if (string.IsNullOrWhiteSpace(physicalPath) || string.IsNullOrWhiteSpace(internalAssetsPath))
+        {
+            return false;
+        }
+
+        var normalizedFilePath = Path.GetFullPath(physicalPath).Replace('\\', '/');
+        var normalizedInternalPath = Path.GetFullPath(internalAssetsPath).Replace('\\', '/').TrimEnd('/');
+
+        if (!normalizedFilePath.StartsWith(normalizedInternalPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var relativePath = Path.GetRelativePath(normalizedInternalPath, normalizedFilePath)
+            .Replace('\\', '/')
+            .TrimStart('/');
+
+        if (!relativePath.StartsWith("users/", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var segments = relativePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length < 2)
+        {
+            return false;
+        }
+
+        return Guid.TryParse(segments[1], out ownerUserId);
+    }
+
+    private static bool TryGetOwnerUserIdFromVirtualPath(string virtualPath, out Guid ownerUserId)
+    {
+        ownerUserId = Guid.Empty;
+        if (string.IsNullOrWhiteSpace(virtualPath))
+        {
+            return false;
+        }
+
+        var normalizedVirtualPath = virtualPath.Replace('\\', '/').TrimStart('/');
+        if (!normalizedVirtualPath.StartsWith("assets/users/", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var segments = normalizedVirtualPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length < 3)
+        {
+            return false;
+        }
+
+        return Guid.TryParse(segments[2], out ownerUserId);
     }
 
     private bool TryGetUserId(ClaimsPrincipal user, out Guid userId)
