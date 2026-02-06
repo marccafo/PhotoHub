@@ -674,7 +674,9 @@ else
                                  ValueChanged="@(EventCallback.Factory.Create<bool>(this, value => ToggleFolderSelection(folderData.Folder.Id, value)))" />
                 </div>
 
-                @if (folderData.Folder.SharedWithCount > 1)
+                @if (folderData.Folder.IsShared
+                     ? folderData.Folder.SharedWithCount > 0
+                     : folderData.Folder.SharedWithCount > 1)
                 {
                     <div class="folder-shared-badge" title="Compartida con @folderData.Folder.SharedWithCount usuarios">
                         <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" />
@@ -729,7 +731,9 @@ else
             <div class="folder-list-info">
                 <div class="d-flex align-center gap-2">
                     <MudText Typo="Typo.subtitle1" Class="folder-list-name">@GetDisplayFolderName(folderData.Folder)</MudText>
-                    @if (folderData.Folder.SharedWithCount > 1)
+                    @if (folderData.Folder.IsShared
+                         ? folderData.Folder.SharedWithCount > 0
+                         : folderData.Folder.SharedWithCount > 1)
                     {
                         <div class="folder-list-shared-badge" title="Compartida con @folderData.Folder.SharedWithCount usuarios">
                             <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" />

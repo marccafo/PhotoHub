@@ -59,7 +59,7 @@
 
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
-    [Parameter] public List<UserDto> Users { get; set; } = new();
+    [Parameter] public List<ShareableUserDto> Users { get; set; } = new();
     [Parameter] public AlbumPermissionDto? Permission { get; set; }
     [Parameter] public bool IsEdit { get; set; }
     [Parameter] public Guid AlbumId { get; set; }

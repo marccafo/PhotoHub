@@ -39,6 +39,13 @@ public class UserService : IUserService
         return response ?? new List<UserDto>();
     }
 
+    public async Task<List<ShareableUserDto>> GetShareableUsersAsync()
+    {
+        await SetAuthHeaderAsync();
+        var response = await _httpClient.GetFromJsonAsync<List<ShareableUserDto>>("/api/users/shareable");
+        return response ?? new List<ShareableUserDto>();
+    }
+
     public async Task<UserDto> GetUserAsync(Guid id)
     {
         await SetAuthHeaderAsync();
