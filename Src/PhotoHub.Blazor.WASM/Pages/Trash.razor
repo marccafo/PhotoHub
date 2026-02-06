@@ -65,7 +65,8 @@
                     }
                     else if (!_loading)
                     {
-                        <MudAlert Severity="Severity.Info">La papelera está vacía.</MudAlert>
+                        <EmptyState Icon="@Icons.Material.Filled.Delete"
+                                    Title="La papelera está vacía" />
                     }
                 </div>
             </div>

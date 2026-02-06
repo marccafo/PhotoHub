@@ -16,11 +16,15 @@ else
 {
     @if (string.IsNullOrWhiteSpace(_searchTerm))
     {
-        <MudAlert Severity="Severity.Info" Class="mt-4">Escribe un nombre o una etiqueta (ej. #paisaje) para buscar.</MudAlert>
+        <EmptyState Icon="@Icons.Material.Filled.Search"
+                    Title="Escribe un nombre o una etiqueta"
+                    Description="Ej. #paisaje para buscar." />
     }
     else if (!_results.Any())
     {
-        <MudAlert Severity="Severity.Info" Class="mt-4">No se encontraron archivos con ese nombre.</MudAlert>
+        <EmptyState Icon="@Icons.Material.Filled.SearchOff"
+                    Title="No se encontraron archivos"
+                    Description="Prueba con otro nombre o etiqueta." />
     }
     else
     {

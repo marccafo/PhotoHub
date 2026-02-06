@@ -417,11 +417,9 @@
         }
         else
         {
-            <div class="d-flex flex-column align-center justify-center py-12">
-                <MudIcon Icon="@Icons.Material.Filled.Collections" Size="Size.Large" Style="width: 120px; height: 120px; color: var(--mud-palette-text-disabled);" />
-                <MudText Typo="Typo.h5" Style="color: var(--mud-palette-text-disabled);" Class="mt-4">No hay álbumes</MudText>
-                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-disabled);">Empieza creando uno nuevo.</MudText>
-            </div>
+            <EmptyState Icon="@Icons.Material.Filled.Collections"
+                        Title="No hay álbumes"
+                        Description="Empieza creando uno nuevo." />
         }
     }
 }
@@ -524,7 +522,9 @@ else
     else
     {
         <div class="px-4 pb-4">
-            <MudAlert Severity="Severity.Info">Este álbum está vacío. Añade fotos desde el detalle de cualquier foto.</MudAlert>
+            <EmptyState Icon="@Icons.Material.Filled.PhotoLibrary"
+                        Title="Este álbum está vacío"
+                        Description="Añade fotos desde el detalle de cualquier foto." />
         </div>
     }
 }

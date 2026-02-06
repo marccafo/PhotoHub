@@ -52,7 +52,9 @@
                     }
                     else if (!_loading)
                     {
-                        <MudAlert Severity="Severity.Info">No hay fotografías disponibles. Indexa un directorio para comenzar.</MudAlert>
+                        <EmptyState Icon="@Icons.Material.Filled.PhotoLibrary"
+                                    Title="No hay fotografías disponibles"
+                                    Description="Indexa un directorio para comenzar." />
                     }
                 </div>
             </div>
