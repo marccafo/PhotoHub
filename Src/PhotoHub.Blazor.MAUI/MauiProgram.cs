@@ -1,4 +1,7 @@
-﻿using Microsoft.Extensions.Logging;
+using System.Globalization;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using MudBlazor.Services;
 using PhotoHub.Blazor.Shared.Services;
 using PhotoHub.Blazor.MAUI.Services;
@@ -9,6 +12,11 @@ public static class MauiProgram
 {
     public static MauiApp CreateMauiApp()
     {
+        // Evitar que el runtime busque ensamblados satélite (en-US/MudBlazor.resources.dll, en/MudBlazor.resources.dll)
+        // que no se incluyen en el bundle de MAUI/Android y provocan warnings y posibles HttpRequestException.
+        CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
+        CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
+
         var builder = MauiApp.CreateBuilder();
         builder
             .UseMauiApp<App>()
@@ -16,9 +24,18 @@ public static class MauiProgram
 
         builder.Services.AddMauiBlazorWebView();
 
+        // Autorización para AuthorizeView (IAuthorizationPolicyProvider, etc.)
+        builder.Services.AddAuthorizationCore();
+        builder.Services.AddScoped<AuthenticationStateProvider, MauiAuthenticationStateProvider>();
+        builder.Services.AddCascadingAuthenticationState();
+
+        // Evitar spam de "Authorization failed" cuando el usuario no está autenticado (comportamiento esperado)
+        builder.Logging.AddFilter("Microsoft.AspNetCore.Authorization", LogLevel.Warning);
+
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
         builder.Logging.AddDebug();
+        builder.Logging.AddFilter("Microsoft.AspNetCore.Components.WebView", LogLevel.Trace);
 #endif
 
         // Agregar MudBlazor

@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -16,6 +16,10 @@ public partial class App : MauiWinUIApplication
     /// </summary>
     public App()
     {
+        // WebView2 necesita una carpeta de datos con permisos de escritura.
+        // Sin esto, el BlazorWebView puede no renderizar contenido en Windows.
+        var userDataFolder = Path.Combine(FileSystem.AppDataDirectory, "WebView2");
+        Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", userDataFolder);
         this.InitializeComponent();
     }
 

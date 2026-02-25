@@ -38,8 +38,8 @@
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
 
-        <AndroidSdkDirectory Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">C:\Android</AndroidSdkDirectory>
-        <AcceptAndroidSDKLicenses Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">true</AcceptAndroidSDKLicenses>
+        <!--<AndroidSdkDirectory Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">C:\Android</AndroidSdkDirectory>
+        <AcceptAndroidSDKLicenses Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">true</AcceptAndroidSDKLicenses>-->
     </PropertyGroup>
 
     <ItemGroup>
