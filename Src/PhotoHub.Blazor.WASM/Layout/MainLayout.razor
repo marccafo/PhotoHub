@@ -297,8 +297,17 @@
 
     private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
+        var path = new Uri(Navigation.Uri).AbsolutePath.Trim('/').ToLowerInvariant();
+        if (!path.StartsWith("asset/", StringComparison.OrdinalIgnoreCase))
+        {
+            LayoutService.ResetNavbar();
+        }
         UpdateSearchQueryFromUri();
-        StateHasChanged();
+        // Solo forzar refresh cuando no se llamó ResetNavbar (ej. entrando en /asset/), para evitar doble refresco al salir
+        if (path.StartsWith("asset/", StringComparison.OrdinalIgnoreCase))
+        {
+            StateHasChanged();
+        }
     }
 
     private void HandleApiError(ApiErrorInfo info)

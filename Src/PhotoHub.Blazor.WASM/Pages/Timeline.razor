@@ -7,6 +7,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject LayoutService LayoutService
+@inject IAssetListNavigationState AssetListNavigationState
 @implements IDisposable
 
 <PageTitle>Timeline - PhotoHub</PageTitle>
@@ -633,6 +634,7 @@
 
     private void OpenAsset(TimelineItem asset)
     {
+        AssetListNavigationState.SetList(_assets, albumId: null);
         if (asset.SyncStatus == AssetSyncStatus.Synced)
         {
             Navigation.NavigateTo($"/asset/{asset.Id}");

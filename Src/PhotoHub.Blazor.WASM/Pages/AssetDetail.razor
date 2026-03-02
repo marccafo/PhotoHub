@@ -9,6 +9,7 @@
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @inject LayoutService LayoutService
+@inject IAssetListNavigationState AssetListNavigationState
 
 <PageTitle>Detalle - PhotoHub</PageTitle>
 
@@ -303,16 +304,25 @@ else
     private TimelineItem? _nextAsset;
     private List<TimelineItem> _allAssets = new();
 
+    /// <summary>Evita cargar dos veces el mismo asset (OnInitializedAsync y OnParametersSetAsync se ejecutan ambos al navegar).</summary>
+    private Guid _lastLoadedAssetId = Guid.Empty;
+    private string _lastLoadedPath = string.Empty;
+
     private bool CanEditTags => _asset != null && _asset.Id != Guid.Empty && _asset.SyncStatus == AssetSyncStatus.Synced;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         UpdateNavbar();
-        await LoadAsset();
     }
 
     protected override async Task OnParametersSetAsync()
     {
+        // Evitar doble carga: Blazor llama OnInitializedAsync y OnParametersSetAsync al montar; solo cargar cuando cambien los parámetros.
+        if (AssetId == _lastLoadedAssetId && (Path ?? "") == _lastLoadedPath)
+        {
+            UpdateNavbar();
+            return;
+        }
         UpdateNavbar();
         await LoadAsset();
     }
@@ -421,7 +431,12 @@ else
             
             if (_allAssets.Count == 0)
             {
-                if (AlbumId.HasValue && AlbumId.Value != Guid.Empty)
+                var listFromNavigation = AssetListNavigationState.TryGetList(AlbumId);
+                if (listFromNavigation != null)
+                {
+                    _allAssets = listFromNavigation;
+                }
+                else if (AlbumId.HasValue && AlbumId.Value != Guid.Empty)
                 {
                     _allAssets = await AlbumService.GetAlbumAssetsAsync(AlbumId.Value);
                 }
@@ -432,6 +447,8 @@ else
             }
             
             UpdateNavigation();
+            _lastLoadedAssetId = AssetId;
+            _lastLoadedPath = Path ?? string.Empty;
         }
         catch (Exception ex)
         {
@@ -535,6 +552,11 @@ else
         if (AlbumId.HasValue && AlbumId.Value != Guid.Empty)
         {
             Navigation.NavigateTo($"/albums/{AlbumId.Value}");
+        }
+        else if (!string.IsNullOrEmpty(Path))
+        {
+            // Abierto desde Mi Dispositivo (o similar con path local)
+            Navigation.NavigateTo("/device");
         }
         else
         {

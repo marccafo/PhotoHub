@@ -92,9 +92,14 @@ public class LayoutService
 
     public void ResetNavbar()
     {
-        IsNavbarCustom = false;
-        NavbarContent = null;
-        KeepDrawerVisible = false;
+        var changed = _isNavbarCustom || _navbarContent != null || _keepDrawerVisible;
+        _isNavbarCustom = false;
+        _navbarContent = null;
+        _keepDrawerVisible = false;
+        if (changed)
+        {
+            NotifyUpdate();
+        }
     }
 
     private void NotifyUpdate() => OnMajorUpdate?.Invoke();

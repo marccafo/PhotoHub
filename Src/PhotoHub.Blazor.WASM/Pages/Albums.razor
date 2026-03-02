@@ -7,6 +7,7 @@
 @inject NavigationManager Navigation
 @inject IDialogService DialogService
 @inject LayoutService LayoutService
+@inject IAssetListNavigationState AssetListNavigationState
 @implements IDisposable
 
 <PageTitle>Álbumes - PhotoHub</PageTitle>
@@ -687,12 +688,10 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadAlbums();
-        
-        if (AlbumId != Guid.Empty)
-        {
-            await LoadAlbum(AlbumId);
-        }
+        // Solo cargar la lista de álbumes cuando estamos en la vista de listado (sin AlbumId).
+        // Si entramos en /albums/{id} (p. ej. volver del detalle de un asset), no pedir /api/albums.
+        if (AlbumId == Guid.Empty)
+            await LoadAlbums();
     }
 
     protected override async Task OnParametersSetAsync()
@@ -719,6 +718,9 @@ else
         }
         else
         {
+            // Volver a la vista de listado (Mis Álbumes / Compartidos): cargar la lista si veníamos de un álbum
+            if (_selectedAlbum != null)
+                await LoadAlbums();
             _selectedAlbum = null;
             _albumAssets = new();
             _assetSelectionMode = false;
@@ -845,6 +847,7 @@ else
 
     private void OpenAsset(TimelineItem asset)
     {
+        AssetListNavigationState.SetList(_albumAssets, AlbumId);
         Navigation.NavigateTo($"/asset/{asset.Id}?albumId={AlbumId}");
     }
 
