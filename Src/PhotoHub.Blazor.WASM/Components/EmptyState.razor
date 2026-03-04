@@ -1,0 +1,19 @@
+@using Microsoft.AspNetCore.Components
+
+<div class="d-flex flex-column align-center justify-center py-12 @(string.IsNullOrWhiteSpace(Class) ? "" : Class)">
+    <MudIcon Icon="@Icon"
+             Size="Size.Large"
+             Style="width: 120px; height: 120px; color: var(--mud-palette-text-disabled);" />
+    <MudText Typo="Typo.h5" Style="color: var(--mud-palette-text-disabled);" Class="mt-4">@Title</MudText>
+    @if (!string.IsNullOrWhiteSpace(Description))
+    {
+        <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-disabled);">@Description</MudText>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Icon { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Description { get; set; }
+    [Parameter] public string? Class { get; set; }
+}

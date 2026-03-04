@@ -125,7 +125,7 @@
 
     private async Task OpenAddPermissionDialog()
     {
-        var users = await UserService.GetUsersAsync();
+        var users = await UserService.GetShareableUsersAsync();
         var currentUser = await AuthService.GetCurrentUserAsync();
         
         // Filtrar usuarios que no sean el actual y que no tengan ya permisos
@@ -159,7 +159,7 @@
 
     private async Task OpenEditPermissionDialog(AlbumPermissionDto permission)
     {
-        var users = await UserService.GetUsersAsync();
+        var users = await UserService.GetShareableUsersAsync();
         
         var parameters = new DialogParameters
         {

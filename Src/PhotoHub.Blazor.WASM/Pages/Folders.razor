@@ -633,11 +633,9 @@ else
         }
         else
         {
-            <div class="d-flex flex-column align-center justify-center py-12">
-                <MudIcon Icon="@Icons.Material.Filled.Folder" Size="Size.Large" Style="width: 120px; height: 120px; color: var(--mud-palette-text-disabled);" />
-                <MudText Typo="Typo.h5" Style="color: var(--mud-palette-text-disabled);" Class="mt-4">No hay carpetas</MudText>
-                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-disabled);">Empieza creando una nueva.</MudText>
-            </div>
+            <EmptyState Icon="@Icons.Material.Filled.Folder"
+                        Title="No hay carpetas"
+                        Description="Empieza creando una nueva." />
         }
     };
 
@@ -654,11 +652,9 @@ else
         }
         else
         {
-            <div class="d-flex flex-column align-center justify-center py-12">
-                <MudIcon Icon="@Icons.Material.Filled.Folder" Size="Size.Large" Style="width: 120px; height: 120px; color: var(--mud-palette-text-disabled);" />
-                <MudText Typo="Typo.h5" Style="color: var(--mud-palette-text-disabled);" Class="mt-4">No hay carpetas</MudText>
-                <MudText Typo="Typo.body1" Style="color: var(--mud-palette-text-disabled);">Empieza creando una nueva.</MudText>
-            </div>
+            <EmptyState Icon="@Icons.Material.Filled.Folder"
+                        Title="No hay carpetas"
+                        Description="Empieza creando una nueva." />
         }
     };
 
@@ -674,7 +670,9 @@ else
                                  ValueChanged="@(EventCallback.Factory.Create<bool>(this, value => ToggleFolderSelection(folderData.Folder.Id, value)))" />
                 </div>
 
-                @if (folderData.Folder.SharedWithCount > 1)
+                @if (folderData.Folder.IsShared
+                     ? folderData.Folder.SharedWithCount > 0
+                     : folderData.Folder.SharedWithCount > 1)
                 {
                     <div class="folder-shared-badge" title="Compartida con @folderData.Folder.SharedWithCount usuarios">
                         <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" />
@@ -729,7 +727,9 @@ else
             <div class="folder-list-info">
                 <div class="d-flex align-center gap-2">
                     <MudText Typo="Typo.subtitle1" Class="folder-list-name">@GetDisplayFolderName(folderData.Folder)</MudText>
-                    @if (folderData.Folder.SharedWithCount > 1)
+                    @if (folderData.Folder.IsShared
+                         ? folderData.Folder.SharedWithCount > 0
+                         : folderData.Folder.SharedWithCount > 1)
                     {
                         <div class="folder-list-shared-badge" title="Compartida con @folderData.Folder.SharedWithCount usuarios">
                             <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" />
@@ -1480,7 +1480,11 @@ else
             return;
         }
 
-        Navigation.NavigateTo($"/asset/{asset.Id}");
+        var returnTo = _selectedFolder != null
+            ? $"folders/{_selectedFolder.Id}"
+            : (_activeTab == 1 ? "folders/shared" : "folders/own");
+        var returnToEncoded = System.Net.WebUtility.UrlEncode(returnTo);
+        Navigation.NavigateTo($"/asset/{asset.Id}?returnTo={returnToEncoded}");
     }
 
     private void OpenCreateFolderDialog(bool isSharedSpace = false)

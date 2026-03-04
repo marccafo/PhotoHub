@@ -9,6 +9,7 @@
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @inject LayoutService LayoutService
+@inject IAssetListNavigationState AssetListNavigationState
 
 <PageTitle>Detalle - PhotoHub</PageTitle>
 
@@ -281,13 +282,15 @@ else if (_asset != null)
 else
 {
     <MudAlert Severity="Severity.Error" Class="mt-4">No se pudo cargar la información del archivo.</MudAlert>
-    <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" Color="Color.Primary" OnClick="GoBack" Class="mt-2">Volver al Timeline</MudButton>
+    <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" Color="Color.Primary" OnClick="GoBack" Class="mt-2">@(string.IsNullOrEmpty(ReturnTo) ? "Volver al Timeline" : "Volver al directorio")</MudButton>
 }
 
 @code {
     [Parameter] public Guid AssetId { get; set; }
     [SupplyParameterFromQuery] public string? Path { get; set; }
     [SupplyParameterFromQuery] public Guid? AlbumId { get; set; }
+    /// <summary>Ruta de retorno al volver (ej. folders/own, folders/shared, folders/{id}).</summary>
+    [SupplyParameterFromQuery] public string? ReturnTo { get; set; }
     
     private PhotoHub.Blazor.Shared.Models.AssetDetail? _asset;
     private string _displayContentUrl = string.Empty;
@@ -303,16 +306,25 @@ else
     private TimelineItem? _nextAsset;
     private List<TimelineItem> _allAssets = new();
 
+    /// <summary>Evita cargar dos veces el mismo asset (OnInitializedAsync y OnParametersSetAsync se ejecutan ambos al navegar).</summary>
+    private Guid _lastLoadedAssetId = Guid.Empty;
+    private string _lastLoadedPath = string.Empty;
+
     private bool CanEditTags => _asset != null && _asset.Id != Guid.Empty && _asset.SyncStatus == AssetSyncStatus.Synced;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         UpdateNavbar();
-        await LoadAsset();
     }
 
     protected override async Task OnParametersSetAsync()
     {
+        // Evitar doble carga: Blazor llama OnInitializedAsync y OnParametersSetAsync al montar; solo cargar cuando cambien los parámetros.
+        if (AssetId == _lastLoadedAssetId && (Path ?? "") == _lastLoadedPath)
+        {
+            UpdateNavbar();
+            return;
+        }
         UpdateNavbar();
         await LoadAsset();
     }
@@ -421,7 +433,12 @@ else
             
             if (_allAssets.Count == 0)
             {
-                if (AlbumId.HasValue && AlbumId.Value != Guid.Empty)
+                var listFromNavigation = AssetListNavigationState.TryGetList(AlbumId);
+                if (listFromNavigation != null)
+                {
+                    _allAssets = listFromNavigation;
+                }
+                else if (AlbumId.HasValue && AlbumId.Value != Guid.Empty)
                 {
                     _allAssets = await AlbumService.GetAlbumAssetsAsync(AlbumId.Value);
                 }
@@ -432,6 +449,8 @@ else
             }
             
             UpdateNavigation();
+            _lastLoadedAssetId = AssetId;
+            _lastLoadedPath = Path ?? string.Empty;
         }
         catch (Exception ex)
         {
@@ -511,15 +530,17 @@ else
         if (asset == null) return;
 
         var albumQuery = AlbumId.HasValue ? $"&albumId={AlbumId}" : "";
+        var returnToQuery = !string.IsNullOrEmpty(ReturnTo) ? $"&returnTo={System.Net.WebUtility.UrlEncode(ReturnTo)}" : "";
 
         if (asset.SyncStatus == AssetSyncStatus.Synced)
         {
-            Navigation.NavigateTo($"/asset/{asset.Id}?{(albumQuery.StartsWith("&") ? albumQuery.Substring(1) : albumQuery)}");
+            var query = (albumQuery.TrimStart('&') + returnToQuery).TrimStart('&');
+            Navigation.NavigateTo($"/asset/{asset.Id}{(string.IsNullOrEmpty(query) ? "" : "?")}{query}");
         }
         else
         {
             var encodedPath = System.Net.WebUtility.UrlEncode(asset.FullPath);
-            Navigation.NavigateTo($"/asset/{Guid.Empty}?path={encodedPath}{albumQuery}");
+            Navigation.NavigateTo($"/asset/{Guid.Empty}?path={encodedPath}{albumQuery}{returnToQuery}");
         }
     }
 
@@ -532,9 +553,23 @@ else
 
     private void GoBack()
     {
+        // Restaurar navbar y menú lateral antes de navegar para que al llegar a la página destino se vea el drawer
+        LayoutService.ResetNavbar();
+
+        if (!string.IsNullOrEmpty(ReturnTo))
+        {
+            var path = ReturnTo.TrimStart('/');
+            Navigation.NavigateTo("/" + path);
+            return;
+        }
         if (AlbumId.HasValue && AlbumId.Value != Guid.Empty)
         {
             Navigation.NavigateTo($"/albums/{AlbumId.Value}");
+        }
+        else if (!string.IsNullOrEmpty(Path))
+        {
+            // Abierto desde Mi Dispositivo (o similar con path local)
+            Navigation.NavigateTo("/device");
         }
         else
         {

@@ -33,6 +33,7 @@ builder.Services.AddScoped(sp =>
 builder.Services.AddMudServices();
 
 // Agregar servicios personalizados
+builder.Services.AddScoped<IAssetListNavigationState, AssetListNavigationState>();
 builder.Services.AddScoped<LayoutService>();
 builder.Services.AddScoped<ThemeService>();
 builder.Services.AddScoped<PhotoHub.Blazor.Shared.Services.IAuthService, PhotoHub.Blazor.WASM.Services.AuthService>();

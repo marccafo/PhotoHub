@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using PhotoHub.Blazor.Shared.Services;
 
 namespace PhotoHub.Blazor.WASM.Services;
 

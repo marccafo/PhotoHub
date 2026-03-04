@@ -102,7 +102,8 @@ public class UploadAssetsEndpoint : IEndpoint
                 CreatedDate = fileInfo.CreationTimeUtc,
                 ModifiedDate = fileInfo.LastWriteTimeUtc,
                 ScannedAt = DateTime.UtcNow,
-                FolderId = uploadsFolder?.Id
+                FolderId = uploadsFolder?.Id,
+                OwnerId = userId
             };
 
             // 6. Extract Metadata & Recognition

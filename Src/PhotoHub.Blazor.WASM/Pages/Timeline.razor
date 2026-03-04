@@ -7,6 +7,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject LayoutService LayoutService
+@inject IAssetListNavigationState AssetListNavigationState
 @implements IDisposable
 
 <PageTitle>Timeline - PhotoHub</PageTitle>
@@ -52,7 +53,9 @@
                     }
                     else if (!_loading)
                     {
-                        <MudAlert Severity="Severity.Info">No hay fotografías disponibles. Indexa un directorio para comenzar.</MudAlert>
+                        <EmptyState Icon="@Icons.Material.Filled.PhotoLibrary"
+                                    Title="No hay fotografías disponibles"
+                                    Description="Indexa un directorio para comenzar." />
                     }
                 </div>
             </div>
@@ -631,6 +634,7 @@
 
     private void OpenAsset(TimelineItem asset)
     {
+        AssetListNavigationState.SetList(_assets, albumId: null);
         if (asset.SyncStatus == AssetSyncStatus.Synced)
         {
             Navigation.NavigateTo($"/asset/{asset.Id}");

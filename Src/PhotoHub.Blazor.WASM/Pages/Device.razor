@@ -98,7 +98,9 @@
 }
 else if (!_loading)
 {
-    <MudAlert Severity="Severity.Info">No hay fotos pendientes de sincronizar en tu dispositivo.</MudAlert>
+    <EmptyState Icon="@Icons.Material.Filled.CloudUpload"
+                Title="No hay fotos pendientes de sincronizar"
+                Description="Tu dispositivo está al día." />
 }
 
 @code {

@@ -33,6 +33,10 @@ public class UsersEndpoint : IEndpoint
             .WithName("GetCurrentUser")
             .WithDescription("Gets the current authenticated user");
 
+        group.MapGet("shareable", GetShareableUsers)
+            .WithName("GetShareableUsers")
+            .WithDescription("Gets users for sharing");
+
         group.MapPost("", CreateUser)
             .WithName("CreateUser")
             .WithDescription("Creates a new user (Admin only)")
@@ -132,6 +136,23 @@ public class UsersEndpoint : IEndpoint
             return Results.NotFound();
 
         return Results.Ok(currentUser);
+    }
+
+    private async Task<IResult> GetShareableUsers(
+        [FromServices] ApplicationDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var users = await dbContext.Users
+            .Where(u => u.IsActive)
+            .Select(u => new ShareableUserDto
+            {
+                Id = u.Id,
+                Username = u.Username,
+                Email = u.Email
+            })
+            .ToListAsync(cancellationToken);
+
+        return Results.Ok(users);
     }
 
     private async Task<IResult> CreateUser(
@@ -301,4 +322,11 @@ public class UpdateUserRequest
 public class ResetPasswordRequest
 {
     public string NewPassword { get; set; } = string.Empty;
+}
+
+public class ShareableUserDto
+{
+    public Guid Id { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
 }
