@@ -66,29 +66,32 @@
     
     @if (_groupedAssets.Any())
     {
-        <div class="timeline-nav-wrapper">
-    <div id="timeline-nav-container" class="vertical-timeline-nav">
-        @{
-            var renderedYears = new HashSet<string>();
-        }
-        @foreach (var group in _groupedAssets)
-        {
-            var groupKey = group.Key;
-            var year = GetYearFromGroup(groupKey);
-
-            @if (!renderedYears.Contains(year))
-            {
-                renderedYears.Add(year);
-                var pos = GetGroupPosition(groupKey);
-                var posStr = pos.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
-                <div class="timeline-nav-item @(IsActiveYear(year) ? "active" : "")" 
-                     style="top: @($"{posStr}%");"
-                     @onclick="@(() => ScrollToGroup(groupKey))">
-                    <span class="timeline-nav-label">@year</span>
+        <div class="scrubber-overlay">
+            <div class="scrubber-track" id="scrubber-track">
+                <div class="scrubber-thumb" id="scrubber-thumb">
+                    <span class="scrubber-thumb-label" id="scrubber-thumb-label"></span>
+                    <div class="scrubber-thumb-bar"></div>
                 </div>
-            }
-        }
-    </div>
+                @{
+                    var renderedScrubYears = new HashSet<string>();
+                }
+                @foreach (var group in _groupedAssets)
+                {
+                    var scrubYear = GetYearFromGroup(group.Key);
+                    @if (!renderedScrubYears.Contains(scrubYear))
+                    {
+                        renderedScrubYears.Add(scrubYear);
+                        var scrubPos = GetGroupPosition(group.Key);
+                        var scrubPosStr = scrubPos.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+                        <div class="scrubber-year-marker @(IsActiveYear(scrubYear) ? "active" : "")"
+                             data-group-id="@GetGroupId(group.Key)"
+                             style="top: @($"{scrubPosStr}%")">
+                            <span class="scrubber-year-label">@scrubYear</span>
+                            <div class="scrubber-year-dot"></div>
+                        </div>
+                    }
+                }
+            </div>
         </div>
     }
 </div>
@@ -150,33 +153,18 @@
         scrollbar-gutter: stable;
     }
 
-    /* Estilo del scrollbar nativo */
+    /* Hide native scrollbar — custom scrubber replaces it */
     .timeline-container::-webkit-scrollbar {
-        width: 8px; 
+        display: none;
     }
 
-    .timeline-container::-webkit-scrollbar-track {
-        background: transparent;
-    }
-
-    .timeline-container::-webkit-scrollbar-thumb {
-        background-color: var(--mud-palette-primary);
-        border-radius: 4px;
-    }
-
-    .timeline-container::-webkit-scrollbar-thumb:hover {
-        background-color: var(--mud-palette-primary-lighten);
-    }
-
-    /* Firefox */
     .timeline-container {
-        scrollbar-width: thin;
-        scrollbar-color: var(--mud-palette-primary) transparent;
+        scrollbar-width: none;
     }
 
     .timeline-content {
         flex: 1;
-        padding-right: 24px; 
+        padding-right: 80px;
         padding-bottom: 200px;
     }
 
@@ -280,51 +268,139 @@
         opacity: 1;
     }
 
-    .timeline-nav-wrapper {
+    /* ===== Custom Scrubber ===== */
+    .scrubber-overlay {
         position: absolute;
-        right: 8px;
+        right: 0;
         top: 0;
         bottom: 0;
-        width: 40px;
+        width: 80px;
         z-index: 100;
         pointer-events: none;
-        display: flex;
-        flex-direction: column;
     }
 
-    .vertical-timeline-nav {
-        position: relative;
-        height: 100%;
-        width: 100%;
-    }
-
-    .timeline-nav-item {
+    /* Large invisible hit area + visual bar via ::before */
+    .scrubber-track {
         position: absolute;
-        left: 0;
-        transform: translateY(-50%);
+        right: 4px;
+        top: 8px;
+        bottom: 8px;
+        width: 72px;
         pointer-events: auto;
         cursor: pointer;
-        padding: 4px;
-        transition: all 0.2s ease;
     }
 
-    .timeline-nav-label {
-        font-size: 0.75rem;
+    .scrubber-track::before {
+        content: '';
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: 3px;
+        background: rgba(128, 128, 128, 0.2);
+        border-radius: 2px;
+        pointer-events: none;
+        transition: background 0.2s;
+    }
+
+    .scrubber-track:hover::before {
+        background: rgba(128, 128, 128, 0.35);
+    }
+
+    /* Thumb: label + bar side by side */
+    .scrubber-thumb {
+        position: absolute;
+        top: 0;
+        right: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 48px;
+        cursor: grab;
+        user-select: none;
+        will-change: transform;
+        pointer-events: auto;
+    }
+
+    .scrubber-thumb.dragging {
+        cursor: grabbing;
+    }
+
+    .scrubber-thumb-bar {
+        width: 5px;
+        height: 48px;
+        background: var(--mud-palette-primary);
+        border-radius: 3px;
+        flex-shrink: 0;
+        transition: width 0.15s ease;
+    }
+
+    .scrubber-track:hover .scrubber-thumb-bar,
+    .scrubber-thumb.dragging .scrubber-thumb-bar {
+        width: 8px;
+    }
+
+    .scrubber-thumb-label {
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: white;
+        background: rgba(0, 0, 0, 0.7);
+        padding: 3px 8px;
+        border-radius: 4px;
+        white-space: nowrap;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+        pointer-events: none;
+        flex-shrink: 0;
+        order: -1;
+    }
+
+    .scrubber-track:hover .scrubber-thumb-label,
+    .scrubber-thumb.dragging .scrubber-thumb-label {
+        opacity: 1;
+    }
+
+    /* Year markers */
+    .scrubber-year-marker {
+        position: absolute;
+        right: 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        pointer-events: auto;
+        cursor: pointer;
+        transform: translateY(-50%);
+    }
+
+    .scrubber-year-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: rgba(128, 128, 128, 0.5);
+        flex-shrink: 0;
+        margin-right: -2px;
+        transition: background 0.2s, transform 0.2s;
+    }
+
+    .scrubber-year-marker:hover .scrubber-year-dot,
+    .scrubber-year-marker.active .scrubber-year-dot {
+        background: var(--mud-palette-primary);
+        transform: scale(1.4);
+    }
+
+    .scrubber-year-label {
+        font-size: 0.7rem;
         font-weight: 600;
         color: var(--mud-palette-text-secondary);
-        background-color: var(--mud-palette-surface);
-        padding: 2px 6px;
-        border-radius: 4px;
-        border: 1px solid var(--mud-palette-divider);
         white-space: nowrap;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        opacity: 0;
+        transition: opacity 0.15s ease;
+        order: -1;
     }
 
-    .timeline-nav-item.active .timeline-nav-label {
-        color: var(--mud-palette-primary);
-        border-color: var(--mud-palette-primary);
-        font-size: 0.85rem;
-        z-index: 10;
+    .scrubber-track:hover .scrubber-year-label,
+    .scrubber-year-marker.active .scrubber-year-label {
+        opacity: 1;
     }
 </style>
 
@@ -466,45 +542,56 @@
         return null;
     }
 
+    private bool _scrollSetupDone = false;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
-        {
-            // Agregar clase al body para aplicar estilos específicos de Timeline
             await JS.InvokeVoidAsync("scrollHelpers.enableTimelineScroll");
-            
-            if (_groupedAssets.Any())
+
+        if (_groupedAssets.Any())
+        {
+            // Setup scroll listener + scrubber once, whenever data is first available
+            // (firstRender may fire before data loads in Blazor WASM)
+            if (!_scrollSetupDone)
             {
+                _scrollSetupDone = true;
                 await SetupScrollListener();
-                
-                // Inicializar el progreso del scroll después de que el listener esté configurado
-                if (_objRef != null)
-                {
-                    await Task.Delay(100);
-                    await JS.InvokeVoidAsync("scrollHelpers.updateScrollProgress", _objRef);
-                }
-                
-                // Inicializar masonry layout después de que los elementos estén renderizados
-                await Task.Delay(200);
-                await JS.InvokeVoidAsync("masonryHelpers.initializeMasonry");
-                
-                // Si hay un parámetro de fecha en la query string, hacer scroll a esa fecha
+                await InitScrubber();
+
                 var dateParam = GetDateFromQuery();
                 if (!string.IsNullOrEmpty(dateParam))
-                {
                     await ScrollToDate(dateParam);
-                }
             }
+
+            await Task.Delay(200);
+            await JS.InvokeVoidAsync("masonryHelpers.initializeMasonry");
         }
-        else
+    }
+
+    private async Task InitScrubber()
+    {
+        var keys = _groupedAssets.Keys.ToList();
+        var count = keys.Count;
+        var groupData = keys.Select((key, index) => new
         {
-            // Reinicializar masonry después de actualizaciones
-            if (_groupedAssets.Any())
-            {
-                await Task.Delay(200);
-                await JS.InvokeVoidAsync("masonryHelpers.initializeMasonry");
-            }
-        }
+            id = GetGroupId(key),
+            label = GetGroupLabel(key),
+            position = count > 1 ? (double)index / (count - 1) : 0.0
+        }).ToList();
+        await JS.InvokeVoidAsync("scrubberHelpers.init", groupData);
+    }
+
+    private string GetGroupLabel(string groupKey)
+    {
+        var date = GetDayDateFromGroup(groupKey);
+        if (date == DateTime.MinValue) return "";
+        return date.ToString("MMM yyyy", new System.Globalization.CultureInfo("es-ES"));
+    }
+
+    private string GetThumbLabel()
+    {
+        return GetGroupLabel(_activeGroup);
     }
     
     private async Task ScrollToDate(string dateString)
@@ -590,12 +677,12 @@
         try
         {
             _loading = true;
+            _scrollSetupDone = false;
             _assets = await AssetService.GetTimelineAsync();
             GroupAssets();
             if (_groupedAssets.Any())
             {
                 _activeGroup = _groupedAssets.Keys.First();
-                // No llamamos a SetupScrollListener aquí porque necesitamos que el DOM esté listo
             }
         }
         catch (Exception ex)
@@ -961,8 +1048,8 @@
     public void Dispose()
     {
         _objRef?.Dispose();
-        // Remover clase del body al salir de la página
         JS.InvokeVoidAsync("scrollHelpers.disableTimelineScroll");
+        JS.InvokeVoidAsync("scrubberHelpers.cleanup");
         LayoutService.ResetNavbar();
     }
 }

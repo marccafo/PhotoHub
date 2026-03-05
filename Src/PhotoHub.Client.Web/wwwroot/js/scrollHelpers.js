@@ -79,72 +79,197 @@ window.scrollHelpers = {
         // Remover listener anterior si existe
         if (window._timelineScrollHandler) {
             const oldContainer = window._timelineScrollContainer || window;
-            if (oldContainer === window) {
-                window.removeEventListener('scroll', window._timelineScrollHandler, { passive: true });
-            } else {
+            if (oldContainer !== window) {
                 oldContainer.removeEventListener('scroll', window._timelineScrollHandler, { passive: true });
-                oldContainer.removeEventListener('wheel', window._timelineScrollHandler, { passive: true });
-                oldContainer.removeEventListener('touchmove', window._timelineScrollHandler, { passive: true });
+            } else {
+                window.removeEventListener('scroll', window._timelineScrollHandler, { passive: true });
             }
         }
-        
+
         const scrollContainer = this.getScrollContainer();
         window._timelineScrollContainer = scrollContainer;
-        
+
+        let scrollDebounceTimer = null;
+
         const handleScroll = () => {
             let activeId = "";
-            
+
             for (const id of groupIds) {
                 const element = document.getElementById(id);
                 if (element) {
                     const rect = element.getBoundingClientRect();
-                    // Para el contenedor del timeline, comparamos con la parte superior del contenedor
                     if (scrollContainer === window) {
-                        // Para window, comparamos con la parte superior de la ventana
-                        if (rect.top <= 150) { 
-                            activeId = id;
-                        }
+                        if (rect.top <= 150) activeId = id;
                     } else {
-                        // Para contenedores internos, comparamos con la parte superior del contenedor
                         const containerRect = scrollContainer.getBoundingClientRect();
-                        const relativeTop = rect.top - containerRect.top;
-                        if (relativeTop <= 150) { 
-                            activeId = id;
-                        }
+                        if (rect.top - containerRect.top <= 150) activeId = id;
                     }
                 }
             }
-            
-            // Notificar a Blazor solo el grupo activo
-            dotnetHelper.invokeMethodAsync('OnScrollUpdated', activeId, 0, 0).catch(err => {
-                console.error('Error updating scroll progress:', err);
-            });
+
+            // Actualizar thumb del scrubber directamente (sin pasar por Blazor para suavidad)
+            if (window.scrubberHelpers) window.scrubberHelpers.updateThumb(scrollContainer);
+
+            // Notificar a Blazor con debounce para no disparar re-renders continuos
+            clearTimeout(scrollDebounceTimer);
+            scrollDebounceTimer = setTimeout(() => {
+                const scrollable = scrollContainer.scrollHeight - scrollContainer.clientHeight;
+                const percentage = scrollable > 0 ? (scrollContainer.scrollTop / scrollable) * 100 : 0;
+                dotnetHelper.invokeMethodAsync('OnScrollUpdated', activeId, percentage, 0)
+                    .catch(err => console.error('Error updating scroll:', err));
+            }, 80);
         };
 
         if (scrollContainer === window) {
             window.addEventListener('scroll', handleScroll, { passive: true });
         } else {
             scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
-            scrollContainer.addEventListener('wheel', handleScroll, { passive: true });
-            scrollContainer.addEventListener('touchmove', handleScroll, { passive: true });
         }
         window._timelineScrollHandler = handleScroll;
-        
-        // Ejecutar inmediatamente para actualizar el estado inicial
+
+        // Estado inicial
         handleScroll();
     },
-    updateScrollProgress: function (dotnetHelper) {
-        // Ya no necesitamos actualizar el progreso del marcador
+    updateScrollProgress: function () {},
+    setupTimelineHover: function () {},
+    setupDraggableMarker: function () {},
+    getTimelineHoverPosition: function () {},
+};
+
+window.scrubberHelpers = {
+    _sc: null,
+    _track: null,
+    _thumb: null,
+    _label: null,
+    _groupMap: [],
+    _isDragging: false,
+
+    init: function (groupMap) {
+        this._groupMap = groupMap || [];
+        this._sc = document.getElementById('timeline-scroll-container');
+        this._track = document.getElementById('scrubber-track');
+        this._thumb = document.getElementById('scrubber-thumb');
+        this._label = document.getElementById('scrubber-thumb-label');
+
+        if (!this._sc || !this._track || !this._thumb) return;
+
+        // Year marker clicks — jump to that group
+        document.querySelectorAll('.scrubber-year-marker').forEach(function (marker) {
+            marker.addEventListener('click', function (e) {
+                e.stopPropagation();
+                var gid = marker.getAttribute('data-group-id');
+                if (gid) window.scrollHelpers.scrollToElement(gid);
+            });
+        });
+
+        // Track click — jump scroll to that vertical position
+        var self = this;
+        this._track.addEventListener('click', function (e) {
+            if (self._isDragging) return;
+            if (e.target === self._thumb || self._thumb.contains(e.target)) return;
+            var rect = self._track.getBoundingClientRect();
+            var pct = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+            self._scrollToPercent(pct);
+        });
+
+        // Thumb drag — mouse
+        this._thumb.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+            self._startDrag(e.clientY);
+        });
+
+        // Thumb drag — touch
+        this._thumb.addEventListener('touchstart', function (e) {
+            e.preventDefault();
+            self._startDrag(e.touches[0].clientY);
+        }, { passive: false });
+
+        // Forward wheel events to the scroll container (scrubber-track is not a DOM
+        // ancestor of timeline-scroll-container, so wheel events won't bubble there)
+        this._track.addEventListener('wheel', function (e) {
+            if (self._sc) {
+                self._sc.scrollTop += e.deltaY;
+            }
+        }, { passive: true });
+
+        // Set initial position
+        this.updateThumb(this._sc);
     },
-    setupTimelineHover: function (dotnetHelper, groupIds, groupLabels) {
-        // Ya no necesitamos hover en la sidebar
+
+    _startDrag: function (startClientY) {
+        var self = this;
+        this._isDragging = true;
+        this._thumb.classList.add('dragging');
+
+        var onMove = function (clientY) {
+            var rect = self._track.getBoundingClientRect();
+            var pct = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+            self._setThumbPercent(pct);
+            self._scrollToPercent(pct);
+        };
+
+        var onMouseMove = function (e) { onMove(e.clientY); };
+        var onTouchMove = function (e) { e.preventDefault(); onMove(e.touches[0].clientY); };
+
+        var stop = function () {
+            self._isDragging = false;
+            self._thumb.classList.remove('dragging');
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', stop);
+            document.removeEventListener('touchmove', onTouchMove);
+            document.removeEventListener('touchend', stop);
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', stop);
+        document.addEventListener('touchmove', onTouchMove, { passive: false });
+        document.addEventListener('touchend', stop);
     },
-    setupDraggableMarker: function (dotnetHelper) {
-        // Ya no necesitamos marcador arrastrable
+
+    _scrollToPercent: function (pct) {
+        if (!this._sc) return;
+        var scrollable = this._sc.scrollHeight - this._sc.clientHeight;
+        this._sc.scrollTop = pct * scrollable;
     },
-    getTimelineHoverPosition: function (dotnetHelper, clientY) {
-        // Ya no necesitamos posición de hover
+
+    _setThumbPercent: function (pct) {
+        if (!this._thumb || !this._track) return;
+        var trackH = this._track.clientHeight;
+        var thumbH = this._thumb.clientHeight;
+        var top = Math.max(0, Math.min(trackH - thumbH, pct * trackH - thumbH / 2));
+        this._thumb.style.transform = 'translateY(' + top + 'px)';
+
+        // Update label text directly (no Blazor round-trip)
+        if (this._label && this._groupMap.length > 0) {
+            var label = this._groupMap[0].label;
+            for (var i = 0; i < this._groupMap.length; i++) {
+                if (this._groupMap[i].position <= pct + 0.001) {
+                    label = this._groupMap[i].label;
+                } else {
+                    break;
+                }
+            }
+            this._label.textContent = label;
+        }
     },
+
+    updateThumb: function (scrollContainer) {
+        if (this._isDragging) return;
+        var sc = (scrollContainer === window) ? document.documentElement : scrollContainer;
+        if (!sc || !this._thumb || !this._track) return;
+        var scrollable = sc.scrollHeight - sc.clientHeight;
+        if (scrollable <= 0) return;
+        var pct = sc.scrollTop / scrollable;
+        this._setThumbPercent(pct);
+    },
+
+    cleanup: function () {
+        this._sc = null;
+        this._track = null;
+        this._thumb = null;
+        this._label = null;
+        this._groupMap = [];
+    }
 };
 
 window.videoHelpers = {
