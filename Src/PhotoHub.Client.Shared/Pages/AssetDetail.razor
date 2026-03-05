@@ -9,6 +9,7 @@
 @inject NavigationManager Navigation
 @inject LayoutService LayoutService
 @inject IAssetListNavigationState AssetListNavigationState
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Detalle - PhotoHub</PageTitle>
 
@@ -105,9 +106,21 @@ else if (_asset != null)
             .asset-detail-menu-popover .mud-list-item:hover {
                 background-color: rgba(255, 255, 255, 0.1) !important;
             }
+            .asset-detail-content.zoomed-container {
+                overflow: auto;
+                align-items: flex-start;
+                justify-content: flex-start;
+                cursor: zoom-out;
+            }
+            .asset-detail-image.zoomed {
+                max-width: none;
+                max-height: none;
+                width: auto;
+                height: auto;
+            }
         </style>
 
-        <div class="asset-detail-content" @onclick="ToggleToolbar">
+        <div class="asset-detail-content @(_zoomed ? "zoomed-container" : "")" @onclick="ToggleToolbar">
             <span @onclick:stopPropagation="true" @onclick:preventDefault="true">
                 <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" 
                                Class="@GetNavButtonClass(true)" 
@@ -125,8 +138,8 @@ else if (_asset != null)
             }
             else if (_asset.HasThumbnails || _asset.Type == "IMAGE")
             {
-                <img src="@(_asset.Type == "IMAGE" ? _displayContentUrl : _displayThumbnailUrl)" 
-                     alt="@_asset.FileName" class="asset-detail-image" />
+                <img src="@(_asset.Type == "IMAGE" ? _displayContentUrl : _displayThumbnailUrl)"
+                     alt="@_asset.FileName" class="asset-detail-image @(_zoomed ? "zoomed" : "")" />
             }
             else
             {
@@ -298,6 +311,9 @@ else
     private bool _infoOpen = false;
     private bool _toolbarVisible = true;
     private bool _syncing = false;
+    private bool _zoomed = false;
+    private bool _deleting = false;
+    private bool _deleteConfirmOpen = false;
     private bool _tagBusy = false;
     private string _newTag = string.Empty;
     
@@ -335,72 +351,79 @@ else
 
     private void UpdateNavbar()
     {
+        var isDeviceAsset = _asset == null || _asset.Id == Guid.Empty;
+
         LayoutService.SetCustomNavbar(
             @<text>
                 <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" OnClick="GoBack" Edge="Edge.Start" />
                 <MudSpacer />
-                
+
                 <div class="d-flex align-center gap-1">
-                    @if (_asset != null && _asset.Id == Guid.Empty && _asset.SyncStatus == AssetSyncStatus.Pending)
+                    @if (isDeviceAsset)
                     {
-                        <MudTooltip Text="Sincronizar ahora">
-                            <MudIconButton Icon="@Icons.Material.Filled.CloudUpload" 
-                                           Color="Color.Default" 
-                                           OnClick="SyncAsset"
-                                           Disabled="@_syncing" />
+                        @* Dispositivo: Sync/Copied + Zoom + Info *@
+                        @if (_asset != null && _asset.SyncStatus == AssetSyncStatus.Pending)
+                        {
+                            <MudTooltip Text="Sincronizar ahora">
+                                <MudIconButton Icon="@Icons.Material.Filled.CloudUpload"
+                                               Color="Color.Default"
+                                               OnClick="SyncAsset"
+                                               Disabled="@_syncing" />
+                            </MudTooltip>
+                        }
+                        else if (_asset != null && _asset.SyncStatus == AssetSyncStatus.Copied)
+                        {
+                            <MudTooltip Text="Pendiente de indexar">
+                                <MudIconButton Icon="@Icons.Material.Outlined.Schedule"
+                                               Color="Color.Default"
+                                               OnClick="NavigateToIndex" />
+                            </MudTooltip>
+                        }
+
+                        <MudTooltip Text="@(_zoomed ? "Ajustar" : "Zoom")">
+                            <MudIconButton Icon="@(_zoomed ? Icons.Material.Outlined.ZoomOut : Icons.Material.Outlined.ZoomIn)"
+                                           Color="Color.Inherit" OnClick="ToggleZoom" />
+                        </MudTooltip>
+
+                        <MudTooltip Text="Información">
+                            <MudIconButton Icon="@(_infoOpen ? Icons.Material.Filled.Info : Icons.Material.Outlined.Info)"
+                                           Color="Color.Inherit" OnClick="ToggleInfo" />
                         </MudTooltip>
                     }
-                    else if (_asset != null && (_asset.Id == Guid.Empty && _asset.SyncStatus == AssetSyncStatus.Copied))
+                    else
                     {
-                        <MudTooltip Text="Pendiente de indexar">
-                            <MudIconButton Icon="@Icons.Material.Outlined.Schedule" 
-                                           Color="Color.Default" 
-                                           OnClick="NavigateToIndex" />
+                        @* Indexado: Zoom + Share + Info + Download + Delete + Add to album *@
+                        <MudTooltip Text="@(_zoomed ? "Ajustar" : "Zoom")">
+                            <MudIconButton Icon="@(_zoomed ? Icons.Material.Outlined.ZoomOut : Icons.Material.Outlined.ZoomIn)"
+                                           Color="Color.Inherit" OnClick="ToggleZoom" />
                         </MudTooltip>
-                    }
 
-                    <MudTooltip Text="Compartir">
-                        <MudIconButton Icon="@Icons.Material.Outlined.Share" Color="Color.Inherit" />
-                    </MudTooltip>
-                    
-                    <MudTooltip Text="Acercar">
-                        <MudIconButton Icon="@Icons.Material.Outlined.ZoomIn" Color="Color.Inherit" />
-                    </MudTooltip>
-                    
-                    <MudTooltip Text="Copiar">
-                        <MudIconButton Icon="@Icons.Material.Outlined.ContentCopy" Color="Color.Inherit" />
-                    </MudTooltip>
-
-                    <MudTooltip Text="Información">
-                        <MudIconButton Icon="@(_infoOpen ? Icons.Material.Filled.Info : Icons.Material.Outlined.Info)" 
-                                       Color="Color.Inherit" OnClick="ToggleInfo" />
-                    </MudTooltip>
-                    
-                    @if (_asset != null && _asset.Id != Guid.Empty)
-                    {
-                        <MudTooltip Text="Favorito">
-                            <MudToggleIconButton ToggledIcon="@Icons.Material.Filled.Favorite" 
-                                                 Icon="@Icons.Material.Outlined.FavoriteBorder" 
-                                                 Color="Color.Inherit" ToggledColor="Color.Error" />
+                        <MudTooltip Text="Compartir">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Share"
+                                           Color="Color.Inherit" OnClick="ShareAsset" />
                         </MudTooltip>
-                    }
 
-                    <MudTooltip Text="Descargar">
-                        <MudIconButton Icon="@Icons.Material.Outlined.Download" Color="Color.Inherit" />
-                    </MudTooltip>
+                        <MudTooltip Text="Información">
+                            <MudIconButton Icon="@(_infoOpen ? Icons.Material.Filled.Info : Icons.Material.Outlined.Info)"
+                                           Color="Color.Inherit" OnClick="ToggleInfo" />
+                        </MudTooltip>
 
-                    @if (_asset is { Id: var assetId } && assetId != Guid.Empty)
-                    {
+                        <MudTooltip Text="Descargar">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Download"
+                                           Color="Color.Inherit" OnClick="DownloadAsset" />
+                        </MudTooltip>
+
                         <MudTooltip Text="Eliminar">
-                            <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Inherit" />
+                            <MudIconButton Icon="@Icons.Material.Outlined.Delete"
+                                           Color="Color.Inherit"
+                                           OnClick="@(() => _deleteConfirmOpen = true)"
+                                           Disabled="@_deleting" />
                         </MudTooltip>
 
-                        <MudMenu Icon="@Icons.Material.Outlined.MoreVert" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true" PopoverClass="asset-detail-menu-popover">
-                            <MudMenuItem Icon="@Icons.Material.Outlined.Edit">Editar fecha y hora</MudMenuItem>
-                            <MudMenuItem Icon="@Icons.Material.Outlined.LocationOn">Editar ubicación</MudMenuItem>
-                            <MudMenuItem Icon="@Icons.Material.Outlined.Add" OnClick="@OpenAddToAlbumDialog">Añadir a álbum</MudMenuItem>
-                            <MudMenuItem Icon="@Icons.Material.Outlined.Archive">Archivar</MudMenuItem>
-                        </MudMenu>
+                        <MudTooltip Text="Añadir a álbum">
+                            <MudIconButton Icon="@Icons.Material.Outlined.AddPhotoAlternate"
+                                           Color="Color.Inherit" OnClick="OpenAddToAlbumDialog" />
+                        </MudTooltip>
                     }
                 </div>
             </text>
@@ -590,7 +613,58 @@ else
 
     private void ToggleToolbar()
     {
+        if (_zoomed)
+        {
+            _zoomed = false;
+            UpdateNavbar();
+            return;
+        }
         _toolbarVisible = !_toolbarVisible;
+    }
+
+    private void ToggleZoom()
+    {
+        _zoomed = !_zoomed;
+        UpdateNavbar();
+        StateHasChanged();
+    }
+
+    private async Task ShareAsset()
+    {
+        var result = await JSRuntime.InvokeAsync<string>("shareOrCopyUrl", Navigation.Uri, _asset?.FileName ?? "PhotoHub");
+        if (result == "shared" || result == "copied")
+            Snackbar.Add(result == "shared" ? "Compartido" : "Enlace copiado al portapapeles", Severity.Success);
+    }
+
+    private async Task DownloadAsset()
+    {
+        if (_asset == null || _asset.Id == Guid.Empty) return;
+        var url = $"/api/assets/{_asset.Id}/content?download=true";
+        await JSRuntime.InvokeVoidAsync("downloadAsset", url, _asset.FileName);
+    }
+
+    private async Task DeleteAssetAsync()
+    {
+        if (_asset == null || _asset.Id == Guid.Empty) return;
+        try
+        {
+            _deleting = true;
+            _deleteConfirmOpen = false;
+            UpdateNavbar();
+            StateHasChanged();
+            await AssetService.DeleteAssetsAsync(new DeleteAssetsRequest { AssetIds = [_asset.Id] });
+            Snackbar.Add("Archivo enviado a la papelera", Severity.Success);
+            GoBack();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al eliminar: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _deleting = false;
+            UpdateNavbar();
+        }
     }
 
     private async Task AddTagAsync()
@@ -832,6 +906,21 @@ else
         }
     }
 }
+
+<MudDialog @bind-Visible="_deleteConfirmOpen" Options="new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true }">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Eliminar archivo</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText>¿Mover <strong>@_asset?.FileName</strong> a la papelera?</MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _deleteConfirmOpen = false)">Cancelar</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="DeleteAssetAsync" Disabled="@_deleting">
+            Eliminar
+        </MudButton>
+    </DialogActions>
+</MudDialog>
 
 <MudDialog @bind-Visible="_addToAlbumDialogVisible" Options="new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true }">
     <TitleContent>

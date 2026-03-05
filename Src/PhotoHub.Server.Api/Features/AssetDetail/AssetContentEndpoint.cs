@@ -20,10 +20,11 @@ public class AssetContentEndpoint : IEndpoint
         [FromServices] ApplicationDbContext dbContext,
         [FromServices] SettingsService settingsService,
         [FromRoute] Guid assetId,
+        [FromQuery] bool? download,
         CancellationToken cancellationToken)
     {
         var asset = await dbContext.Assets.FindAsync(new object[] { assetId }, cancellationToken);
-        
+
         if (asset == null)
         {
             return Results.NotFound(new { error = $"Asset with ID {assetId} not found" });
@@ -38,6 +39,9 @@ public class AssetContentEndpoint : IEndpoint
 
         var extension = Path.GetExtension(physicalPath).ToLowerInvariant();
         var contentType = GetContentType(extension, asset.Type);
+
+        if (download == true)
+            return Results.File(physicalPath, contentType, fileDownloadName: asset.FileName);
 
         return Results.File(physicalPath, contentType, enableRangeProcessing: true);
     }
