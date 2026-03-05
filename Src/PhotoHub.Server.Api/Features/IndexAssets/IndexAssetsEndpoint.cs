@@ -91,7 +91,10 @@ public class IndexAssetsEndpoint : IEndpoint
                 }
                 
                 await channel.Writer.WriteAsync(new IndexProgressUpdate { Message = "Iniciando descubrimiento de archivos...", Percentage = 0 }, cancellationToken);
-                
+
+                // Repair any folders that were created outside the app and have no owner
+                await AssignAdminToOrphanedFoldersAsync(scopedDbContext, cancellationToken);
+
                 // STEP 1: Recursive file discovery
                 var scannedFilesList = (await directoryScanner.ScanDirectoryAsync(directoryPath, cancellationToken)).ToList();
                 stats.TotalFilesFound = scannedFilesList.Count;
@@ -452,7 +455,10 @@ public class IndexAssetsEndpoint : IEndpoint
             {
                 return Results.NotFound(new { error = $"El directorio interno no existe: {directoryPath}" });
             }
-            
+
+            // Repair any folders that were created outside the app and have no owner
+            await AssignAdminToOrphanedFoldersAsync(dbContext, cancellationToken);
+
             // STEP 1: Recursive file discovery
             var scannedFiles = await DiscoverFilesAsync(directoryScanner, directoryPath, stats, cancellationToken);
             
@@ -1446,7 +1452,100 @@ public class IndexAssetsEndpoint : IEndpoint
         dbContext.Folders.Add(folder);
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        // Auto-assign primary admin as owner for folders outside personal user spaces.
+        // Folders under /assets/users/{id}/ are owned implicitly by their user; everything
+        // else (shared, external) must have an explicit owner so it's not invisible to all
+        // non-admin users and won't be pruned as an orphan on subsequent scans.
+        if (!IsPersonalUserPath(normalizedPath))
+        {
+            await AssignAdminOwnerAsync(dbContext, folder.Id, cancellationToken);
+        }
+
         return folder;
+    }
+
+    private static bool IsPersonalUserPath(string normalizedPath) =>
+        normalizedPath.StartsWith("/assets/users/", StringComparison.OrdinalIgnoreCase);
+
+    private static async Task AssignAdminOwnerAsync(
+        ApplicationDbContext dbContext,
+        Guid folderId,
+        CancellationToken ct)
+    {
+        var primaryAdmin = await dbContext.Users
+            .Where(u => u.Role == "Admin" && u.IsActive)
+            .OrderBy(u => u.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (primaryAdmin == null) return;
+
+        var exists = await dbContext.FolderPermissions
+            .AnyAsync(p => p.UserId == primaryAdmin.Id && p.FolderId == folderId, ct);
+
+        if (exists) return;
+
+        dbContext.FolderPermissions.Add(new FolderPermission
+        {
+            UserId = primaryAdmin.Id,
+            FolderId = folderId,
+            CanRead = true,
+            CanWrite = true,
+            CanDelete = true,
+            CanManagePermissions = true,
+            GrantedByUserId = primaryAdmin.Id
+        });
+
+        await dbContext.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Assigns the primary admin as owner to any existing non-personal folder that has no
+    /// FolderPermission records at all. Runs once per indexing pass to repair orphaned folders
+    /// created outside the app (e.g., via filesystem or a previous app version).
+    /// </summary>
+    private static async Task AssignAdminToOrphanedFoldersAsync(
+        ApplicationDbContext dbContext,
+        CancellationToken ct)
+    {
+        var primaryAdmin = await dbContext.Users
+            .Where(u => u.Role == "Admin" && u.IsActive)
+            .OrderBy(u => u.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (primaryAdmin == null) return;
+
+        var foldersWithPermissions = (await dbContext.FolderPermissions
+            .Select(p => p.FolderId)
+            .Distinct()
+            .ToListAsync(ct))
+            .ToHashSet();
+
+        var orphaned = await dbContext.Folders
+            .Where(f => !foldersWithPermissions.Contains(f.Id))
+            .ToListAsync(ct);
+
+        var toFix = orphaned
+            .Where(f => !IsPersonalUserPath(f.Path))
+            .ToList();
+
+        if (toFix.Count == 0) return;
+
+        foreach (var folder in toFix)
+        {
+            dbContext.FolderPermissions.Add(new FolderPermission
+            {
+                UserId = primaryAdmin.Id,
+                FolderId = folder.Id,
+                CanRead = true,
+                CanWrite = true,
+                CanDelete = true,
+                CanManagePermissions = true,
+                GrantedByUserId = primaryAdmin.Id
+            });
+        }
+
+        await dbContext.SaveChangesAsync(ct);
+        Console.WriteLine($"[INDEX] Auto-asignado admin '{primaryAdmin.Username}' como propietario de {toFix.Count} carpeta(s) huérfana(s).");
     }
 
     private async Task EnsureFolderStructureExistsAsync(
