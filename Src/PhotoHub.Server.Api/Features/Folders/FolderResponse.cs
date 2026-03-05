@@ -8,6 +8,7 @@ public class FolderResponse
     public Guid? ParentFolderId { get; set; }
     public DateTime CreatedAt { get; set; }
     public int AssetCount { get; set; }
+    public Guid? FirstAssetId { get; set; }
     public bool IsShared { get; set; }
     public bool IsOwner { get; set; }
     public int SharedWithCount { get; set; }
