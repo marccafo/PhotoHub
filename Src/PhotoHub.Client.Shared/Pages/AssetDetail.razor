@@ -1,0 +1,932 @@
+@page "/asset/{AssetId:guid}"
+@using PhotoHub.Client.Shared.Services
+@implements IDisposable
+@inject IAssetService AssetService
+@inject IPendingAssetsProvider PendingAssetsProvider
+@inject IAuthService AuthService
+@inject IAlbumService AlbumService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject LayoutService LayoutService
+@inject IAssetListNavigationState AssetListNavigationState
+
+<PageTitle>Detalle - PhotoHub</PageTitle>
+
+@if (_loading && _asset == null)
+{
+    <div class="asset-detail-container">
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    </div>
+}
+else if (_asset != null)
+{
+    <div class="asset-detail-container" @onkeydown="HandleKeyDown" tabindex="0">
+        <style>
+            .asset-detail-container {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                z-index: 1100;
+                display: flex;
+                flex-direction: column;
+                outline: none;
+                margin: -24px;
+                width: calc(100% + 48px);
+                height: calc(100% + 48px);
+                background-color: black;
+            }
+            .asset-detail-content {
+                flex-grow: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                overflow: hidden;
+                position: relative;
+            }
+            .asset-detail-image {
+                max-width: 100%;
+                max-height: 100%;
+                object-fit: contain;
+                user-select: none;
+            }
+            video.asset-detail-image {
+                outline: none;
+                background-color: black;
+            }
+            .asset-info-drawer {
+                width: 360px;
+                background-color: #1a1a1a;
+                height: 100%;
+                overflow-y: auto;
+                transition: transform 0.3s ease;
+                position: absolute;
+                right: 0;
+                top: 0;
+                z-index: 40;
+                border-left: 1px solid #333;
+                color: #e1e1e1;
+            }
+            .asset-info-drawer.closed {
+                transform: translateX(100%);
+            }
+            .nav-button {
+                position: absolute;
+                top: 50%;
+                transform: translateY(-50%);
+                z-index: 20;
+                background-color: rgba(0,0,0,0.3);
+                color: white;
+                transition: opacity 0.3s ease, background-color 0.2s;
+            }
+            .nav-button:hover {
+                background-color: rgba(0,0,0,0.6);
+            }
+            .nav-button.prev { left: 16px; }
+            .nav-button.next { right: 16px; }
+            .nav-button.hidden {
+                opacity: 0;
+                pointer-events: none;
+            }
+            .asset-detail-menu-popover {
+                background-color: #1a1a1a !important;
+                color: #e1e1e1 !important;
+                border: 1px solid #333 !important;
+            }
+            .asset-detail-menu-popover .mud-popover-paper {
+                background-color: #1a1a1a !important;
+                box-shadow: 0px 5px 5px -3px rgba(0,0,0,0.2),0px 8px 10px 1px rgba(0,0,0,0.14),0px 3px 14px 2px rgba(0,0,0,0.12) !important;
+                border: 1px solid #333 !important;
+            }
+            .asset-detail-menu-popover .mud-list-item {
+                color: #e1e1e1 !important;
+            }
+            .asset-detail-menu-popover .mud-list-item:hover {
+                background-color: rgba(255, 255, 255, 0.1) !important;
+            }
+        </style>
+
+        <div class="asset-detail-content" @onclick="ToggleToolbar">
+            <span @onclick:stopPropagation="true" @onclick:preventDefault="true">
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" 
+                               Class="@GetNavButtonClass(true)" 
+                               Size="Size.Large"
+                               OnClick="NavigatePrev"
+                               Disabled="@(_prevAsset == null)" />
+            </span>
+
+            @if (_asset.Type == "VIDEO")
+            {
+                <video controls autoplay class="asset-detail-image">
+                    <source src="@_displayContentUrl" type="video/mp4">
+                    Tu navegador no soporta la reproducción de videos.
+                </video>
+            }
+            else if (_asset.HasThumbnails || _asset.Type == "IMAGE")
+            {
+                <img src="@(_asset.Type == "IMAGE" ? _displayContentUrl : _displayThumbnailUrl)" 
+                     alt="@_asset.FileName" class="asset-detail-image" />
+            }
+            else
+            {
+                <MudIcon Icon="@GetAssetIcon(_asset.Type)" Size="Size.Large" Color="Color.Default" Style="width: 128px; height: 128px;" />
+            }
+
+            <span @onclick:stopPropagation="true" @onclick:preventDefault="true">
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" 
+                               Class="@GetNavButtonClass(false)" 
+                               Size="Size.Large"
+                               OnClick="NavigateNext"
+                               Disabled="@(_nextAsset == null)" />
+            </span>
+        </div>
+
+        <div class="asset-info-drawer @(_infoOpen ? "" : "closed")">
+            <div class="pa-4">
+                <div class="d-flex align-center mb-4">
+                    <MudText Typo="Typo.h6">Información</MudText>
+                    <MudSpacer />
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Inherit" OnClick="ToggleInfo" />
+                </div>
+
+                <MudText Typo="Typo.subtitle1" Class="font-weight-bold mb-1">Detalles del archivo</MudText>
+                <MudList T="string" Dense="true" ReadOnly="true">
+                    <MudListItem Icon="@Icons.Material.Filled.InsertDriveFile" IconColor="Color.Info">
+                        <MudText Typo="Typo.body2">@_asset.FileName</MudText>
+                    </MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.CalendarToday" IconColor="Color.Info">
+                        <MudText Typo="Typo.body2">@_asset.DisplayDate</MudText>
+                    </MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.SdStorage" IconColor="Color.Info">
+                        <MudText Typo="Typo.body2">@_asset.FileSizeFormatted</MudText>
+                    </MudListItem>
+                    @if (!string.IsNullOrEmpty(_asset.FolderPath))
+                    {
+                        <MudListItem Icon="@Icons.Material.Filled.Folder" IconColor="Color.Info">
+                            <MudText Typo="Typo.body2">@_asset.FolderPath</MudText>
+                        </MudListItem>
+                    }
+                </MudList>
+
+                @if (_asset.Exif != null)
+                {
+                    <MudDivider Class="my-4" Style="background-color: #333;" />
+                    <MudText Typo="Typo.subtitle1" Class="font-weight-bold mb-1">Información técnica</MudText>
+                    <MudList T="string" Dense="true" ReadOnly="true">
+                        @if (_asset.Exif.CameraMake != null)
+                        {
+                            <MudListItem Icon="@Icons.Material.Filled.Camera" IconColor="Color.Info">
+                                <MudText Typo="Typo.body2">@_asset.Exif.CameraMake @_asset.Exif.CameraModel</MudText>
+                            </MudListItem>
+                        }
+                        @if (_asset.Exif.Width.HasValue)
+                        {
+                            <MudListItem Icon="@Icons.Material.Filled.AspectRatio" IconColor="Color.Info">
+                                <MudText Typo="Typo.body2">@_asset.Exif.Width x @_asset.Exif.Height</MudText>
+                            </MudListItem>
+                        }
+                        @if (_asset.Exif.Iso.HasValue || _asset.Exif.Aperture.HasValue || _asset.Exif.ShutterSpeed.HasValue)
+                        {
+                            <MudListItem Icon="@Icons.Material.Filled.Settings" IconColor="Color.Info">
+                                <MudText Typo="Typo.body2">
+                                    @( _asset.Exif.Iso.HasValue ? $"ISO {_asset.Exif.Iso} " : "" )
+                                    @( _asset.Exif.Aperture.HasValue ? $"f/{_asset.Exif.Aperture:0.#} " : "" )
+                                    @if (_asset.Exif.ShutterSpeed.HasValue)
+                                    {
+                                        var ss = _asset.Exif.ShutterSpeed.Value;
+                                        var ssText = ss < 1 ? $"1/{(int)Math.Round(1 / ss)}s" : $"{ss:0.#}s";
+                                        <span>@ssText </span>
+                                    }
+                                    @( _asset.Exif.FocalLength.HasValue ? $"{_asset.Exif.FocalLength:0.#}mm" : "" )
+                                </MudText>
+                            </MudListItem>
+                        }
+                    </MudList>
+
+                    @if (_asset.Exif.Latitude.HasValue && _asset.Exif.Longitude.HasValue)
+                    {
+                        <MudDivider Class="my-4" Style="background-color: #333;" />
+                        <MudText Typo="Typo.subtitle1" Class="font-weight-bold mb-1">Ubicación</MudText>
+                        <MudList T="string" Dense="true" ReadOnly="true">
+                            <MudListItem Icon="@Icons.Material.Filled.LocationOn" IconColor="Color.Info">
+                                <div class="d-flex flex-column">
+                                    <MudText Typo="Typo.body2">@_asset.Exif.Latitude.Value.ToString("F6"), @_asset.Exif.Longitude.Value.ToString("F6")</MudText>
+                                    @if (_asset.Exif.Altitude.HasValue)
+                                    {
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Altitud: @_asset.Exif.Altitude.Value.ToString("F0") m</MudText>
+                                    }
+                                    <MudLink Href="@($"https://www.google.com/maps/search/?api=1&query={_asset.Exif.Latitude},{_asset.Exif.Longitude}")" 
+                                             Target="_blank" Underline="Underline.Hover" Color="Color.Primary" Class="mt-1">
+                                        Ver en Google Maps
+                                    </MudLink>
+                                </div>
+                            </MudListItem>
+                        </MudList>
+                    }
+
+                    @if (!string.IsNullOrEmpty(_asset.Exif.Description))
+                    {
+                        <MudDivider Class="my-4" Style="background-color: #333;" />
+                        <MudText Typo="Typo.subtitle1" Class="font-weight-bold mb-1">Descripción</MudText>
+                        <MudText Typo="Typo.body2" Class="px-4 py-2" Style="font-style: italic;">@_asset.Exif.Description</MudText>
+                    }
+                }
+
+                <MudDivider Class="my-4" Style="background-color: #333;" />
+                <MudText Typo="Typo.subtitle1" Class="font-weight-bold mb-2">Etiquetas</MudText>
+                <div class="d-flex flex-wrap gap-2">
+                    @if (_asset.Tags.Any())
+                    {
+                        @foreach (var tag in _asset.Tags)
+                        {
+                            <MudChip T="string"
+                                     Size="Size.Small"
+                                     Variant="Variant.Text"
+                                     Color="Color.Primary"
+                                     Closable="@CanEditTags"
+                                     OnClose="() => RemoveTagAsync(tag)">
+                                @tag
+                            </MudChip>
+                        }
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Sin etiquetas</MudText>
+                    }
+                </div>
+                @if (CanEditTags)
+                {
+                    <div class="d-flex align-center gap-2 mt-3">
+                        <MudTextField @bind-Value="_newTag"
+                                      Placeholder="Añadir etiqueta"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Dense="true"
+                                      Immediate="true"
+                                      Disabled="@_tagBusy"
+                                      Class="flex-grow-1" />
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   Disabled="@_tagBusy"
+                                   OnClick="AddTagAsync">
+                            Añadir
+                        </MudButton>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <MudAlert Severity="Severity.Error" Class="mt-4">No se pudo cargar la información del archivo.</MudAlert>
+    <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" Color="Color.Primary" OnClick="GoBack" Class="mt-2">@(string.IsNullOrEmpty(ReturnTo) ? "Volver al Timeline" : "Volver al directorio")</MudButton>
+}
+
+@code {
+    [Parameter] public Guid AssetId { get; set; }
+    [SupplyParameterFromQuery] public string? Path { get; set; }
+    [SupplyParameterFromQuery] public Guid? AlbumId { get; set; }
+    /// <summary>Ruta de retorno al volver (ej. folders/own, folders/shared, folders/{id}).</summary>
+    [SupplyParameterFromQuery] public string? ReturnTo { get; set; }
+    
+    private PhotoHub.Client.Shared.Models.AssetDetail? _asset;
+    private string _displayContentUrl = string.Empty;
+    private string _displayThumbnailUrl = string.Empty;
+    private bool _loading = true;
+    private bool _infoOpen = false;
+    private bool _toolbarVisible = true;
+    private bool _syncing = false;
+    private bool _tagBusy = false;
+    private string _newTag = string.Empty;
+    
+    private TimelineItem? _prevAsset;
+    private TimelineItem? _nextAsset;
+    private List<TimelineItem> _allAssets = new();
+
+    /// <summary>Evita cargar dos veces el mismo asset (OnInitializedAsync y OnParametersSetAsync se ejecutan ambos al navegar).</summary>
+    private Guid _lastLoadedAssetId = Guid.Empty;
+    private string _lastLoadedPath = string.Empty;
+
+    private bool CanEditTags => _asset != null && _asset.Id != Guid.Empty && _asset.SyncStatus == AssetSyncStatus.Synced;
+
+    protected override void OnInitialized()
+    {
+        UpdateNavbar();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Evitar doble carga: Blazor llama OnInitializedAsync y OnParametersSetAsync al montar; solo cargar cuando cambien los parámetros.
+        if (AssetId == _lastLoadedAssetId && (Path ?? "") == _lastLoadedPath)
+        {
+            UpdateNavbar();
+            return;
+        }
+        UpdateNavbar();
+        await LoadAsset();
+    }
+
+    public void Dispose()
+    {
+        LayoutService.ResetNavbar();
+    }
+
+    private void UpdateNavbar()
+    {
+        LayoutService.SetCustomNavbar(
+            @<text>
+                <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" OnClick="GoBack" Edge="Edge.Start" />
+                <MudSpacer />
+                
+                <div class="d-flex align-center gap-1">
+                    @if (_asset != null && _asset.Id == Guid.Empty && _asset.SyncStatus == AssetSyncStatus.Pending)
+                    {
+                        <MudTooltip Text="Sincronizar ahora">
+                            <MudIconButton Icon="@Icons.Material.Filled.CloudUpload" 
+                                           Color="Color.Default" 
+                                           OnClick="SyncAsset"
+                                           Disabled="@_syncing" />
+                        </MudTooltip>
+                    }
+                    else if (_asset != null && (_asset.Id == Guid.Empty && _asset.SyncStatus == AssetSyncStatus.Copied))
+                    {
+                        <MudTooltip Text="Pendiente de indexar">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Schedule" 
+                                           Color="Color.Default" 
+                                           OnClick="NavigateToIndex" />
+                        </MudTooltip>
+                    }
+
+                    <MudTooltip Text="Compartir">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Share" Color="Color.Inherit" />
+                    </MudTooltip>
+                    
+                    <MudTooltip Text="Acercar">
+                        <MudIconButton Icon="@Icons.Material.Outlined.ZoomIn" Color="Color.Inherit" />
+                    </MudTooltip>
+                    
+                    <MudTooltip Text="Copiar">
+                        <MudIconButton Icon="@Icons.Material.Outlined.ContentCopy" Color="Color.Inherit" />
+                    </MudTooltip>
+
+                    <MudTooltip Text="Información">
+                        <MudIconButton Icon="@(_infoOpen ? Icons.Material.Filled.Info : Icons.Material.Outlined.Info)" 
+                                       Color="Color.Inherit" OnClick="ToggleInfo" />
+                    </MudTooltip>
+                    
+                    @if (_asset != null && _asset.Id != Guid.Empty)
+                    {
+                        <MudTooltip Text="Favorito">
+                            <MudToggleIconButton ToggledIcon="@Icons.Material.Filled.Favorite" 
+                                                 Icon="@Icons.Material.Outlined.FavoriteBorder" 
+                                                 Color="Color.Inherit" ToggledColor="Color.Error" />
+                        </MudTooltip>
+                    }
+
+                    <MudTooltip Text="Descargar">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Download" Color="Color.Inherit" />
+                    </MudTooltip>
+
+                    @if (_asset is { Id: var assetId } && assetId != Guid.Empty)
+                    {
+                        <MudTooltip Text="Eliminar">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Inherit" />
+                        </MudTooltip>
+
+                        <MudMenu Icon="@Icons.Material.Outlined.MoreVert" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true" PopoverClass="asset-detail-menu-popover">
+                            <MudMenuItem Icon="@Icons.Material.Outlined.Edit">Editar fecha y hora</MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Outlined.LocationOn">Editar ubicación</MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Outlined.Add" OnClick="@OpenAddToAlbumDialog">Añadir a álbum</MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Outlined.Archive">Archivar</MudMenuItem>
+                        </MudMenu>
+                    }
+                </div>
+            </text>
+        );
+    }
+
+    private async Task LoadAsset()
+    {
+        try
+        {
+            _loading = true;
+            if (AssetId != Guid.Empty)
+            {
+                _asset = await AssetService.GetAssetDetailAsync(AssetId);
+            }
+            else if (!string.IsNullOrEmpty(Path))
+            {
+                _asset = await PendingAssetsProvider.GetPendingAssetDetailAsync(Path);
+            }
+            
+            // Actualizar el navbar una vez cargado el asset para habilitar botones
+            // Asegurar que se actualice después de cargar el asset
+            if (_asset != null)
+            {
+                await UpdateAssetDisplayUrlsAsync();
+                UpdateNavbar();
+                StateHasChanged();
+            }
+            
+            if (_allAssets.Count == 0)
+            {
+                var listFromNavigation = AssetListNavigationState.TryGetList(AlbumId);
+                if (listFromNavigation != null)
+                {
+                    _allAssets = listFromNavigation;
+                }
+                else if (AlbumId.HasValue && AlbumId.Value != Guid.Empty)
+                {
+                    _allAssets = await AlbumService.GetAlbumAssetsAsync(AlbumId.Value);
+                }
+                else
+                {
+                    _allAssets = await AssetService.GetTimelineAsync();
+                }
+            }
+            
+            UpdateNavigation();
+            _lastLoadedAssetId = AssetId;
+            _lastLoadedPath = Path ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar archivo: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void UpdateNavigation()
+    {
+        int currentIndex = -1;
+        if (AssetId != Guid.Empty)
+        {
+            currentIndex = _allAssets.FindIndex(a => a.Id == AssetId);
+        }
+        else if (!string.IsNullOrEmpty(Path))
+        {
+            currentIndex = _allAssets.FindIndex(a => a.FullPath == Path);
+        }
+
+        if (currentIndex != -1)
+        {
+            _prevAsset = currentIndex > 0 ? _allAssets[currentIndex - 1] : null;
+            _nextAsset = currentIndex < _allAssets.Count - 1 ? _allAssets[currentIndex + 1] : null;
+        }
+    }
+
+    private async Task UpdateAssetDisplayUrlsAsync()
+    {
+        if (_asset == null)
+        {
+            _displayContentUrl = string.Empty;
+            _displayThumbnailUrl = string.Empty;
+            return;
+        }
+
+        var contentUrl = _asset.ContentUrl;
+        var thumbnailUrl = _asset.ThumbnailUrl;
+
+        if (_asset.Id == Guid.Empty)
+        {
+            var token = await AuthService.GetTokenAsync();
+            contentUrl = AppendAccessToken(contentUrl, token);
+            thumbnailUrl = AppendAccessToken(thumbnailUrl, token);
+        }
+
+        _displayContentUrl = contentUrl;
+        _displayThumbnailUrl = thumbnailUrl;
+    }
+
+    private static string AppendAccessToken(string url, string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token) || url.Contains("access_token=", StringComparison.OrdinalIgnoreCase))
+        {
+            return url;
+        }
+
+        var separator = url.Contains('?') ? "&" : "?";
+        return $"{url}{separator}access_token={Uri.EscapeDataString(token)}";
+    }
+
+    private void NavigatePrev()
+    {
+        NavigateToAsset(_prevAsset);
+    }
+
+    private void NavigateNext()
+    {
+        NavigateToAsset(_nextAsset);
+    }
+
+    private void NavigateToAsset(TimelineItem? asset)
+    {
+        if (asset == null) return;
+
+        var albumQuery = AlbumId.HasValue ? $"&albumId={AlbumId}" : "";
+        var returnToQuery = !string.IsNullOrEmpty(ReturnTo) ? $"&returnTo={System.Net.WebUtility.UrlEncode(ReturnTo)}" : "";
+
+        if (asset.SyncStatus == AssetSyncStatus.Synced)
+        {
+            var query = (albumQuery.TrimStart('&') + returnToQuery).TrimStart('&');
+            Navigation.NavigateTo($"/asset/{asset.Id}{(string.IsNullOrEmpty(query) ? "" : "?")}{query}");
+        }
+        else
+        {
+            var encodedPath = System.Net.WebUtility.UrlEncode(asset.FullPath);
+            Navigation.NavigateTo($"/asset/{Guid.Empty}?path={encodedPath}{albumQuery}{returnToQuery}");
+        }
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "ArrowLeft") NavigatePrev();
+        else if (e.Key == "ArrowRight") NavigateNext();
+        else if (e.Key == "Escape") GoBack();
+    }
+
+    private void GoBack()
+    {
+        // Restaurar navbar y menú lateral antes de navegar para que al llegar a la página destino se vea el drawer
+        LayoutService.ResetNavbar();
+
+        if (!string.IsNullOrEmpty(ReturnTo))
+        {
+            var path = ReturnTo.TrimStart('/');
+            Navigation.NavigateTo("/" + path);
+            return;
+        }
+        if (AlbumId.HasValue && AlbumId.Value != Guid.Empty)
+        {
+            Navigation.NavigateTo($"/albums/{AlbumId.Value}");
+        }
+        else if (!string.IsNullOrEmpty(Path))
+        {
+            // Abierto desde Mi Dispositivo (o similar con path local)
+            Navigation.NavigateTo("/device");
+        }
+        else
+        {
+            Navigation.NavigateTo("/");
+        }
+    }
+
+    private void NavigateToIndex()
+    {
+        Navigation.NavigateTo("/admin/queues/indexar");
+    }
+
+    private void ToggleInfo()
+    {
+        _infoOpen = !_infoOpen;
+        UpdateNavbar();
+        StateHasChanged();
+    }
+
+    private void ToggleToolbar()
+    {
+        _toolbarVisible = !_toolbarVisible;
+    }
+
+    private async Task AddTagAsync()
+    {
+        if (!CanEditTags || _asset == null || _tagBusy)
+        {
+            return;
+        }
+
+        var tag = _newTag.Trim();
+        if (string.IsNullOrWhiteSpace(tag))
+        {
+            return;
+        }
+
+        try
+        {
+            _tagBusy = true;
+            var tags = await AssetService.AddAssetTagsAsync(_asset.Id, new List<string> { tag });
+            _asset.Tags = tags;
+            _newTag = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"No se pudo añadir la etiqueta: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _tagBusy = false;
+        }
+    }
+
+    private async Task RemoveTagAsync(string tag)
+    {
+        if (!CanEditTags || _asset == null || _tagBusy)
+        {
+            return;
+        }
+
+        try
+        {
+            _tagBusy = true;
+            var tags = await AssetService.RemoveAssetTagAsync(_asset.Id, tag);
+            _asset.Tags = tags;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"No se pudo eliminar la etiqueta: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _tagBusy = false;
+        }
+    }
+
+    private async Task SyncAsset()
+    {
+        if (_asset == null || string.IsNullOrEmpty(_asset.FullPath) || _syncing) return;
+
+        try
+        {
+            _syncing = true;
+            UpdateNavbar();
+            StateHasChanged();
+
+            var result = await AssetService.SyncAssetAsync(_asset.FullPath);
+            if (result != null && !string.IsNullOrEmpty(result.Message))
+            {
+                Snackbar.Add(result.Message, Severity.Success);
+                
+                // Si tiene AssetId, significa que ya estaba indexado, navegar a él
+                if (result.AssetId.HasValue)
+                {
+                    Navigation.NavigateTo($"/asset/{result.AssetId.Value}");
+                    return;
+                }
+                
+                // Si no tiene AssetId, el archivo se copió pero aún no está indexado
+                // Actualizar el estado del asset y recargar usando la nueva ruta
+                if (!string.IsNullOrEmpty(result.TargetPath))
+                {
+                    // Recargar el asset con la nueva ruta para obtener el estado actualizado
+                    // El endpoint AssetPendingEndpoint determinará automáticamente que está en Copied
+                    Path = result.TargetPath;
+                    AssetId = Guid.Empty; // Asegurar que se use el path en lugar del ID
+                    await LoadAsset();
+                    
+                    // Asegurar que el navbar se actualice después de cargar completamente
+                    // Esperar un momento para que el estado se actualice
+                    await Task.Delay(100);
+                    UpdateNavbar();
+                    StateHasChanged();
+                }
+                else
+                {
+                    // Si no hay TargetPath, actualizar el estado manualmente
+                    if (_asset != null)
+                    {
+                        _asset.SyncStatus = AssetSyncStatus.Copied;
+                    }
+                    UpdateNavbar();
+                    StateHasChanged();
+                }
+            }
+            else
+            {
+                Snackbar.Add("Error al sincronizar el asset", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _syncing = false;
+            UpdateNavbar();
+            StateHasChanged();
+        }
+    }
+
+    private string GetAssetIcon(string type)
+    {
+        return type == "IMAGE" ? Icons.Material.Filled.Image : Icons.Material.Filled.VideoLibrary;
+    }
+
+    private string GetNavButtonClass(bool isPrev)
+    {
+        var baseClass = isPrev ? "nav-button prev" : "nav-button next";
+        var hasAsset = isPrev ? _prevAsset != null : _nextAsset != null;
+        return _toolbarVisible && hasAsset ? baseClass : $"{baseClass} hidden";
+    }
+
+    // Add to Album functionality
+    private bool _addToAlbumDialogVisible = false;
+    private List<AlbumItem> _availableAlbums = new();
+    private bool _loadingAlbums = false;
+    private Guid? _selectedAlbumId = null;
+    private bool _showCreateAlbum = false;
+    private string _newAlbumName = "";
+    private string? _newAlbumDescription = "";
+
+    private async Task OpenAddToAlbumDialog()
+    {
+        if (_asset == null || _asset.Id == Guid.Empty)
+        {
+            Snackbar.Add("Solo se pueden añadir fotos indexadas a álbumes", Severity.Info);
+            return;
+        }
+
+        _addToAlbumDialogVisible = true;
+        _loadingAlbums = true;
+        StateHasChanged();
+        
+        try 
+        {
+            _availableAlbums = await AlbumService.GetAlbumsAsync();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Error al cargar álbumes", Severity.Error);
+        }
+        finally
+        {
+            _loadingAlbums = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task AddToAlbum()
+    {
+        if (_asset == null || _asset.Id == Guid.Empty || !_selectedAlbumId.HasValue)
+            return;
+
+        try
+        {
+            var success = await AlbumService.AddAssetToAlbumAsync(_selectedAlbumId.Value, _asset.Id);
+            if (success)
+            {
+                Snackbar.Add("Foto añadida al álbum correctamente", Severity.Success);
+                _addToAlbumDialogVisible = false;
+                _selectedAlbumId = null;
+            }
+            else
+            {
+                Snackbar.Add("Error al añadir la foto al álbum", Severity.Error);
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Snackbar.Add("No tienes permisos suficientes para añadir fotos a este álbum.", Severity.Error);
+        }
+    }
+
+    private async Task CreateAlbumAndAdd()
+    {
+        if (string.IsNullOrWhiteSpace(_newAlbumName))
+        {
+            Snackbar.Add("El nombre del álbum es obligatorio", Severity.Warning);
+            return;
+        }
+
+        var album = await AlbumService.CreateAlbumAsync(_newAlbumName, _newAlbumDescription);
+        if (album != null && _asset != null && _asset.Id != Guid.Empty)
+        {
+            try
+            {
+                var success = await AlbumService.AddAssetToAlbumAsync(album.Id, _asset.Id);
+                if (success)
+                {
+                    Snackbar.Add("Álbum creado y foto añadida correctamente", Severity.Success);
+                    _addToAlbumDialogVisible = false;
+                    _showCreateAlbum = false;
+                    _newAlbumName = "";
+                    _newAlbumDescription = "";
+                    _selectedAlbumId = null;
+                }
+                else
+                {
+                    Snackbar.Add("Álbum creado pero error al añadir la foto", Severity.Warning);
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Warning);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                Snackbar.Add("No tienes permisos suficientes para añadir fotos a este álbum.", Severity.Error);
+            }
+        }
+        else
+        {
+            Snackbar.Add("Error al crear el álbum", Severity.Error);
+        }
+    }
+}
+
+<MudDialog @bind-Visible="_addToAlbumDialogVisible" Options="new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true }">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Añadir a Álbum</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (!_showCreateAlbum)
+        {
+            @if (_loadingAlbums)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+            }
+            else if (_availableAlbums.Any())
+            {
+                <MudRadioGroup T="Guid?" @bind-Value="_selectedAlbumId">
+                    @foreach (var album in _availableAlbums)
+                    {
+                        <MudRadio T="Guid?" Value="@album.Id">
+                            <div class="d-flex align-center gap-2">
+                                @if (!string.IsNullOrEmpty(album.CoverThumbnailUrl))
+                                {
+                                    <img src="@album.CoverThumbnailUrl" 
+                                         style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px;" 
+                                         alt="@album.Name" />
+                                }
+                                else
+                                {
+                                    <div style="width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; background: #333; border-radius: 4px;">
+                                        <MudIcon Icon="@Icons.Material.Filled.Collections" Size="Size.Small" />
+                                    </div>
+                                }
+                                <div>
+                                    <MudText Typo="Typo.body1">@album.Name</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        @album.AssetCount @(album.AssetCount == 1 ? "foto" : "fotos")
+                                    </MudText>
+                                </div>
+                            </div>
+                        </MudRadio>
+                    }
+                </MudRadioGroup>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Class="mb-3">
+                    No tienes ningún álbum. Crea uno nuevo para añadir esta foto.
+                </MudAlert>
+            }
+            
+            <MudDivider Class="my-3" />
+            <MudButton Variant="Variant.Text" 
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="@(() => _showCreateAlbum = true)"
+                       FullWidth="true">
+                Crear nuevo álbum
+            </MudButton>
+        }
+        else
+        {
+            <MudTextField @bind-Value="_newAlbumName" 
+                          Label="Nombre del álbum" 
+                          Variant="Variant.Outlined" 
+                          FullWidth="true"
+                          Class="mb-3" />
+            <MudTextField @bind-Value="_newAlbumDescription" 
+                          Label="Descripción (opcional)" 
+                          Variant="Variant.Outlined" 
+                          FullWidth="true"
+                          Lines="3" />
+            <MudButton Variant="Variant.Text" 
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="@(() => _showCreateAlbum = false)"
+                       Class="mt-2">
+                Volver a seleccionar álbum
+            </MudButton>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => { _addToAlbumDialogVisible = false; _showCreateAlbum = false; _selectedAlbumId = null; })">
+            Cancelar
+        </MudButton>
+        @if (_showCreateAlbum)
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="CreateAlbumAndAdd">
+                Crear y Añadir
+            </MudButton>
+        }
+        else
+        {
+            <MudButton Color="Color.Primary" 
+                       Variant="Variant.Filled" 
+                       OnClick="AddToAlbum"
+                       Disabled="@(!_selectedAlbumId.HasValue)">
+                Añadir
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>

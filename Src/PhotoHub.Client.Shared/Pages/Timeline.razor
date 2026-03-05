@@ -1,0 +1,968 @@
+@page "/"
+@using Microsoft.AspNetCore.Components
+@inject IAssetService AssetService
+@inject IAlbumService AlbumService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject LayoutService LayoutService
+@inject IAssetListNavigationState AssetListNavigationState
+@implements IDisposable
+
+<PageTitle>Timeline - PhotoHub</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+}
+
+<div class="timeline-wrapper">
+    <div class="timeline-main-container">
+        <div class="timeline-content-wrapper">
+
+            <div class="timeline-container" id="timeline-scroll-container">
+                <div class="timeline-content">
+                    @if (_groupedAssets.Any())
+                    {
+                        @foreach (var group in _groupedAssets)
+                        {
+                            var dayDate = DateTime.ParseExact(group.Key, "yyyy-MM-dd", null);
+                            <div class="day-group" id="@GetGroupId(group.Key)">
+                                <MudText Typo="Typo.h6" Class="day-header">@FormatDayHeader(dayDate)</MudText>
+                                <div class="masonry-grid" data-day-group="@GetGroupId(group.Key)">
+                                    @foreach (var asset in group.Value)
+                                    {
+                                        <div class="masonry-item" 
+                                             data-aspect-ratio="@asset.AspectRatio.ToString("F4", System.Globalization.CultureInfo.InvariantCulture)"
+                                             data-width="@(asset.Width?.ToString() ?? "0")"
+                                             data-height="@(asset.Height?.ToString() ?? "0")">
+                                            <div class="asset-select-container @(_selectionMode ? "selection-mode" : "") @(IsAssetSelected(asset.Id) ? "selected" : "")">
+                                                <AssetCard Asset="@asset" OnAssetClick="OnTimelineAssetClick" />
+                                                <div class="asset-select-checkbox" @onclick:stopPropagation="true">
+                                                    <MudCheckBox T="bool"
+                                                                 Value="@IsAssetSelected(asset.Id)"
+                                                                 ValueChanged="@(EventCallback.Factory.Create<bool>(this, value => ToggleAssetSelection(asset.Id, value)))" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    }
+                    else if (!_loading)
+                    {
+                        <EmptyState Icon="@Icons.Material.Filled.PhotoLibrary"
+                                    Title="No hay fotografías disponibles"
+                                    Description="Indexa un directorio para comenzar." />
+                    }
+                </div>
+            </div>
+        </div>
+        
+        <div class="timeline-sidebar">
+        </div>
+    </div>
+    
+    @if (_groupedAssets.Any())
+    {
+        <div class="timeline-nav-wrapper">
+    <div id="timeline-nav-container" class="vertical-timeline-nav">
+        @{
+            var renderedYears = new HashSet<string>();
+        }
+        @foreach (var group in _groupedAssets)
+        {
+            var groupKey = group.Key;
+            var year = GetYearFromGroup(groupKey);
+
+            @if (!renderedYears.Contains(year))
+            {
+                renderedYears.Add(year);
+                var pos = GetGroupPosition(groupKey);
+                var posStr = pos.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+                <div class="timeline-nav-item @(IsActiveYear(year) ? "active" : "")" 
+                     style="top: @($"{posStr}%");"
+                     @onclick="@(() => ScrollToGroup(groupKey))">
+                    <span class="timeline-nav-label">@year</span>
+                </div>
+            }
+        }
+    </div>
+        </div>
+    }
+</div>
+
+<style>
+    /* Desactivar scroll en body/html y contenedores de MudBlazor */
+    :global(body.timeline-page) {
+        overflow: hidden !important;
+        height: 100vh !important;
+    }
+
+    :global(body.timeline-page html) {
+        overflow: hidden !important;
+        height: 100vh !important;
+    }
+
+    :global(body.timeline-page .mud-layout) {
+        overflow: hidden !important;
+        height: 100vh !important;
+    }
+
+    :global(body.timeline-page .mud-main-content) {
+        overflow: hidden !important;
+        height: 100vh !important;
+        position: relative !important;
+    }
+
+    /* Contenedor principal del timeline */
+    .timeline-wrapper {
+        position: relative;
+        width: 100%;
+        height: calc(100vh - 64px - 48px);
+    }
+
+    /* Contenedor principal con flex para layout horizontal */
+    .timeline-main-container {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        position: relative;
+    }
+
+    /* Contenedor del contenido principal */
+    .timeline-content-wrapper {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    /* Contenedor del timeline es el único con scroll */
+    .timeline-container {
+        display: flex;
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow-y: auto; 
+        overflow-x: hidden;
+        scrollbar-gutter: stable;
+    }
+
+    /* Estilo del scrollbar nativo */
+    .timeline-container::-webkit-scrollbar {
+        width: 8px; 
+    }
+
+    .timeline-container::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .timeline-container::-webkit-scrollbar-thumb {
+        background-color: var(--mud-palette-primary);
+        border-radius: 4px;
+    }
+
+    .timeline-container::-webkit-scrollbar-thumb:hover {
+        background-color: var(--mud-palette-primary-lighten);
+    }
+
+    /* Firefox */
+    .timeline-container {
+        scrollbar-width: thin;
+        scrollbar-color: var(--mud-palette-primary) transparent;
+    }
+
+    .timeline-content {
+        flex: 1;
+        padding-right: 24px; 
+        padding-bottom: 200px;
+    }
+
+    /* Sidebar con barra de scroll */
+    .timeline-sidebar {
+        display: none; 
+    }
+
+    /* Estilos para agrupación por día */
+    .day-group {
+        margin-bottom: 48px;
+    }
+
+    .day-header {
+        margin-bottom: 16px !important;
+        margin-left: 4px;
+        font-weight: 600;
+        color: var(--mud-palette-text-primary);
+        text-transform: capitalize;
+    }
+
+    /* Layout tipo masonry justificado - llena todo el ancho */
+    .masonry-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px;
+        width: 100%;
+        align-items: flex-start;
+        justify-content: flex-start;
+        align-content: flex-start;
+    }
+
+    .masonry-item {
+        height: 180px;
+        flex-shrink: 0;
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    @@media (min-width: 600px) {
+        .masonry-item {
+            height: 200px;
+        }
+    }
+
+    @@media (min-width: 960px) {
+        .masonry-item {
+            height: 220px;
+        }
+    }
+
+    @@media (min-width: 1280px) {
+        .masonry-item {
+            height: 240px;
+        }
+    }
+
+    @@media (min-width: 1920px) {
+        .masonry-item {
+            height: 260px;
+        }
+    }
+
+    .masonry-item .asset-card-container {
+        width: 100%;
+        height: 100%;
+        border-radius: 0 !important;
+    }
+
+    .masonry-item img,
+    .masonry-item video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    .asset-select-container {
+        position: relative;
+        height: 100%;
+    }
+
+    .asset-select-checkbox {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        z-index: 5;
+        opacity: 0;
+        transition: opacity 0.2s;
+        background: rgba(0,0,0,0.4);
+        border-radius: 999px;
+        padding: 2px;
+    }
+
+    .asset-select-container:hover .asset-select-checkbox {
+        opacity: 1;
+    }
+
+    .asset-select-container.selection-mode .asset-select-checkbox,
+    .asset-select-container.selected .asset-select-checkbox {
+        opacity: 1;
+    }
+
+    .timeline-nav-wrapper {
+        position: absolute;
+        right: 8px;
+        top: 0;
+        bottom: 0;
+        width: 40px;
+        z-index: 100;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .vertical-timeline-nav {
+        position: relative;
+        height: 100%;
+        width: 100%;
+    }
+
+    .timeline-nav-item {
+        position: absolute;
+        left: 0;
+        transform: translateY(-50%);
+        pointer-events: auto;
+        cursor: pointer;
+        padding: 4px;
+        transition: all 0.2s ease;
+    }
+
+    .timeline-nav-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--mud-palette-text-secondary);
+        background-color: var(--mud-palette-surface);
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid var(--mud-palette-divider);
+        white-space: nowrap;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .timeline-nav-item.active .timeline-nav-label {
+        color: var(--mud-palette-primary);
+        border-color: var(--mud-palette-primary);
+        font-size: 0.85rem;
+        z-index: 10;
+    }
+</style>
+
+<MudDialog @bind-Visible="_addToAlbumDialogVisible" Options="new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true }">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Añadir a álbum</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3">@($"{_selectedAssetIds.Count} elementos seleccionados")</MudText>
+        @if (!_showCreateAlbum)
+        {
+            @if (_loadingAlbums)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+            }
+            else if (_availableAlbums.Any())
+            {
+                <MudRadioGroup T="Guid?" @bind-Value="_selectedAlbumId">
+                    @foreach (var album in _availableAlbums)
+                    {
+                        <MudRadio T="Guid?" Value="@album.Id">
+                            <div class="d-flex flex-column">
+                                <MudText Typo="Typo.subtitle2">@album.Name</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@album.AssetCount fotos</MudText>
+                            </div>
+                        </MudRadio>
+                    }
+                </MudRadioGroup>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info">No hay álbumes disponibles.</MudAlert>
+            }
+            
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Outlined.Add"
+                       Class="mt-3"
+                       OnClick="@(() => _showCreateAlbum = true)">
+                Crear nuevo álbum
+            </MudButton>
+        }
+        else
+        {
+            <MudTextField @bind-Value="_newAlbumName"
+                          Label="Nombre del álbum"
+                          Variant="Variant.Outlined"
+                          FullWidth="true"
+                          Class="mb-3" />
+            <MudTextField @bind-Value="_newAlbumDescription"
+                          Label="Descripción (opcional)"
+                          Variant="Variant.Outlined"
+                          FullWidth="true"
+                          Lines="3" />
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Outlined.ArrowBack"
+                       Class="mt-3"
+                       OnClick="@(() => _showCreateAlbum = false)">
+                Volver a selección
+            </MudButton>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@CloseAddToAlbumDialog">Cancelar</MudButton>
+        @if (_showCreateAlbum)
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="CreateAlbumAndAddAsync">
+                Crear y añadir
+            </MudButton>
+        }
+        else
+        {
+            <MudButton Color="Color.Primary"
+                       Variant="Variant.Filled"
+                       OnClick="AddSelectionToAlbumAsync"
+                       Disabled="@(!_selectedAlbumId.HasValue)">
+                Añadir
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+<MudDialog @bind-Visible="_deleteAssetsDialogVisible" Options="@(new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Eliminar archivos</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText>¿Quieres mover @_selectedAssetIds.Count archivos a la papelera?</MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseDeleteAssetsDialog">Cancelar</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="DeleteSelectedAsync">Eliminar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<TimelineItem> _assets = new();
+    private Dictionary<string, List<TimelineItem>> _groupedAssets = new();
+    private bool _loading = true;
+    private string _activeGroup = "";
+    private DotNetObjectReference<Timeline>? _objRef;
+    private bool _selectionMode = false;
+    private HashSet<Guid> _selectedAssetIds = new();
+    private bool _addToAlbumDialogVisible = false;
+    private bool _deleteAssetsDialogVisible = false;
+    private List<AlbumItem> _availableAlbums = new();
+    private bool _loadingAlbums = false;
+    private Guid? _selectedAlbumId = null;
+    private bool _showCreateAlbum = false;
+    private string _newAlbumName = "";
+    private string? _newAlbumDescription = "";
+    private bool _deleteDialogVisible = false;
+    
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTimeline();
+    }
+
+    private string? GetDateFromQuery()
+    {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        if (string.IsNullOrEmpty(uri.Query))
+            return null;
+            
+        var query = uri.Query.TrimStart('?');
+        var pairs = query.Split('&');
+        
+        foreach (var pair in pairs)
+        {
+            var parts = pair.Split('=', 2);
+            if (parts.Length == 2 && parts[0] == "date")
+            {
+                return Uri.UnescapeDataString(parts[1]);
+            }
+        }
+        
+        return null;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Agregar clase al body para aplicar estilos específicos de Timeline
+            await JS.InvokeVoidAsync("scrollHelpers.enableTimelineScroll");
+            
+            if (_groupedAssets.Any())
+            {
+                await SetupScrollListener();
+                
+                // Inicializar el progreso del scroll después de que el listener esté configurado
+                if (_objRef != null)
+                {
+                    await Task.Delay(100);
+                    await JS.InvokeVoidAsync("scrollHelpers.updateScrollProgress", _objRef);
+                }
+                
+                // Inicializar masonry layout después de que los elementos estén renderizados
+                await Task.Delay(200);
+                await JS.InvokeVoidAsync("masonryHelpers.initializeMasonry");
+                
+                // Si hay un parámetro de fecha en la query string, hacer scroll a esa fecha
+                var dateParam = GetDateFromQuery();
+                if (!string.IsNullOrEmpty(dateParam))
+                {
+                    await ScrollToDate(dateParam);
+                }
+            }
+        }
+        else
+        {
+            // Reinicializar masonry después de actualizaciones
+            if (_groupedAssets.Any())
+            {
+                await Task.Delay(200);
+                await JS.InvokeVoidAsync("masonryHelpers.initializeMasonry");
+            }
+        }
+    }
+    
+    private async Task ScrollToDate(string dateString)
+    {
+        Console.WriteLine($"[TIMELINE] ScrollToDate requested for: {dateString}");
+        if (DateTime.TryParse(dateString, out var targetDate))
+        {
+            // Si el timeline aún no está cargado, esperar un poco
+            int attempts = 0;
+            while (!_groupedAssets.Any() && attempts < 20) // Aumentar intentos
+            {
+                Console.WriteLine($"[TIMELINE] Waiting for assets to load... attempt {attempts}");
+                await Task.Delay(500);
+                attempts++;
+            }
+
+            if (!_groupedAssets.Any())
+            {
+                Console.WriteLine("[TIMELINE] No assets found after waiting.");
+                return;
+            }
+
+            // Buscar el grupo que contiene esta fecha (por día)
+            var targetGroup = _groupedAssets.Keys.FirstOrDefault(g => 
+            {
+                var groupDate = GetDayDateFromGroup(g);
+                return groupDate.Date == targetDate.Date;
+            });
+            
+            if (!string.IsNullOrEmpty(targetGroup))
+            {
+                Console.WriteLine($"[TIMELINE] Target group found: {targetGroup}. Scrolling...");
+                // Esperar un poco más para asegurar que el DOM esté listo y el masonry inicializado
+                await Task.Delay(1500); // Un poco más de tiempo para estar seguros
+                await ScrollToGroup(targetGroup);
+            }
+            else
+            {
+                Console.WriteLine($"[TIMELINE] Target group NOT found for date: {targetDate.Date}");
+            }
+        }
+    }
+
+    private async Task SetupScrollListener()
+    {
+        if (_objRef == null)
+        {
+            _objRef = DotNetObjectReference.Create(this);
+        }
+        var groupIds = _groupedAssets.Keys.Select(GetGroupId).ToList();
+        await JS.InvokeVoidAsync("scrollHelpers.onWindowScroll", _objRef, groupIds);
+    }
+
+    [JSInvokable]
+    public void OnScrollUpdated(string activeGroupId, double percentage, double handleTopPixels)
+    {
+        var groupName = _groupedAssets.Keys.FirstOrDefault(k => GetGroupId(k) == activeGroupId);
+        if (!string.IsNullOrEmpty(groupName))
+        {
+            _activeGroup = groupName;
+        }
+        StateHasChanged();
+    }
+
+    private double GetGroupPosition(string groupName)
+    {
+        if (!_groupedAssets.Any()) return 0;
+        
+        var keys = _groupedAssets.Keys.ToList();
+        var index = keys.IndexOf(groupName);
+        if (index == -1) return 0;
+        
+        return (double)index / (keys.Count - 1) * 100;
+    }
+
+    private string GetGroupStyle(string groupName)
+    {
+        return $"top: {GetGroupPosition(groupName).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}%;";
+    }
+
+    private async Task LoadTimeline()
+    {
+        try
+        {
+            _loading = true;
+            _assets = await AssetService.GetTimelineAsync();
+            GroupAssets();
+            if (_groupedAssets.Any())
+            {
+                _activeGroup = _groupedAssets.Keys.First();
+                // No llamamos a SetupScrollListener aquí porque necesitamos que el DOM esté listo
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar timeline: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void GroupAssets()
+    {
+        _groupedAssets = _assets
+            .OrderByDescending(a => a.CreatedDate)
+            .GroupBy(a => a.CreatedDate.Date)
+            .ToDictionary(g => g.Key.ToString("yyyy-MM-dd"), g => g.OrderByDescending(a => a.CreatedDate).ToList());
+    }
+    
+    private string FormatDayHeader(DateTime date)
+    {
+        var today = DateTime.Today;
+        var yesterday = today.AddDays(-1);
+        
+        if (date.Date == today)
+            return "Hoy";
+        else if (date.Date == yesterday)
+            return "Ayer";
+        else if (date.Year == today.Year)
+            return date.ToString("dddd, d 'de' MMMM", new System.Globalization.CultureInfo("es-ES"));
+        else
+            return date.ToString("dddd, d 'de' MMMM 'de' yyyy", new System.Globalization.CultureInfo("es-ES"));
+    }
+
+    private void OpenAsset(TimelineItem asset)
+    {
+        AssetListNavigationState.SetList(_assets, albumId: null);
+        if (asset.SyncStatus == AssetSyncStatus.Synced)
+        {
+            Navigation.NavigateTo($"/asset/{asset.Id}");
+        }
+        else
+        {
+            var encodedPath = System.Net.WebUtility.UrlEncode(asset.FullPath);
+            Navigation.NavigateTo($"/asset/{Guid.Empty}?path={encodedPath}");
+        }
+    }
+
+    private void OnTimelineAssetClick(TimelineItem asset)
+    {
+        if (_selectionMode)
+        {
+            ToggleAssetSelection(asset.Id, !IsAssetSelected(asset.Id));
+            return;
+        }
+
+        OpenAsset(asset);
+    }
+
+    private void ToggleAssetSelection(Guid assetId, bool selected)
+    {
+        if (!_selectionMode)
+        {
+            _selectionMode = true;
+        }
+
+        if (selected)
+        {
+            _selectedAssetIds.Add(assetId);
+        }
+        else
+        {
+            _selectedAssetIds.Remove(assetId);
+            if (_selectedAssetIds.Count == 0)
+            {
+                ExitSelectionMode();
+                return;
+            }
+        }
+
+        UpdateSelectionNavbar();
+    }
+
+    private bool IsAssetSelected(Guid assetId) => _selectedAssetIds.Contains(assetId);
+
+    private void ExitSelectionMode()
+    {
+        _selectionMode = false;
+        _selectedAssetIds.Clear();
+        UpdateSelectionNavbar();
+    }
+
+    private void ToggleSelectAll()
+    {
+        if (_selectedAssetIds.Count == _assets.Count && _assets.Any())
+        {
+            _selectedAssetIds.Clear();
+            UpdateSelectionNavbar();
+            return;
+        }
+
+        _selectedAssetIds = _assets.Select(asset => asset.Id).ToHashSet();
+        if (_selectedAssetIds.Any())
+        {
+            _selectionMode = true;
+        }
+        UpdateSelectionNavbar();
+    }
+
+    private void OpenAddToAlbumDialog()
+    {
+        if (!_selectedAssetIds.Any())
+        {
+            return;
+        }
+
+        _addToAlbumDialogVisible = true;
+        _loadingAlbums = true;
+        _ = LoadAlbumsForSelectionAsync();
+    }
+
+    private async Task LoadAlbumsForSelectionAsync()
+    {
+        try
+        {
+            _availableAlbums = await AlbumService.GetAlbumsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar álbumes: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingAlbums = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CloseAddToAlbumDialog()
+    {
+        _addToAlbumDialogVisible = false;
+        _showCreateAlbum = false;
+        _selectedAlbumId = null;
+    }
+
+    private async Task AddSelectionToAlbumAsync()
+    {
+        if (!_selectedAlbumId.HasValue || !_selectedAssetIds.Any())
+        {
+            return;
+        }
+
+        var failed = 0;
+        var alreadyInAlbum = 0;
+        var permissionDenied = false;
+        foreach (var assetId in _selectedAssetIds.ToList())
+        {
+            try
+            {
+                var success = await AlbumService.AddAssetToAlbumAsync(_selectedAlbumId.Value, assetId);
+                if (!success)
+                {
+                    failed++;
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                alreadyInAlbum++;
+                failed++;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                permissionDenied = true;
+                failed++;
+                break;
+            }
+            catch
+            {
+                failed++;
+            }
+        }
+
+        CloseAddToAlbumDialog();
+        ExitSelectionMode();
+
+        if (permissionDenied)
+        {
+            Snackbar.Add("No tienes permisos suficientes para añadir elementos a este álbum.", Severity.Error);
+            return;
+        }
+
+        if (failed == 0)
+        {
+            Snackbar.Add("Elementos añadidos al álbum", Severity.Success);
+        }
+        else
+        {
+            if (alreadyInAlbum > 0)
+            {
+                var message = alreadyInAlbum == 1
+                    ? "El elemento ya está en el álbum."
+                    : $"{alreadyInAlbum} elementos ya estaban en el álbum.";
+                Snackbar.Add(message, Severity.Warning);
+            }
+
+            if (failed > alreadyInAlbum)
+            {
+                Snackbar.Add("Algunos elementos no se pudieron añadir", Severity.Warning);
+            }
+        }
+    }
+
+    private async Task CreateAlbumAndAddAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newAlbumName))
+        {
+            Snackbar.Add("El nombre del álbum es obligatorio", Severity.Warning);
+            return;
+        }
+
+        var album = await AlbumService.CreateAlbumAsync(_newAlbumName, _newAlbumDescription);
+        if (album == null)
+        {
+            Snackbar.Add("Error al crear el álbum", Severity.Error);
+            return;
+        }
+
+        _selectedAlbumId = album.Id;
+        await AddSelectionToAlbumAsync();
+    }
+
+    private void ShareSelection()
+    {
+        Snackbar.Add("Compartir desde selección aún no está disponible.", Severity.Info);
+    }
+
+    private void ToggleFavorites()
+    {
+        Snackbar.Add("Favoritos desde selección aún no está disponible.", Severity.Info);
+    }
+
+    private void HandleMoreOption(string option)
+    {
+        Snackbar.Add($"{option} aún no está disponible en selección.", Severity.Info);
+    }
+
+    private void ExitSelectionFromNavbar()
+    {
+        ExitSelectionMode();
+    }
+
+    private void OpenDeleteAssetsDialog()
+    {
+        _deleteAssetsDialogVisible = true;
+    }
+
+    private void CloseDeleteAssetsDialog()
+    {
+        _deleteAssetsDialogVisible = false;
+    }
+
+    private async Task DeleteSelectedAsync()
+    {
+        if (!_selectedAssetIds.Any())
+        {
+            return;
+        }
+
+        try
+        {
+            var request = new DeleteAssetsRequest
+            {
+                AssetIds = _selectedAssetIds.ToList()
+            };
+
+            await AssetService.DeleteAssetsAsync(request);
+            _deleteAssetsDialogVisible = false;
+            Snackbar.Add($"{_selectedAssetIds.Count} elementos movidos a la papelera", Severity.Success);
+            await LoadTimeline();
+            ExitSelectionMode();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al eliminar archivos: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void UpdateSelectionNavbar()
+    {
+        if (!_selectionMode)
+        {
+            LayoutService.ResetNavbar();
+            return;
+        }
+
+        var selectedCount = _selectedAssetIds.Count;
+        var allSelected = _assets.Any() && selectedCount == _assets.Count;
+
+        LayoutService.SetCustomNavbar(
+            @<text>
+                <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Inherit" Edge="Edge.Start" OnClick="ExitSelectionFromNavbar" />
+                <MudText Typo="Typo.h6" Class="ml-2">@($"{selectedCount} seleccionadas")</MudText>
+                <MudSpacer />
+                <MudTooltip Text="Compartir">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Share" Color="Color.Inherit" Disabled="@(!_selectedAssetIds.Any())" OnClick="ShareSelection" />
+                </MudTooltip>
+                <MudTooltip Text="@(allSelected ? "Deseleccionar todo" : "Seleccionar todo")">
+                    <MudIconButton Icon="@Icons.Material.Filled.SelectAll" Color="Color.Inherit" Disabled="@(!_assets.Any())" OnClick="ToggleSelectAll" />
+                </MudTooltip>
+                <MudTooltip Text="Añadir a álbum">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Add" Color="Color.Inherit" Disabled="@(!_selectedAssetIds.Any())" OnClick="OpenAddToAlbumDialog" />
+                </MudTooltip>
+                <MudTooltip Text="Favoritos">
+                    <MudIconButton Icon="@Icons.Material.Filled.FavoriteBorder" Color="Color.Inherit" Disabled="@(!_selectedAssetIds.Any())" OnClick="ToggleFavorites" />
+                </MudTooltip>
+                <MudMenu Icon="@Icons.Material.Outlined.MoreVert" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true">
+                    <MudMenuItem Icon="@Icons.Material.Outlined.Edit" OnClick="@(() => HandleMoreOption("Editar fecha y hora"))">Editar fecha y hora</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Outlined.LocationOn" OnClick="@(() => HandleMoreOption("Editar ubicación"))">Editar ubicación</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Outlined.Archive" OnClick="@(() => HandleMoreOption("Archivar"))">Archivar</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Outlined.Delete" OnClick="@OpenDeleteAssetsDialog">Eliminar</MudMenuItem>
+                </MudMenu>
+            </text>
+        , keepDrawerVisible: true);
+    }
+
+    private string GetGroupId(string groupName)
+    {
+        return "group-" + groupName.Replace(" ", "-").ToLower();
+    }
+    
+    private DateTime GetDayDateFromGroup(string groupKey)
+    {
+        if (DateTime.TryParseExact(groupKey, "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out var date))
+        {
+            return date;
+        }
+        return DateTime.MinValue;
+    }
+
+    private async Task ScrollToGroup(string groupName)
+    {
+        // Al hacer scroll manual, actualizamos el estado
+        _activeGroup = groupName;
+        await JS.InvokeVoidAsync("scrollHelpers.scrollToElement", GetGroupId(groupName));
+    }
+
+    private bool IsActiveYear(string year) 
+    {
+        if (string.IsNullOrEmpty(_activeGroup)) return false;
+        return GetYearFromGroup(_activeGroup) == year;
+    }
+
+    private bool IsActive(string groupName) => _activeGroup == groupName;
+
+    private string GetYearFromGroup(string groupKey)
+    {
+        // "2024-01-15" -> "2024"
+        var date = GetDayDateFromGroup(groupKey);
+        return date != DateTime.MinValue ? date.Year.ToString() : "";
+    }
+
+    public void Dispose()
+    {
+        _objRef?.Dispose();
+        // Remover clase del body al salir de la página
+        JS.InvokeVoidAsync("scrollHelpers.disableTimelineScroll");
+        LayoutService.ResetNavbar();
+    }
+}
