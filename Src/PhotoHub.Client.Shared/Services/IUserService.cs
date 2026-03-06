@@ -10,6 +10,8 @@ public interface IUserService
     Task<UserDto> UpdateUserAsync(Guid id, UpdateUserRequest request);
     Task DeleteUserAsync(Guid id);
     Task ResetPasswordAsync(Guid id, string newPassword);
+    Task<UserDto> UpdateProfileAsync(UpdateProfileRequest request);
+    Task ChangePasswordAsync(ChangePasswordRequest request);
 }
 
 public class UserDto
@@ -55,5 +57,19 @@ public class UpdateUserRequest
 
 public class ResetPasswordRequest
 {
+    public string NewPassword { get; set; } = string.Empty;
+}
+
+public class UpdateProfileRequest
+{
+    public string? Username { get; set; }
+    public string? Email { get; set; }
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
+}
+
+public class ChangePasswordRequest
+{
+    public string CurrentPassword { get; set; } = string.Empty;
     public string NewPassword { get; set; } = string.Empty;
 }

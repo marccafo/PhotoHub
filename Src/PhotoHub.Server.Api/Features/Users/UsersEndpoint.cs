@@ -56,6 +56,14 @@ public class UsersEndpoint : IEndpoint
             .WithName("ResetPassword")
             .WithDescription("Resets a user's password (Admin only)")
             .RequireAuthorization(policy => policy.RequireRole("Admin"));
+
+        group.MapPut("me", UpdateProfile)
+            .WithName("UpdateProfile")
+            .WithDescription("Updates the current user's own profile");
+
+        group.MapPost("me/change-password", ChangePassword)
+            .WithName("ChangePassword")
+            .WithDescription("Changes the current user's password");
     }
 
     private async Task<IResult> GetAllUsers(
@@ -296,6 +304,84 @@ public class UsersEndpoint : IEndpoint
 
         return Results.Ok(new { message = "Password reset successfully" });
     }
+
+    private async Task<IResult> UpdateProfile(
+        [FromBody] UpdateProfileRequest request,
+        ClaimsPrincipal user,
+        [FromServices] ApplicationDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+            return Results.Unauthorized();
+
+        var dbUser = await dbContext.Users.FindAsync(new object[] { userId }, cancellationToken);
+        if (dbUser == null)
+            return Results.NotFound();
+
+        if (!string.IsNullOrWhiteSpace(request.Username) && request.Username != dbUser.Username)
+        {
+            if (await dbContext.Users.AnyAsync(u => u.Username == request.Username && u.Id != userId, cancellationToken))
+                return Results.BadRequest(new { error = "El nombre de usuario ya está en uso" });
+            dbUser.Username = request.Username.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Email) && request.Email != dbUser.Email)
+        {
+            if (await dbContext.Users.AnyAsync(u => u.Email == request.Email && u.Id != userId, cancellationToken))
+                return Results.BadRequest(new { error = "El email ya está en uso" });
+            dbUser.Email = request.Email.Trim();
+        }
+
+        if (request.FirstName != null) dbUser.FirstName = request.FirstName.Trim();
+        if (request.LastName != null) dbUser.LastName = request.LastName.Trim();
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return Results.Ok(new UserDto
+        {
+            Id = dbUser.Id,
+            Username = dbUser.Username,
+            Email = dbUser.Email,
+            Role = dbUser.Role,
+            FirstName = dbUser.FirstName,
+            LastName = dbUser.LastName,
+            IsActive = dbUser.IsActive,
+            CreatedAt = dbUser.CreatedAt,
+            LastLoginAt = dbUser.LastLoginAt
+        });
+    }
+
+    private async Task<IResult> ChangePassword(
+        [FromBody] ChangePasswordRequest request,
+        ClaimsPrincipal user,
+        [FromServices] ApplicationDbContext dbContext,
+        [FromServices] IAuthService authService,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.CurrentPassword) || string.IsNullOrWhiteSpace(request.NewPassword))
+            return Results.BadRequest(new { error = "Todos los campos son obligatorios" });
+
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+            return Results.Unauthorized();
+
+        var dbUser = await dbContext.Users.FindAsync(new object[] { userId }, cancellationToken);
+        if (dbUser == null)
+            return Results.NotFound();
+
+        if (!authService.VerifyPassword(request.CurrentPassword, dbUser.PasswordHash))
+            return Results.BadRequest(new { error = "La contraseña actual no es correcta" });
+
+        var validation = authService.ValidatePassword(request.NewPassword);
+        if (!validation.IsValid)
+            return Results.BadRequest(new { error = validation.ErrorMessage });
+
+        dbUser.PasswordHash = authService.HashPassword(request.NewPassword);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return Results.Ok(new { message = "Contraseña cambiada correctamente" });
+    }
 }
 
 public class CreateUserRequest
@@ -329,4 +415,18 @@ public class ShareableUserDto
     public Guid Id { get; set; }
     public string Username { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
+}
+
+public class UpdateProfileRequest
+{
+    public string? Username { get; set; }
+    public string? Email { get; set; }
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
+}
+
+public class ChangePasswordRequest
+{
+    public string CurrentPassword { get; set; } = string.Empty;
+    public string NewPassword { get; set; } = string.Empty;
 }

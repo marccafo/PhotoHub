@@ -90,4 +90,32 @@ public class UserService : IUserService
         var response = await _httpClient.PostAsJsonAsync($"/api/users/{id}/reset-password", request);
         response.EnsureSuccessStatusCode();
     }
+
+    public async Task<UserDto> UpdateProfileAsync(UpdateProfileRequest request)
+    {
+        await SetAuthHeaderAsync();
+        var response = await _httpClient.PutAsJsonAsync("/api/users/me", request);
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+            throw new Exception(error?.Error ?? "Error al actualizar el perfil");
+        }
+        return await response.Content.ReadFromJsonAsync<UserDto>() ?? throw new Exception("Error al actualizar el perfil");
+    }
+
+    public async Task ChangePasswordAsync(ChangePasswordRequest request)
+    {
+        await SetAuthHeaderAsync();
+        var response = await _httpClient.PostAsJsonAsync("/api/users/me/change-password", request);
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+            throw new Exception(error?.Error ?? "Error al cambiar la contraseña");
+        }
+    }
+
+    private class ErrorResponse
+    {
+        public string? Error { get; set; }
+    }
 }
