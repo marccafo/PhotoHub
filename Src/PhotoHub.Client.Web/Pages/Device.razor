@@ -16,67 +16,61 @@
 
 @if (_pendingAssetsCount > 0 && !_syncingAll)
 {
-    <MudCard Class="mb-4">
-        <MudCardContent>
-            <MudAlert Severity="Severity.Info" 
-                      Variant="Variant.Filled" 
-                      Dense="true"
-                      Icon="@Icons.Material.Filled.CloudUpload">
-                <div class="d-flex align-center justify-space-between gap-3">
-                    <div class="flex-grow-1 min-width-0">
-                        <MudText Typo="Typo.body1" Class="mb-1">
-                            <strong>@_pendingAssetsCount</strong> @(_pendingAssetsCount == 1 ? "foto pendiente" : "fotos pendientes") de sincronizar
-                        </MudText>
-                        <MudText Typo="Typo.body2" Style="opacity: 0.8;">
-                            Se copiarán al directorio interno para su indexación
-                        </MudText>
-                    </div>
-                    <MudButton Variant="Variant.Filled" 
-                               Color="Color.Primary" 
-                               StartIcon="@Icons.Material.Filled.CloudUpload"
-                               OnClick="SyncAllPendingAssets"
-                               Disabled="@_syncingAll"
-                               Class="flex-shrink-0">
-                        Sincronizar Todas
-                    </MudButton>
-                </div>
-            </MudAlert>
-        </MudCardContent>
-    </MudCard>
+    <MudAlert Severity="Severity.Info"
+              Variant="Variant.Filled"
+              Dense="true"
+              Icon="@Icons.Material.Filled.CloudUpload"
+              Class="mb-4">
+        <div class="d-flex align-center justify-space-between gap-3">
+            <div class="flex-grow-1 min-width-0">
+                <MudText Typo="Typo.body1" Class="mb-1">
+                    <strong>@_pendingAssetsCount</strong> @(_pendingAssetsCount == 1 ? "foto pendiente" : "fotos pendientes") de sincronizar
+                </MudText>
+                <MudText Typo="Typo.body2" Style="opacity: 0.8;">
+                    Se copiarán al directorio interno para su indexación
+                </MudText>
+            </div>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.CloudUpload"
+                       OnClick="SyncAllPendingAssets"
+                       Disabled="@_syncingAll"
+                       Class="flex-shrink-0">
+                Sincronizar Todas
+            </MudButton>
+        </div>
+    </MudAlert>
 }
 
 @if (_syncingAll)
 {
-    <MudCard Class="mb-4">
-        <MudCardContent>
-            <MudAlert Severity="Severity.Info" 
-                      Variant="Variant.Filled" 
-                      Dense="true"
-                      Icon="@Icons.Material.Filled.CloudSync">
-                <div class="d-flex align-center gap-3">
-                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="flex-shrink-0" />
-                    <div class="flex-grow-1 min-width-0">
-                        <MudText Typo="Typo.body2" Class="mb-1">@_syncProgressMessage</MudText>
-                        <MudProgressLinear Color="Color.Primary" Value="@_syncProgress" Class="my-2" />
-                        <MudText Typo="Typo.caption" Style="opacity: 0.8;">
-                            @_syncCurrent de @_syncTotal sincronizadas 
-                            @if (_syncSuccessful > 0 || _syncFailed > 0)
-                            {
-                                <span>(@_syncSuccessful exitosas@(_syncFailed > 0 ? $", {_syncFailed} fallidas" : ""))</span>
-                            }
-                        </MudText>
-                    </div>
-                    <MudButton Variant="Variant.Text" 
-                               Color="Color.Inherit" 
-                               OnClick="CancelSyncAll"
-                               Size="Size.Small"
-                               Class="flex-shrink-0">
-                        Cancelar
-                    </MudButton>
-                </div>
-            </MudAlert>
-        </MudCardContent>
-    </MudCard>
+    <MudAlert Severity="Severity.Info"
+              Variant="Variant.Filled"
+              Dense="true"
+              Icon="@Icons.Material.Filled.CloudSync"
+              Class="mb-4">
+        <div class="d-flex align-center gap-3">
+            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="flex-shrink-0" />
+            <div class="flex-grow-1 min-width-0">
+                <MudText Typo="Typo.body2" Class="mb-1">@_syncProgressMessage</MudText>
+                <MudProgressLinear Color="Color.Primary" Value="@_syncProgress" Class="my-2" />
+                <MudText Typo="Typo.caption" Style="opacity: 0.8;">
+                    @_syncCurrent de @_syncTotal sincronizadas
+                    @if (_syncSuccessful > 0 || _syncFailed > 0)
+                    {
+                        <span>(@_syncSuccessful exitosas@(_syncFailed > 0 ? $", {_syncFailed} fallidas" : ""))</span>
+                    }
+                </MudText>
+            </div>
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Inherit"
+                       OnClick="CancelSyncAll"
+                       Size="Size.Small"
+                       Class="flex-shrink-0">
+                Cancelar
+            </MudButton>
+        </div>
+    </MudAlert>
 }
 
 @if (_groupedAssets.Any())

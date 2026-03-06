@@ -327,6 +327,9 @@ else
     private Guid _lastLoadedAssetId = Guid.Empty;
     private string _lastLoadedPath = string.Empty;
 
+    /// <summary>Señal para evitar que LoadAsset() en vuelo llame UpdateNavbar() tras GoBack()/Dispose().</summary>
+    private bool _navigatingAway;
+
     private bool CanEditTags => _asset != null && _asset.Id != Guid.Empty && _asset.SyncStatus == AssetSyncStatus.Synced;
 
     protected override void OnInitialized()
@@ -356,6 +359,7 @@ else
 
     public void Dispose()
     {
+        _navigatingAway = true;
         LayoutService.ResetNavbar();
     }
 
@@ -443,6 +447,7 @@ else
 
     private async Task LoadAsset()
     {
+        _navigatingAway = false;
         try
         {
             _loading = true;
@@ -457,11 +462,14 @@ else
             
             // Actualizar el navbar una vez cargado el asset para habilitar botones
             // Asegurar que se actualice después de cargar el asset
-            if (_asset != null)
+            if (_asset != null && !_navigatingAway)
             {
                 await UpdateAssetDisplayUrlsAsync();
-                UpdateNavbar();
-                StateHasChanged();
+                if (!_navigatingAway)
+                {
+                    UpdateNavbar();
+                    StateHasChanged();
+                }
             }
             
             if (_allAssets.Count == 0)
@@ -605,6 +613,7 @@ else
 
     private void GoBack()
     {
+        _navigatingAway = true;
         // Restaurar navbar y menú lateral antes de navegar para que al llegar a la página destino se vea el drawer
         LayoutService.ResetNavbar();
 
