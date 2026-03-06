@@ -558,9 +558,12 @@
 
     private bool _scrollSetupDone = false;
     private bool _groupMapNeedsUpdate = false;
+    private bool _isDisposed = false;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (_isDisposed) return;
+
         if (firstRender)
             await JS.InvokeVoidAsync("scrollHelpers.enableTimelineScroll");
 
@@ -575,6 +578,8 @@
                 await SetupScrollListener();
                 await InitScrubber();
 
+                if (_isDisposed) return;
+
                 var dateParam = GetDateFromQuery();
                 if (!string.IsNullOrEmpty(dateParam))
                     await ScrollToDate(dateParam);
@@ -586,9 +591,13 @@
                 await JS.InvokeVoidAsync("scrubberHelpers.updateGroupMap", BuildGroupData());
             }
 
+            if (_isDisposed) return;
             await Task.Delay(200);
+            if (_isDisposed) return;
             await JS.InvokeVoidAsync("masonryHelpers.initializeMasonry");
         }
+
+        if (_isDisposed) return;
 
         // (Re)attach the load-more sentinel observer whenever _hasMore state changes
         if (_hasMore && _objRef != null)
@@ -1106,6 +1115,7 @@
 
     public void Dispose()
     {
+        _isDisposed = true;
         _objRef?.Dispose();
         JS.InvokeVoidAsync("scrollHelpers.disableTimelineScroll");
         JS.InvokeVoidAsync("scrubberHelpers.cleanup");
