@@ -457,6 +457,10 @@ window.masonryHelpers = {
     }
 };
 
+window.focusElement = function (element) {
+    if (element) element.focus();
+};
+
 window.lazyImageHelpers = {
     _observer: null,
 

@@ -21,7 +21,7 @@
 }
 else if (_asset != null)
 {
-    <div class="asset-detail-container" @onkeydown="HandleKeyDown" tabindex="0">
+    <div class="asset-detail-container" @ref="_containerRef" @onkeydown="HandleKeyDown" tabindex="0">
         <style>
             .asset-detail-container {
                 position: fixed;
@@ -321,6 +321,8 @@ else
     private TimelineItem? _nextAsset;
     private List<TimelineItem> _allAssets = new();
 
+    private ElementReference _containerRef;
+
     /// <summary>Evita cargar dos veces el mismo asset (OnInitializedAsync y OnParametersSetAsync se ejecutan ambos al navegar).</summary>
     private Guid _lastLoadedAssetId = Guid.Empty;
     private string _lastLoadedPath = string.Empty;
@@ -330,6 +332,14 @@ else
     protected override void OnInitialized()
     {
         UpdateNavbar();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _containerRef.Context != null)
+        {
+            await JSRuntime.InvokeVoidAsync("focusElement", _containerRef);
+        }
     }
 
     protected override async Task OnParametersSetAsync()
@@ -578,7 +588,18 @@ else
     {
         if (e.Key == "ArrowLeft") NavigatePrev();
         else if (e.Key == "ArrowRight") NavigateNext();
-        else if (e.Key == "Escape") GoBack();
+        else if (e.Key == "Escape")
+        {
+            if (_zoomed)
+            {
+                _zoomed = false;
+                UpdateNavbar();
+            }
+            else
+            {
+                GoBack();
+            }
+        }
     }
 
     private void GoBack()
