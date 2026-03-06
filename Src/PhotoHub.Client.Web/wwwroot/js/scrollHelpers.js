@@ -181,19 +181,20 @@ window.scrubberHelpers = {
 
         if (!this._sc || !this._track || !this._thumb) return;
 
-        // Year marker clicks — jump to that group
-        document.querySelectorAll('.scrubber-year-marker').forEach(function (marker) {
-            marker.addEventListener('click', function (e) {
-                e.stopPropagation();
-                var gid = marker.getAttribute('data-group-id');
-                if (gid) window.scrollHelpers.scrollToElement(gid);
-            });
-        });
-
-        // Track click — jump scroll to that vertical position
+        // Track click — handles both year marker clicks and bare track clicks.
+        // Using event delegation so markers added via pagination are covered automatically.
         var self = this;
         this._track.addEventListener('click', function (e) {
             if (self._isDragging) return;
+            // Year marker click — jump to that group
+            var marker = e.target.closest('.scrubber-year-marker');
+            if (marker) {
+                e.stopPropagation();
+                var gid = marker.getAttribute('data-group-id');
+                if (gid) window.scrollHelpers.scrollToElement(gid);
+                return;
+            }
+            // Bare track click — jump scroll to that vertical position
             if (e.target === self._thumb || self._thumb.contains(e.target)) return;
             var rect = self._track.getBoundingClientRect();
             var pct = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
@@ -289,6 +290,12 @@ window.scrubberHelpers = {
         if (scrollable <= 0) return;
         var pct = sc.scrollTop / scrollable;
         this._setThumbPercent(pct);
+    },
+
+    updateGroupMap: function (groupData) {
+        // Refresh group positions after pagination loads new data.
+        // Event delegation on the track already covers new year marker clicks.
+        this._groupMap = groupData || [];
     },
 
     updateActiveMarker: function (activeGroupId) {

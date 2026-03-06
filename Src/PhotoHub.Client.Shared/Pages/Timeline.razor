@@ -557,6 +557,7 @@
     }
 
     private bool _scrollSetupDone = false;
+    private bool _groupMapNeedsUpdate = false;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -570,12 +571,19 @@
             if (!_scrollSetupDone)
             {
                 _scrollSetupDone = true;
+                _groupMapNeedsUpdate = false;
                 await SetupScrollListener();
                 await InitScrubber();
 
                 var dateParam = GetDateFromQuery();
                 if (!string.IsNullOrEmpty(dateParam))
                     await ScrollToDate(dateParam);
+            }
+            else if (_groupMapNeedsUpdate)
+            {
+                // Pagination loaded new groups — refresh scrubber positions without re-init
+                _groupMapNeedsUpdate = false;
+                await JS.InvokeVoidAsync("scrubberHelpers.updateGroupMap", BuildGroupData());
             }
 
             await Task.Delay(200);
@@ -595,15 +603,25 @@
 
     private async Task InitScrubber()
     {
-        var keys = _groupedAssets.Keys.ToList();
-        var count = keys.Count;
-        var groupData = keys.Select((key, index) => new
+        await JS.InvokeVoidAsync("scrubberHelpers.init", BuildGroupData());
+    }
+
+    private List<object> BuildGroupData()
+    {
+        var totalAssets = _groupedAssets.Values.Sum(g => g.Count);
+        var cumulative = 0;
+        var result = new List<object>();
+        foreach (var kvp in _groupedAssets)
         {
-            id = GetGroupId(key),
-            label = GetGroupLabel(key),
-            position = count > 1 ? (double)index / (count - 1) : 0.0
-        }).ToList();
-        await JS.InvokeVoidAsync("scrubberHelpers.init", groupData);
+            result.Add(new
+            {
+                id = GetGroupId(kvp.Key),
+                label = GetGroupLabel(kvp.Key),
+                position = totalAssets > 0 ? (double)cumulative / totalAssets : 0.0
+            });
+            cumulative += kvp.Value.Count;
+        }
+        return result;
     }
 
     private string GetGroupLabel(string groupKey)
@@ -684,12 +702,17 @@
     private double GetGroupPosition(string groupName)
     {
         if (!_groupedAssets.Any()) return 0;
-        
-        var keys = _groupedAssets.Keys.ToList();
-        var index = keys.IndexOf(groupName);
-        if (index == -1) return 0;
-        
-        return (double)index / (keys.Count - 1) * 100;
+        var totalAssets = _groupedAssets.Values.Sum(g => g.Count);
+        if (totalAssets == 0) return 0;
+
+        var cumulative = 0;
+        foreach (var kvp in _groupedAssets)
+        {
+            if (kvp.Key == groupName)
+                return (double)cumulative / totalAssets * 100;
+            cumulative += kvp.Value.Count;
+        }
+        return 0;
     }
 
     private string GetGroupStyle(string groupName)
@@ -760,6 +783,7 @@
             .OrderByDescending(a => a.CreatedDate)
             .GroupBy(a => a.CreatedDate.Date)
             .ToDictionary(g => g.Key.ToString("yyyy-MM-dd"), g => g.OrderByDescending(a => a.CreatedDate).ToList());
+        _groupMapNeedsUpdate = true;
     }
     
     private string FormatDayHeader(DateTime date)
