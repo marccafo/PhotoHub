@@ -20,6 +20,13 @@ public interface IAssetService
     Task EmptyTrashAsync();
     Task<List<string>> AddAssetTagsAsync(Guid assetId, List<string> tags);
     Task<List<string>> RemoveAssetTagAsync(Guid assetId, string tag);
+    Task<(List<TimelineItem> Items, bool HasMore)> SearchAssetsAsync(string? q, DateTime? from, DateTime? to, string? folder, int pageSize = 100);
+}
+
+public class SearchResult
+{
+    public List<TimelineItem> Items { get; set; } = new();
+    public bool HasMore { get; set; }
 }
 
 public class UploadResponse

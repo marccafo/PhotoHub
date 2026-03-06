@@ -294,6 +294,24 @@ public class AssetService : IAssetService
         return result?.Tags ?? new List<string>();
     }
 
+    public async Task<(List<TimelineItem> Items, bool HasMore)> SearchAssetsAsync(
+        string? q, DateTime? from, DateTime? to, string? folder, int pageSize = 100)
+    {
+        await SetAuthHeaderAsync();
+        var url = $"/api/assets/search?pageSize={pageSize}";
+        if (!string.IsNullOrWhiteSpace(q))
+            url += $"&q={Uri.EscapeDataString(q)}";
+        if (from.HasValue)
+            url += $"&from={Uri.EscapeDataString(from.Value.ToString("o"))}";
+        if (to.HasValue)
+            url += $"&to={Uri.EscapeDataString(to.Value.ToString("o"))}";
+        if (!string.IsNullOrWhiteSpace(folder))
+            url += $"&folder={Uri.EscapeDataString(folder)}";
+
+        var response = await _httpClient.GetFromJsonAsync<SearchResult>(url);
+        return (response?.Items ?? new(), response?.HasMore ?? false);
+    }
+
     public async Task RestoreTrashAsync()
     {
         await SetAuthHeaderAsync();
