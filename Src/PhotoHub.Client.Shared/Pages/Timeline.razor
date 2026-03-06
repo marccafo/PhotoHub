@@ -670,14 +670,15 @@
     }
 
     [JSInvokable]
-    public void OnScrollUpdated(string activeGroupId, double percentage, double handleTopPixels)
+    public void OnScrollUpdated(string activeGroupId)
     {
+        // Solo mantiene _activeGroup sincronizado para re-renders por carga de datos.
+        // Los year markers del scrubber se actualizan directamente desde JS (sin re-render).
         var groupName = _groupedAssets.Keys.FirstOrDefault(k => GetGroupId(k) == activeGroupId);
         if (!string.IsNullOrEmpty(groupName))
         {
             _activeGroup = groupName;
         }
-        StateHasChanged();
     }
 
     private double GetGroupPosition(string groupName)

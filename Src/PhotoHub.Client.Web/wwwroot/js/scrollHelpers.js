@@ -107,17 +107,18 @@ window.scrollHelpers = {
                 }
             }
 
-            // Actualizar thumb del scrubber directamente (sin pasar por Blazor para suavidad)
-            if (window.scrubberHelpers) window.scrubberHelpers.updateThumb(scrollContainer);
+            // Actualizar thumb y year markers del scrubber directamente en JS (sin round-trip a Blazor)
+            if (window.scrubberHelpers) {
+                window.scrubberHelpers.updateThumb(scrollContainer);
+                window.scrubberHelpers.updateActiveMarker(activeId);
+            }
 
-            // Notificar a Blazor con debounce para no disparar re-renders continuos
+            // Notificar a Blazor solo para mantener _activeGroup sincronizado (sin StateHasChanged)
             clearTimeout(scrollDebounceTimer);
             scrollDebounceTimer = setTimeout(() => {
-                const scrollable = scrollContainer.scrollHeight - scrollContainer.clientHeight;
-                const percentage = scrollable > 0 ? (scrollContainer.scrollTop / scrollable) * 100 : 0;
-                dotnetHelper.invokeMethodAsync('OnScrollUpdated', activeId, percentage, 0)
+                dotnetHelper.invokeMethodAsync('OnScrollUpdated', activeId)
                     .catch(err => console.error('Error updating scroll:', err));
-            }, 80);
+            }, 200);
         };
 
         if (scrollContainer === window) {
@@ -288,6 +289,24 @@ window.scrubberHelpers = {
         if (scrollable <= 0) return;
         var pct = sc.scrollTop / scrollable;
         this._setThumbPercent(pct);
+    },
+
+    updateActiveMarker: function (activeGroupId) {
+        // Extraer el año del group id: "group-2024-01-15" → "2024"
+        var activeYear = null;
+        if (activeGroupId) {
+            var match = activeGroupId.match(/^group-(\d{4})-/);
+            if (match) activeYear = match[1];
+        }
+        document.querySelectorAll('.scrubber-year-marker').forEach(function (marker) {
+            var label = marker.querySelector('.scrubber-year-label');
+            var year = label ? label.textContent.trim() : null;
+            if (year && year === activeYear) {
+                marker.classList.add('active');
+            } else {
+                marker.classList.remove('active');
+            }
+        });
     },
 
     cleanup: function () {
