@@ -21,12 +21,19 @@ public interface IAssetService
     Task<List<string>> AddAssetTagsAsync(Guid assetId, List<string> tags);
     Task<List<string>> RemoveAssetTagAsync(Guid assetId, string tag);
     Task<(List<TimelineItem> Items, bool HasMore)> SearchAssetsAsync(string? q, DateTime? from, DateTime? to, string? folder, int pageSize = 100);
+    Task<bool> ToggleFavoriteAsync(Guid assetId);
+    Task<TimelinePageResult> GetFavoritesPageAsync(DateTime? cursor = null, int pageSize = 150);
 }
 
 public class SearchResult
 {
     public List<TimelineItem> Items { get; set; } = new();
     public bool HasMore { get; set; }
+}
+
+public class FavoriteToggleResult
+{
+    public bool IsFavorite { get; set; }
 }
 
 public class UploadResponse

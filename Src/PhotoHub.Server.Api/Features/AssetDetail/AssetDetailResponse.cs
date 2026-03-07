@@ -20,6 +20,7 @@ public class AssetDetailResponse
     public List<ThumbnailInfoResponse> Thumbnails { get; set; } = new();
     public List<string> Tags { get; set; } = new();
     public PhotoHub.Client.Shared.Models.AssetSyncStatus SyncStatus { get; set; } = PhotoHub.Client.Shared.Models.AssetSyncStatus.Synced;
+    public bool IsFavorite { get; set; }
 }
 
 public class ExifDataResponse

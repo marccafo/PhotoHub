@@ -315,6 +315,7 @@ else
     private bool _deleting = false;
     private bool _deleteConfirmOpen = false;
     private bool _tagBusy = false;
+    private bool _favoriteBusy = false;
     private string _newTag = string.Empty;
     
     private TimelineItem? _prevAsset;
@@ -406,7 +407,14 @@ else
                     }
                     else
                     {
-                        @* Indexado: Zoom + Share + Info + Download + Delete + Add to album *@
+                        @* Indexado: Zoom + Favorite + Share + Info + Download + Delete + Add to album *@
+                        <MudTooltip Text="@(_asset != null && _asset.IsFavorite ? "Quitar de favoritos" : "Añadir a favoritos")">
+                            <MudIconButton Icon="@(_asset != null && _asset.IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
+                                           Color="@(_asset != null && _asset.IsFavorite ? Color.Error : Color.Inherit)"
+                                           OnClick="ToggleFavoriteAsync"
+                                           Disabled="@_favoriteBusy" />
+                        </MudTooltip>
+
                         <MudTooltip Text="@(_zoomed ? "Ajustar" : "Zoom")">
                             <MudIconButton Icon="@(_zoomed ? Icons.Material.Outlined.ZoomOut : Icons.Material.Outlined.ZoomIn)"
                                            Color="Color.Inherit" OnClick="ToggleZoom" />
@@ -666,6 +674,27 @@ else
         _zoomed = !_zoomed;
         UpdateNavbar();
         StateHasChanged();
+    }
+
+    private async Task ToggleFavoriteAsync()
+    {
+        if (_asset == null || _asset.Id == Guid.Empty || _favoriteBusy) return;
+        try
+        {
+            _favoriteBusy = true;
+            UpdateNavbar();
+            _asset.IsFavorite = await AssetService.ToggleFavoriteAsync(_asset.Id);
+            UpdateNavbar();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al actualizar favorito: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _favoriteBusy = false;
+            StateHasChanged();
+        }
     }
 
     private async Task ShareAsset()

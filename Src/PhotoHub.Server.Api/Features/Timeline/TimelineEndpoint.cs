@@ -112,7 +112,8 @@ public class TimelineEndpoint : IEndpoint
                 Width = asset.Exif?.Width,
                 Height = asset.Exif?.Height,
                 DeletedAt = asset.DeletedAt,
-                Tags = BuildTagList(asset)
+                Tags = BuildTagList(asset),
+                IsFavorite = asset.IsFavorite
             }).ToList();
 
             // Normalizar rutas existentes en BD para comparación

@@ -21,5 +21,6 @@ public class TimelineResponse
     public int? Height { get; set; }
     public DateTime? DeletedAt { get; set; }
     public List<string> Tags { get; set; } = new();
+    public bool IsFavorite { get; set; }
 }
 

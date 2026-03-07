@@ -44,6 +44,8 @@ public class Asset
     public Guid? FolderId { get; set; }
     public Folder? Folder { get; set; }
 
+    public bool IsFavorite { get; set; }
+
     public DateTime? DeletedAt { get; set; }
     [MaxLength(1000)]
     public string? DeletedFromPath { get; set; }

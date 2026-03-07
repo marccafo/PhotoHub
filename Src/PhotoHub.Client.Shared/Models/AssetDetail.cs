@@ -20,6 +20,7 @@ public class AssetDetail
     public List<ThumbnailInfo> Thumbnails { get; set; } = new();
     public List<string> Tags { get; set; } = new();
     public AssetSyncStatus SyncStatus { get; set; } = AssetSyncStatus.Pending;
+    public bool IsFavorite { get; set; }
     
     public string ThumbnailUrl => Id != Guid.Empty
         ? $"/api/assets/{Id}/thumbnail?size=Large" 

@@ -148,7 +148,8 @@ public class AssetService : IAssetService
                 AssetId = t.AssetId
             }).ToList(),
             Tags = response.Tags,
-            SyncStatus = response.SyncStatus
+            SyncStatus = response.SyncStatus,
+            IsFavorite = response.IsFavorite
         };
     }
 
@@ -310,6 +311,25 @@ public class AssetService : IAssetService
 
         var response = await _httpClient.GetFromJsonAsync<SearchResult>(url);
         return (response?.Items ?? new(), response?.HasMore ?? false);
+    }
+
+    public async Task<bool> ToggleFavoriteAsync(Guid assetId)
+    {
+        await SetAuthHeaderAsync();
+        var response = await _httpClient.PostAsync($"/api/assets/{assetId}/favorite", null);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<FavoriteToggleResult>();
+        return result?.IsFavorite ?? false;
+    }
+
+    public async Task<TimelinePageResult> GetFavoritesPageAsync(DateTime? cursor = null, int pageSize = 150)
+    {
+        await SetAuthHeaderAsync();
+        var url = $"/api/assets/favorites?pageSize={pageSize}";
+        if (cursor.HasValue)
+            url += $"&cursor={Uri.EscapeDataString(cursor.Value.ToUniversalTime().ToString("o"))}";
+        var response = await _httpClient.GetFromJsonAsync<TimelinePageResult>(url);
+        return response ?? new TimelinePageResult();
     }
 
     public async Task RestoreTrashAsync()

@@ -114,7 +114,8 @@ public class SearchEndpoint : IEndpoint
             SyncStatus = AssetSyncStatus.Synced,
             Width = a.Exif?.Width,
             Height = a.Exif?.Height,
-            Tags = BuildTagList(a)
+            Tags = BuildTagList(a),
+            IsFavorite = a.IsFavorite
         }).ToList();
 
         return Results.Ok(new SearchResponse { Items = items, HasMore = hasMore });

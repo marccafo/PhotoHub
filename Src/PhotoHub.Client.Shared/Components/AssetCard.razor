@@ -78,6 +78,22 @@
             filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));
             z-index: 2;
         }
+        .favorite-btn {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            z-index: 3;
+            opacity: 0;
+            transition: opacity 0.2s;
+            color: white;
+            filter: drop-shadow(0 0 2px rgba(0,0,0,0.6));
+        }
+        .asset-card-container:hover .favorite-btn {
+            opacity: 1;
+        }
+        .favorite-btn.is-favorite {
+            opacity: 1;
+        }
         .asset-pending {
             opacity: 0.6;
         }
@@ -144,8 +160,18 @@
         </div>
     }
 
+    @if (Asset.SyncStatus == AssetSyncStatus.Synced && Asset.Id != Guid.Empty)
+    {
+        <span @onclick:stopPropagation="true" class="favorite-btn @(Asset.IsFavorite ? "is-favorite" : "")">
+            <MudIconButton Icon="@(Asset.IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
+                           Size="Size.Medium"
+                           Color="Color.Inherit"
+                           OnClick="ToggleFavoriteAsync" />
+        </span>
+    }
+
     <div class="asset-card-overlay">
-        <MudText Typo="Typo.caption" Class="white-text" Style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+        <MudText Typo="Typo.caption" Class="white-text" Style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 36px;">
             @Asset.FileName
         </MudText>
     </div>
@@ -239,6 +265,19 @@
             Snackbar.Add("Error al sincronizar el asset", Severity.Error);
         }
         StateHasChanged();
+    }
+
+    private async Task ToggleFavoriteAsync()
+    {
+        try
+        {
+            Asset.IsFavorite = await AssetService.ToggleFavoriteAsync(Asset.Id);
+            StateHasChanged();
+        }
+        catch
+        {
+            Snackbar.Add("Error al actualizar favorito", Severity.Error);
+        }
     }
 
     private async Task HandleMouseOver()
