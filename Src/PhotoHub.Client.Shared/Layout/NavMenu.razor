@@ -30,10 +30,6 @@
                     Favoritos
                 </MudNavLink>
 
-                <MudNavLink Href="/my-shares" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Link" IconColor="Color.Inherit">
-                    Mis enlaces
-                </MudNavLink>
-
                 <MudNavGroup Title="Carpetas" Icon="@Icons.Material.Outlined.Folder" Expanded="true">
                     <MudNavLink Href="/folders/own" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Person">Mi Espacio</MudNavLink>
                     <MudNavLink Href="/folders/shared" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Groups">Espacio Compartido</MudNavLink>
@@ -45,7 +41,8 @@
 
                 <MudNavGroup Title="Álbumes" Icon="@Icons.Material.Outlined.Collections" Expanded="true">
                     <MudNavLink Href="/albums/own" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Person">Mis Álbumes</MudNavLink>
-                    <MudNavLink Href="/albums/shared" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.People">Compartidos</MudNavLink>
+                    <MudNavLink Href="/albums/shared" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.People">Compartidos conmigo</MudNavLink>
+                    <MudNavLink Href="/albums/public" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Link">Públicos</MudNavLink>
                 </MudNavGroup>
 
                 <MudDivider Class="my-2" />

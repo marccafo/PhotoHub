@@ -20,7 +20,6 @@ public class ListSharesEndpoint : IEndpoint
 
     private static async Task<IResult> Handle(
         [FromServices] ApplicationDbContext dbContext,
-        [FromQuery] Guid? assetId,
         [FromQuery] Guid? albumId,
         ClaimsPrincipal user,
         CancellationToken ct)
@@ -29,14 +28,13 @@ public class ListSharesEndpoint : IEndpoint
         if (!Guid.TryParse(userIdClaim?.Value, out var userId))
             return Results.Unauthorized();
 
-        if (assetId == null && albumId == null)
-            return Results.BadRequest(new { error = "assetId or albumId is required" });
+        if (albumId == null)
+            return Results.BadRequest(new { error = "albumId is required" });
 
         // Load all links for this asset/album, then filter expired ones in C#
         // to avoid Npgsql DateTime kind issues with timestamp-without-timezone columns
         var allLinks = await dbContext.SharedLinks
             .Where(l => l.CreatedById == userId &&
-                        l.AssetId == assetId &&
                         l.AlbumId == albumId)
             .OrderByDescending(l => l.CreatedAt)
             .ToListAsync(ct);

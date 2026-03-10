@@ -16,51 +16,8 @@ public class ShareMediaEndpoint : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        // Single asset share
-        app.MapGet("/api/share/{token}/thumbnail", HandleAssetThumbnail).WithTags("Share");
-        app.MapGet("/api/share/{token}/content", HandleAssetContent).WithTags("Share");
-
-        // Album asset share
         app.MapGet("/api/share/{token}/asset/{assetId:guid}/thumbnail", HandleAlbumAssetThumbnail).WithTags("Share");
         app.MapGet("/api/share/{token}/asset/{assetId:guid}/content", HandleAlbumAssetContent).WithTags("Share");
-    }
-
-    // ── Single asset ──────────────────────────────────────────────────────────
-
-    private static async Task<IResult> HandleAssetThumbnail(
-        [FromServices] ApplicationDbContext db,
-        [FromServices] ThumbnailGeneratorService thumbnailService,
-        [FromServices] SettingsService settings,
-        [FromRoute] string token,
-        [FromQuery] string size = "Medium",
-        [FromQuery] string? pw = null,
-        CancellationToken ct = default)
-    {
-        var link = await db.SharedLinks
-            .Include(l => l.Asset).ThenInclude(a => a!.Thumbnails)
-            .FirstOrDefaultAsync(l => l.Token == token && l.AssetId != null, ct);
-
-        if (!IsValidLink(link, pw)) return Results.NotFound();
-
-        return await ServeThumbnail(db, thumbnailService, settings, link!.Asset!, size, ct);
-    }
-
-    private static async Task<IResult> HandleAssetContent(
-        [FromServices] ApplicationDbContext db,
-        [FromServices] SettingsService settings,
-        [FromRoute] string token,
-        [FromQuery] bool? download,
-        [FromQuery] string? pw = null,
-        CancellationToken ct = default)
-    {
-        var link = await db.SharedLinks
-            .Include(l => l.Asset)
-            .FirstOrDefaultAsync(l => l.Token == token && l.AssetId != null, ct);
-
-        if (!IsValidLink(link, pw)) return Results.NotFound();
-        if (download == true && !link!.AllowDownload) return Results.Forbid();
-
-        return await ServeContent(settings, link!.Asset!, download, ct);
     }
 
     // ── Album asset ───────────────────────────────────────────────────────────

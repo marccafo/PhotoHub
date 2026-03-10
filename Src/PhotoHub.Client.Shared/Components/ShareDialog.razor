@@ -9,7 +9,7 @@
     <TitleContent>
         <MudText Typo="Typo.h6">
             <MudIcon Icon="@Icons.Material.Outlined.Link" Class="mr-2" Style="vertical-align:middle;" />
-            Compartir @(AssetFileName ?? AlbumName ?? "")
+            Compartir @(AlbumName ?? "")
         </MudText>
     </TitleContent>
     <DialogContent>
@@ -125,9 +125,7 @@
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
 
-    [Parameter] public Guid? AssetId { get; set; }
     [Parameter] public Guid? AlbumId { get; set; }
-    [Parameter] public string? AssetFileName { get; set; }
     [Parameter] public string? AlbumName { get; set; }
 
     // ── State ───────────────────────────────────────────────────────────────
@@ -147,7 +145,7 @@
     protected override async Task OnInitializedAsync()
     {
         _loadingLinks = true;
-        try { _publicLinks = await ShareService.GetShareLinksAsync(AssetId, AlbumId); }
+        try { _publicLinks = await ShareService.GetShareLinksAsync(null, AlbumId); }
         catch { /* non-critical */ }
         finally { _loadingLinks = false; }
     }
@@ -186,7 +184,6 @@
             _creatingLink = true;
             var request = new CreateShareLinkRequest
             {
-                AssetId = AssetId,
                 AlbumId = AlbumId,
                 Password = _newLinkPasswordEnabled ? _newLinkPassword : null,
                 AllowDownload = _newLinkAllowDownload,

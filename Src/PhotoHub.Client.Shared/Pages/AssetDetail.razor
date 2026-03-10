@@ -421,11 +421,6 @@ else
                                            Color="Color.Inherit" OnClick="ToggleZoom" />
                         </MudTooltip>
 
-                        <MudTooltip Text="Compartir">
-                            <MudIconButton Icon="@Icons.Material.Outlined.Link"
-                                           Color="Color.Inherit" OnClick="OpenShareDialog" />
-                        </MudTooltip>
-
                         <MudTooltip Text="Información">
                             <MudIconButton Icon="@(_infoOpen ? Icons.Material.Filled.Info : Icons.Material.Outlined.Info)"
                                            Color="Color.Inherit" OnClick="ToggleInfo" />
@@ -696,24 +691,6 @@ else
             _favoriteBusy = false;
             StateHasChanged();
         }
-    }
-
-    private async Task OpenShareDialog()
-    {
-        if (_asset == null || _asset.Id == Guid.Empty) return;
-        var parameters = new DialogParameters<ShareDialog>
-        {
-            { x => x.AssetId, _asset.Id },
-            { x => x.AssetFileName, _asset.FileName }
-        };
-        var options = new DialogOptions
-        {
-            MaxWidth = MaxWidth.Small,
-            FullWidth = true,
-            CloseButton = true,
-            CloseOnEscapeKey = true
-        };
-        await DialogService.ShowAsync<ShareDialog>($"Compartir {_asset.FileName}", parameters, options);
     }
 
     private async Task DownloadAsset()

@@ -28,9 +28,8 @@ public class GetSentSharesEndpoint : IEndpoint
             return Results.Unauthorized();
 
         var allLinks = await dbContext.SharedLinks
-            .Include(l => l.Asset)
             .Include(l => l.Album)
-            .Where(l => l.CreatedById == userId)
+            .Where(l => l.CreatedById == userId && l.AlbumId != null)
             .OrderByDescending(l => l.CreatedAt)
             .ToListAsync(ct);
 
@@ -50,13 +49,8 @@ public class GetSentSharesEndpoint : IEndpoint
             AllowDownload = l.AllowDownload,
             MaxViews = l.MaxViews,
             ViewCount = l.ViewCount,
-            AssetId = l.AssetId,
-            AssetFileName = l.Asset?.FileName,
-            AssetType = l.Asset?.Type.ToString(),
-            AssetThumbnailUrl = l.Asset != null ? $"/api/share/{l.Token}/thumbnail" : null,
             AlbumId = l.AlbumId,
-            AlbumName = l.Album?.Name,
-            AlbumCoverUrl = l.Album != null ? $"/api/share/{l.Token}/thumbnail" : null
+            AlbumName = l.Album?.Name
         }).ToList();
 
         return Results.Ok(result);
@@ -72,11 +66,6 @@ public class SentShareLinkDto
     public bool AllowDownload { get; set; } = true;
     public int? MaxViews { get; set; }
     public int ViewCount { get; set; }
-    public Guid? AssetId { get; set; }
-    public string? AssetFileName { get; set; }
-    public string? AssetType { get; set; }
-    public string? AssetThumbnailUrl { get; set; }
     public Guid? AlbumId { get; set; }
     public string? AlbumName { get; set; }
-    public string? AlbumCoverUrl { get; set; }
 }

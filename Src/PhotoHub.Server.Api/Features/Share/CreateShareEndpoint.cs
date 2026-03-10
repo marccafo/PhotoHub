@@ -29,16 +29,11 @@ public class CreateShareEndpoint : IEndpoint
         if (!Guid.TryParse(userIdClaim?.Value, out var userId))
             return Results.Unauthorized();
 
-        if (request.AssetId == null && request.AlbumId == null)
-            return Results.BadRequest(new { error = "AssetId or AlbumId is required" });
+        if (request.AlbumId == null)
+            return Results.BadRequest(new { error = "AlbumId is required" });
 
         // Verify ownership / access
-        if (request.AssetId.HasValue)
-        {
-            var exists = await dbContext.Assets.AnyAsync(a => a.Id == request.AssetId && a.DeletedAt == null, ct);
-            if (!exists) return Results.NotFound(new { error = "Asset not found" });
-        }
-        else if (request.AlbumId.HasValue)
+        if (request.AlbumId.HasValue)
         {
             var isAdmin = user.IsInRole("Admin");
             var album = await dbContext.Albums
@@ -53,7 +48,6 @@ public class CreateShareEndpoint : IEndpoint
         var link = new SharedLink
         {
             Token = Guid.NewGuid().ToString("N"),
-            AssetId = request.AssetId,
             AlbumId = request.AlbumId,
             CreatedById = userId,
             ExpiresAt = request.ExpiresAt,
@@ -73,7 +67,6 @@ public class CreateShareEndpoint : IEndpoint
     internal static ShareLinkResponse ToResponse(SharedLink link) => new()
     {
         Token = link.Token,
-        AssetId = link.AssetId,
         AlbumId = link.AlbumId,
         CreatedAt = link.CreatedAt,
         ExpiresAt = link.ExpiresAt,
@@ -86,7 +79,6 @@ public class CreateShareEndpoint : IEndpoint
 
 public class CreateShareRequest
 {
-    public Guid? AssetId { get; set; }
     public Guid? AlbumId { get; set; }
     public DateTime? ExpiresAt { get; set; }
     public string? Password { get; set; }
@@ -97,7 +89,6 @@ public class CreateShareRequest
 public class ShareLinkResponse
 {
     public string Token { get; set; } = string.Empty;
-    public Guid? AssetId { get; set; }
     public Guid? AlbumId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? ExpiresAt { get; set; }

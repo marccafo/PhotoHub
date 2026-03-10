@@ -24,8 +24,6 @@ public class GetShareEndpoint : IEndpoint
         CancellationToken ct)
     {
         var link = await dbContext.SharedLinks
-            .Include(l => l.Asset).ThenInclude(a => a!.Exif)
-            .Include(l => l.Asset).ThenInclude(a => a!.Thumbnails)
             .Include(l => l.Album).ThenInclude(a => a!.AlbumAssets).ThenInclude(aa => aa.Asset).ThenInclude(a => a.Exif)
             .Include(l => l.Album).ThenInclude(a => a!.AlbumAssets).ThenInclude(aa => aa.Asset).ThenInclude(a => a.Thumbnails)
             .FirstOrDefaultAsync(l => l.Token == token, ct);
@@ -56,30 +54,6 @@ public class GetShareEndpoint : IEndpoint
         // Append password to media URLs so the media endpoints can also validate it
         var pwSuffix = !string.IsNullOrEmpty(pw) ? $"?pw={Uri.EscapeDataString(pw)}" : string.Empty;
 
-        if (link.AssetId.HasValue && link.Asset != null)
-        {
-            var asset = link.Asset;
-            return Results.Ok(new SharedContentResponse
-            {
-                Token = token,
-                Type = "asset",
-                AllowDownload = link.AllowDownload,
-                Asset = new SharedAssetDto
-                {
-                    Id = asset.Id,
-                    FileName = asset.FileName,
-                    Type = asset.Type.ToString(),
-                    CreatedDate = asset.CreatedDate,
-                    FileSize = asset.FileSize,
-                    Width = asset.Exif?.Width,
-                    Height = asset.Exif?.Height,
-                    ThumbnailUrl = $"/api/share/{token}/thumbnail{pwSuffix}",
-                    ContentUrl = $"/api/share/{token}/content{pwSuffix}"
-                },
-                ExpiresAt = link.ExpiresAt
-            });
-        }
-
         if (link.AlbumId.HasValue && link.Album != null)
         {
             var album = link.Album;
@@ -101,7 +75,7 @@ public class GetShareEndpoint : IEndpoint
             return Results.Ok(new SharedContentResponse
             {
                 Token = token,
-                Type = "album",
+
                 AllowDownload = link.AllowDownload,
                 Album = new SharedAlbumDto
                 {
@@ -122,11 +96,9 @@ public class GetShareEndpoint : IEndpoint
 public class SharedContentResponse
 {
     public string Token { get; set; } = string.Empty;
-    public string Type { get; set; } = string.Empty; // "asset" | "album"
     public bool RequiresPassword { get; set; }
     public bool WrongPassword { get; set; }
     public bool AllowDownload { get; set; } = true;
-    public SharedAssetDto? Asset { get; set; }
     public SharedAlbumDto? Album { get; set; }
     public List<SharedAssetDto>? Assets { get; set; }
     public DateTime? ExpiresAt { get; set; }
