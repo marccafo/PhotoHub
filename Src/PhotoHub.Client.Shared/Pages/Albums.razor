@@ -124,7 +124,7 @@
         z-index: 5;
     }
 
-    .album-link-badge {
+    .album-grid-share-btn {
         position: absolute;
         top: 8px;
         right: 8px;
@@ -139,22 +139,21 @@
         transition: background 0.15s;
     }
 
-    .album-link-badge:hover {
-        background: var(--mud-palette-primary);
+    .album-grid-share-btn.active {
+        color: var(--mud-palette-primary-lighten);
     }
 
-    .album-link-badge.with-group-badge {
+    .album-grid-share-btn:hover {
+        background: var(--mud-palette-primary);
+        color: white;
+    }
+
+    .album-grid-share-btn.with-group-badge {
         top: 40px;
     }
 
     .album-list-share-btn {
-        opacity: 0;
-        transition: opacity 0.15s;
         flex-shrink: 0;
-    }
-
-    .album-list-item:hover .album-list-share-btn {
-        opacity: 1;
     }
 
     .album-list-shared-badge {
@@ -197,6 +196,7 @@
     }
 
     .album-list-info {
+        flex: 1;
         min-width: 0;
     }
 
@@ -368,13 +368,13 @@
                                             <span>@album.SharedWithCount</span>
                                         </div>
                                     }
-                                    @if (album.HasActiveShareLink && album.IsOwner)
+                                    @if (album.IsOwner)
                                     {
-                                        <div class="album-link-badge @(album.SharedWithCount > 0 ? "with-group-badge" : "")"
-                                             title="Gestionar enlace público"
+                                        <div class="album-grid-share-btn @(album.HasActiveShareLink ? "active" : "") @(album.SharedWithCount > 0 ? "with-group-badge" : "")"
+                                             title="@(album.HasActiveShareLink ? "Gestionar enlace" : "Compartir álbum")"
                                              @onclick:stopPropagation="true"
                                              @onclick="() => OpenShareDialogForAlbum(album.Id, album.Name)">
-                                            <MudIcon Icon="@Icons.Material.Outlined.Link" Size="Size.Small" />
+                                            <MudIcon Icon="@Icons.Material.Outlined.Share" Size="Size.Small" />
                                         </div>
                                     }
                                     <MudCard Class="album-card" Style="cursor: pointer;">
@@ -449,7 +449,7 @@
                                         @if (album.HasActiveShareLink)
                                         {
                                             <div class="album-list-shared-badge" title="Tiene enlace público activo">
-                                                <MudIcon Icon="@Icons.Material.Outlined.Link" Size="Size.Small" />
+                                                <MudIcon Icon="@Icons.Material.Outlined.Share" Size="Size.Small" />
                                             </div>
                                         }
                                     </MudText>
@@ -461,7 +461,7 @@
                                 {
                                     <div @onclick:stopPropagation="true">
                                         <MudTooltip Text="@(album.HasActiveShareLink ? "Gestionar enlace" : "Compartir álbum")">
-                                            <MudIconButton Icon="@(album.HasActiveShareLink ? Icons.Material.Outlined.Link : Icons.Material.Outlined.AddLink)"
+                                            <MudIconButton Icon="@Icons.Material.Outlined.Share"
                                                            Size="Size.Small"
                                                            Color="@(album.HasActiveShareLink ? Color.Primary : Color.Default)"
                                                            Class="album-list-share-btn"
@@ -496,7 +496,7 @@ else
             @if (_selectedAlbum?.IsOwner == true)
             {
                 <MudTooltip Text="Compartir">
-                    <MudIconButton Icon="@Icons.Material.Outlined.Link"
+                    <MudIconButton Icon="@Icons.Material.Outlined.Share"
                                    Color="Color.Inherit"
                                    OnClick="OpenAlbumShareDialog" />
                 </MudTooltip>
