@@ -1,0 +1,45 @@
+services:
+  photohub-api:
+    build:
+      context: .
+      dockerfile: Src/PhotoHub.Server.Api/Dockerfile
+    container_name: photohub-api
+    ports:
+      - "8080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__Postgres=Host=photohub-db;Port=5432;Database=${POSTGRES_DB:-photohub};Username=${POSTGRES_USER:-photohub_user};Password=${POSTGRES_PASSWORD}
+      - Jwt__Key=${JWT_KEY}
+      - Jwt__Issuer=PhotoHub
+      - Jwt__Audience=PhotoHub
+      - ASSETS_PATH=/data/assets
+      - THUMBNAILS_PATH=/data/thumbnails
+      - HTTPS_REDIRECT=${HTTPS_REDIRECT:-false}
+    volumes:
+      - ${ASSETS_PATH:-/DATA/Media/Photos}:/data/assets:ro
+      - photohub_thumbnails:/data/thumbnails
+    depends_on:
+      photohub-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  photohub-db:
+    image: postgres:17-alpine
+    container_name: photohub-db
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-photohub}
+      - POSTGRES_USER=${POSTGRES_USER:-photohub_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - photohub_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-photohub_user} -d $${POSTGRES_DB:-photohub}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  photohub_db_data:
+  photohub_thumbnails:

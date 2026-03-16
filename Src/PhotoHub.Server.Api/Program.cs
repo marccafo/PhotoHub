@@ -105,7 +105,10 @@ app.Use(async (context, next) =>
     }
 });
 
-app.UseHttpsRedirection();
+if (builder.Configuration.GetValue<bool>("HTTPS_REDIRECT"))
+{
+    app.UseHttpsRedirection();
+}
 
 // IMPORTANTE: Authentication y Authorization deben ir antes de UseBlazorFrameworkFiles
 app.UseAuthentication();

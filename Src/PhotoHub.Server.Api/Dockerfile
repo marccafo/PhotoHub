@@ -1,5 +1,4 @@
-﻿FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
-# Instalar ffmpeg y dependencias para procesamiento de imágenes
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     libgdiplus \
@@ -9,22 +8,23 @@ RUN apt-get update && apt-get install -y \
 USER $APP_UID
 WORKDIR /app
 EXPOSE 8080
-EXPOSE 8081
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["Src/PhotoHub.Api/PhotoHub.Api.csproj", "Src/PhotoHub.Api/"]
-RUN dotnet restore "Src/PhotoHub.Api/PhotoHub.Api.csproj"
+COPY ["Src/PhotoHub.Server.Api/PhotoHub.Server.Api.csproj", "Src/PhotoHub.Server.Api/"]
+COPY ["Src/PhotoHub.Client.Shared/PhotoHub.Client.Shared.csproj", "Src/PhotoHub.Client.Shared/"]
+COPY ["Src/PhotoHub.Client.Web/PhotoHub.Client.Web.csproj", "Src/PhotoHub.Client.Web/"]
+RUN dotnet restore "Src/PhotoHub.Server.Api/PhotoHub.Server.Api.csproj"
 COPY . .
-WORKDIR "/src/Src/PhotoHub.Api"
-RUN dotnet build "./PhotoHub.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build
+WORKDIR "/src/Src/PhotoHub.Server.Api"
+RUN dotnet build "PhotoHub.Server.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "./PhotoHub.Api.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "PhotoHub.Server.Api.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "PhotoHub.Api.dll"]
+ENTRYPOINT ["dotnet", "PhotoHub.Server.Api.dll"]
