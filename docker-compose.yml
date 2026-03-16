@@ -1,8 +1,6 @@
 services:
   photohub-api:
-    build:
-      context: .
-      dockerfile: Src/PhotoHub.Server.Api/Dockerfile
+    image: ghcr.io/marccafo/photohub:latest
     container_name: photohub-api
     ports:
       - "8080:8080"
