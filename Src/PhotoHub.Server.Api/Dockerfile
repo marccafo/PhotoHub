@@ -18,11 +18,11 @@ COPY ["Src/PhotoHub.Client.Web/PhotoHub.Client.Web.csproj", "Src/PhotoHub.Client
 RUN dotnet restore "Src/PhotoHub.Server.Api/PhotoHub.Server.Api.csproj"
 COPY . .
 WORKDIR "/src/Src/PhotoHub.Server.Api"
-RUN dotnet build "PhotoHub.Server.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build
+RUN dotnet build "PhotoHub.Server.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build -m:1
 
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "PhotoHub.Server.Api.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "PhotoHub.Server.Api.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false -m:1
 
 FROM base AS final
 WORKDIR /app
