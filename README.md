@@ -10,7 +10,8 @@ Sistema de gestión de fotos y videos auto-hospedado. Indexa, organiza y visuali
 - **Mapa** — Visualización geográfica por metadatos de ubicación
 - **Miniaturas** — Generación paralela en tres tamaños (small, medium, large)
 - **Etiquetas** — Tags automáticos por ML y tags manuales de usuario
-- **Multi-usuario** — Roles, permisos por carpeta y álbum
+- **Archivado** — Archiva assets para ocultarlos de la vista principal sin eliminarlos
+- **Multi-usuario** — Roles, permisos por carpeta y álbum, admin principal protegido
 - **Sincronización desde dispositivo** — Subida de assets desde navegador o app nativa
 - **JWT + Refresh Token** — Autenticación con soporte multi-dispositivo
 - **Multiplataforma** — Web (Blazor WASM), Android, iOS, Windows, macOS
@@ -41,6 +42,12 @@ PhotoHub.sln
 ```
 
 ### Responsabilidades por proyecto
+
+**`Server.Api`** — Backend completo:
+- API REST con endpoints por feature (`/api/assets`, `/api/albums`, `/api/users`, etc.)
+- Indexación incremental de assets con extracción EXIF, miniaturas y jobs ML
+- Autenticación JWT + Refresh Tokens, gestión de usuarios y permisos
+- Migraciones de base de datos (EF Core + PostgreSQL)
 
 **`Client.Shared`** — Todo lo platform-agnostic:
 - Componentes: `AssetCard`, `ApiErrorDialog`, `EmptyState`
@@ -112,6 +119,7 @@ dotnet run
 | `Jwt:Audience` | Audiencia del token | `PhotoHub` |
 | `ASSETS_PATH` | Ruta al directorio de assets | `C:\PhotoHubAssets\NAS\Assets` |
 | `THUMBNAILS_PATH` | Ruta donde se guardan las miniaturas | `{WorkDir}/thumbnails` |
+| `FFMPEG_PATH` | Ruta al directorio con los binarios de FFmpeg | Descargado automáticamente si no se especifica |
 
 ### Usuario administrador (desarrollo)
 
@@ -122,10 +130,14 @@ Configurado en `appsettings.Development.json`:
   "AdminUser": {
     "Username": "admin",
     "Email": "admin@photohub.local",
-    "Password": "admin123"
+    "Password": "admin123",
+    "FirstName": "Administrador",
+    "LastName": "Sistema"
   }
 }
 ```
+
+El primer usuario admin creado al arrancar se marca automáticamente como **admin principal** (`IsPrimaryAdmin = true`). El admin principal no puede ser eliminado, desactivado ni degradar su rol desde la API, garantizando que siempre exista al menos un administrador en el sistema.
 
 ### Docker Compose — variables personalizables
 
