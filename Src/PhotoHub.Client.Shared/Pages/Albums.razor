@@ -102,6 +102,73 @@
         box-shadow: none !important;
     }
 
+    /* ── Collage de previsualización ── */
+    .album-thumb-collage {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        overflow: hidden;
+        background: var(--mud-palette-surface);
+    }
+
+    .collage-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr 1fr;
+        width: 100%;
+        height: 100%;
+        gap: 2px;
+        transition: gap 0.35s ease;
+    }
+
+    .album-card-container:hover .collage-grid {
+        gap: 3px;
+    }
+
+    .collage-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.4s ease;
+        display: block;
+    }
+
+    .album-card-container:hover .collage-img {
+        transform: scale(1.06);
+    }
+
+    .collage-single {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.35s ease;
+        display: block;
+    }
+
+    .album-card-container:hover .collage-single {
+        transform: scale(1.06);
+    }
+
+    .collage-empty {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, var(--mud-palette-primary) 0%, var(--mud-palette-primary-dark, #4f46e5) 100%);
+        color: white;
+    }
+
+    .collage-overlay {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 12px;
+        background: linear-gradient(transparent, rgba(0,0,0,0.82));
+        pointer-events: none;
+    }
+
     .albums-toolbar {
         display: flex;
         align-items: center;
@@ -391,22 +458,27 @@
                                     }
                                     <MudCard Class="album-card" Style="cursor: pointer;">
                                         <MudCardContent Style="padding: 0;">
-                                            <div style="position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: hidden;">
-                                                @if (!string.IsNullOrEmpty(album.CoverThumbnailUrl))
+                                            <div class="album-thumb-collage">
+                                                @if (album.PreviewThumbnailUrls.Count >= 4)
                                                 {
-                                                    <img src="@album.CoverThumbnailUrl"
-                                                         style="width: 100%; height: 100%; object-fit: cover;"
-                                                         alt="@album.Name" />
+                                                    <div class="collage-grid">
+                                                        @foreach (var url in album.PreviewThumbnailUrls.Take(4))
+                                                        {
+                                                            <img src="@url" class="collage-img" loading="lazy" alt="" />
+                                                        }
+                                                    </div>
+                                                }
+                                                else if (!string.IsNullOrEmpty(album.CoverThumbnailUrl))
+                                                {
+                                                    <img src="@album.CoverThumbnailUrl" class="collage-single" loading="lazy" alt="@album.Name" />
                                                 }
                                                 else
                                                 {
-                                                    <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--mud-palette-primary) 0%, var(--mud-palette-primary-dark) 100%);">
-                                                        <MudIcon Icon="@Icons.Material.Filled.Collections"
-                                                                 Size="Size.Large"
-                                                                 Color="Color.Inherit" />
+                                                    <div class="collage-empty">
+                                                        <MudIcon Icon="@Icons.Material.Filled.Collections" Size="Size.Large" Color="Color.Inherit" />
                                                     </div>
                                                 }
-                                                <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 12px; background: linear-gradient(transparent, rgba(0,0,0,0.8));">
+                                                <div class="collage-overlay">
                                                     <MudText Typo="Typo.body2" Style="color: white; font-weight: 600; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">@album.Name</MudText>
                                                     <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.9);">
                                                         @album.AssetCount @(album.AssetCount == 1 ? "foto" : "fotos")

@@ -96,6 +96,23 @@ html, body {
     background: var(--mud-palette-surface);
 }
 
+/* ── Album hero breadcrumb (siempre blanco sobre la imagen) ─ */
+.album-hero-content .mud-breadcrumb-item a,
+.album-hero-content .mud-breadcrumb-item span,
+.album-hero-content .mud-breadcrumb-separator {
+    color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.album-hero-content .mud-breadcrumb-item a:hover {
+    color: white !important;
+}
+
+/* ── Dialog actions con margen generoso ─────────────────── */
+.mud-dialog-actions {
+    padding: 12px 24px 20px !important;
+    gap: 8px;
+}
+
 /* ── Nav active pill ─────────────────────────────────────── */
 .mud-nav-link {
     border-radius: 8px !important;

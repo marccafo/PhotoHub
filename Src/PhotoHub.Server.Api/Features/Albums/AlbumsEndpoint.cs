@@ -165,7 +165,12 @@ public class AlbumsEndpoint : IEndpoint
                     ? $"/api/assets/{a.CoverAssetId}/thumbnail?size=Medium"
                     : a.AlbumAssets.OrderBy(aa => aa.Order).FirstOrDefault()?.Asset != null
                         ? $"/api/assets/{a.AlbumAssets.OrderBy(aa => aa.Order).First().AssetId}/thumbnail?size=Medium"
-                        : null
+                        : null,
+                PreviewThumbnailUrls = a.AlbumAssets
+                    .OrderBy(aa => aa.Order)
+                    .Take(4)
+                    .Select(aa => $"/api/assets/{aa.AssetId}/thumbnail?size=Small")
+                    .ToList()
             }).ToList();
 
             return Results.Ok(response);
@@ -838,6 +843,7 @@ public class AlbumResponse
     public DateTime UpdatedAt { get; set; }
     public int AssetCount { get; set; }
     public string? CoverThumbnailUrl { get; set; }
+    public List<string> PreviewThumbnailUrls { get; set; } = new();
     public bool IsOwner { get; set; }
     public bool IsShared { get; set; }
     public int SharedWithCount { get; set; }

@@ -9,6 +9,7 @@ public class AlbumItem
     public DateTime UpdatedAt { get; set; }
     public int AssetCount { get; set; }
     public string? CoverThumbnailUrl { get; set; }
+    public List<string> PreviewThumbnailUrls { get; set; } = new();
     public bool IsOwner { get; set; }
     public bool IsShared { get; set; }
     public int SharedWithCount { get; set; }

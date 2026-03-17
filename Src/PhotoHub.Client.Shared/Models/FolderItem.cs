@@ -9,6 +9,7 @@ public class FolderItem
     public DateTime CreatedAt { get; set; }
     public int AssetCount { get; set; }
     public Guid? FirstAssetId { get; set; }
+    public List<Guid> PreviewAssetIds { get; set; } = new();
     public bool IsShared { get; set; }
     public bool IsOwner { get; set; }
     public int SharedWithCount { get; set; }
@@ -17,4 +18,8 @@ public class FolderItem
     public string? ThumbnailUrl => FirstAssetId.HasValue
         ? $"/api/assets/{FirstAssetId.Value}/thumbnail?size=Medium"
         : null;
+
+    public List<string> PreviewThumbnailUrls => PreviewAssetIds
+        .Select(id => $"/api/assets/{id}/thumbnail?size=Small")
+        .ToList();
 }

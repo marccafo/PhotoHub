@@ -37,6 +37,10 @@
         width: 100%;
         height: 100%;
         object-fit: cover;
+        transition: transform 0.35s ease;
+    }
+    .folder-card-container:hover .folder-card-thumbnail {
+        transform: scale(1.06);
     }
     .folder-card-icon {
         width: 100%;
@@ -52,8 +56,32 @@
         left: 0;
         right: 0;
         padding: 12px;
-        background: linear-gradient(transparent, rgba(0,0,0,0.8));
+        background: linear-gradient(transparent, rgba(0,0,0,0.82));
         color: white;
+        pointer-events: none;
+    }
+    /* ── Collage de previsualización ── */
+    .folder-collage-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr 1fr;
+        width: 100%;
+        height: 100%;
+        gap: 2px;
+        transition: gap 0.35s ease;
+    }
+    .folder-card-container:hover .folder-collage-grid {
+        gap: 3px;
+    }
+    .folder-collage-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.4s ease;
+        display: block;
+    }
+    .folder-card-container:hover .folder-collage-img {
+        transform: scale(1.06);
     }
     .folder-card-overlay-name {
         font-weight: 600;
@@ -681,7 +709,16 @@ else
                     </div>
                 }
 
-                @if (folderData.ThumbnailUrl != null)
+                @if (folderData.PreviewThumbnailUrls.Count >= 4)
+                {
+                    <div class="folder-collage-grid">
+                        @foreach (var url in folderData.PreviewThumbnailUrls.Take(4))
+                        {
+                            <img src="@url" class="folder-collage-img" loading="lazy" alt="" />
+                        }
+                    </div>
+                }
+                else if (folderData.ThumbnailUrl != null)
                 {
                     <img src="@folderData.ThumbnailUrl" alt="@folderData.Name" class="folder-card-thumbnail" loading="lazy" />
                 }

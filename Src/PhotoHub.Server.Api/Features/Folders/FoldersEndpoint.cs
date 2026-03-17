@@ -147,6 +147,10 @@ public class FoldersEndpoint : IEndpoint
                         .Where(a => IsBinPath(f.Path) ? a.DeletedAt != null : a.DeletedAt == null)
                         .OrderByDescending(a => a.ScannedAt).ThenByDescending(a => a.ModifiedDate)
                         .FirstOrDefault()?.Id,
+                    PreviewAssetIds = f.Assets
+                        .Where(a => IsBinPath(f.Path) ? a.DeletedAt != null : a.DeletedAt == null)
+                        .OrderByDescending(a => a.ScannedAt).ThenByDescending(a => a.ModifiedDate)
+                        .Take(4).Select(a => a.Id).ToList(),
                     IsOwner = userPerm?.CanManagePermissions ?? isAdmin,
                     IsShared = f.Path.StartsWith("/assets/shared", StringComparison.OrdinalIgnoreCase),
                     SharedWithCount = folderSharedCounts.TryGetValue(f.Id, out var count) ? count : 0
@@ -222,6 +226,10 @@ public class FoldersEndpoint : IEndpoint
                     .Where(a => IsBinPath(folder.Path) ? a.DeletedAt != null : a.DeletedAt == null)
                     .OrderByDescending(a => a.ScannedAt).ThenByDescending(a => a.ModifiedDate)
                     .FirstOrDefault()?.Id,
+                PreviewAssetIds = folder.Assets
+                    .Where(a => IsBinPath(folder.Path) ? a.DeletedAt != null : a.DeletedAt == null)
+                    .OrderByDescending(a => a.ScannedAt).ThenByDescending(a => a.ModifiedDate)
+                    .Take(4).Select(a => a.Id).ToList(),
                 IsOwner = userPermission?.CanManagePermissions ?? isAdmin,
                 IsShared = folder.Path.StartsWith("/assets/shared", StringComparison.OrdinalIgnoreCase),
                 SharedWithCount = sharedCount,
@@ -393,6 +401,10 @@ public class FoldersEndpoint : IEndpoint
                         .Where(a => IsBinPath(f.Path) ? a.DeletedAt != null : a.DeletedAt == null)
                         .OrderByDescending(a => a.ScannedAt).ThenByDescending(a => a.ModifiedDate)
                         .FirstOrDefault()?.Id,
+                    PreviewAssetIds = f.Assets
+                        .Where(a => IsBinPath(f.Path) ? a.DeletedAt != null : a.DeletedAt == null)
+                        .OrderByDescending(a => a.ScannedAt).ThenByDescending(a => a.ModifiedDate)
+                        .Take(4).Select(a => a.Id).ToList(),
                     IsOwner = userPerm?.CanManagePermissions ?? isAdmin,
                     IsShared = f.Path.StartsWith("/assets/shared", StringComparison.OrdinalIgnoreCase),
                     SharedWithCount = folderSharedCounts.TryGetValue(f.Id, out var count) ? count : 0,
