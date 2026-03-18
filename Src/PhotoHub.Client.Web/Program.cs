@@ -99,5 +99,11 @@ builder.Services.AddScoped<IShareService>(sp =>
     var authService = sp.GetRequiredService<PhotoHub.Client.Web.Services.AuthService>();
     return new ShareService(httpClient, async () => await authService.GetTokenAsync());
 });
+builder.Services.AddScoped<INotificationService>(sp =>
+{
+    var httpClient = sp.GetRequiredService<HttpClient>();
+    var authService = sp.GetRequiredService<PhotoHub.Client.Web.Services.AuthService>();
+    return new NotificationService(httpClient, async () => await authService.GetTokenAsync());
+});
 
 await builder.Build().RunAsync();

@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Security.Claims;
 using System.Threading.Channels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -18,10 +19,14 @@ public class DetectDuplicatesEndpoint : IEndpoint
         app.MapGet("/api/assets/duplicates/stream", (
             [FromQuery] bool cleanup,
             [FromQuery] bool physical,
+            HttpContext httpContext,
             CancellationToken cancellationToken) =>
-            physical
-                ? HandlePhysicalStream(serviceProvider, cancellationToken)
-                : HandleDbStream(cleanup, serviceProvider, cancellationToken))
+        {
+            var userId = Guid.TryParse(httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var uid) ? uid : Guid.Empty;
+            return physical
+                ? HandlePhysicalStream(serviceProvider, userId, cancellationToken)
+                : HandleDbStream(cleanup, serviceProvider, userId, cancellationToken);
+        })
         .WithName("DetectDuplicatesStream")
         .WithTags("Assets")
         .WithDescription("Streams duplicate detection. physical=true scans disk files; cleanup=true removes duplicate DB records.")
@@ -34,6 +39,7 @@ public class DetectDuplicatesEndpoint : IEndpoint
     private async IAsyncEnumerable<DuplicatesProgressUpdate> HandleDbStream(
         bool cleanup,
         IServiceProvider serviceProvider,
+        Guid userId,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var channel = Channel.CreateUnbounded<DuplicatesProgressUpdate>();
@@ -45,6 +51,7 @@ public class DetectDuplicatesEndpoint : IEndpoint
                 using var scope = serviceProvider.CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
                 var settingsService = scope.ServiceProvider.GetRequiredService<SettingsService>();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
                 await channel.Writer.WriteAsync(new DuplicatesProgressUpdate
                 {
@@ -151,13 +158,18 @@ public class DetectDuplicatesEndpoint : IEndpoint
                     }, cancellationToken);
                 }
 
+                var dbCompletionMsg = BuildDbCompletionMessage(stats);
                 await channel.Writer.WriteAsync(new DuplicatesProgressUpdate
                 {
-                    Message = BuildDbCompletionMessage(stats),
+                    Message = dbCompletionMsg,
                     Percentage = 100,
                     Statistics = Clone(stats),
                     IsCompleted = true
                 }, cancellationToken);
+
+                if (userId != Guid.Empty)
+                    await notificationService.CreateAsync(userId, NotificationType.JobCompleted,
+                        "Detección de duplicados completada", dbCompletionMsg);
             }
             catch (OperationCanceledException)
             {
@@ -180,6 +192,7 @@ public class DetectDuplicatesEndpoint : IEndpoint
     // -------------------------------------------------------------------------
     private async IAsyncEnumerable<DuplicatesProgressUpdate> HandlePhysicalStream(
         IServiceProvider serviceProvider,
+        Guid userId,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var channel = Channel.CreateUnbounded<DuplicatesProgressUpdate>();
@@ -193,6 +206,7 @@ public class DetectDuplicatesEndpoint : IEndpoint
                 var settingsService = scope.ServiceProvider.GetRequiredService<SettingsService>();
                 var hashService = scope.ServiceProvider.GetRequiredService<FileHashService>();
                 var scanner = scope.ServiceProvider.GetRequiredService<DirectoryScanner>();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
                 var assetsPath = settingsService.GetInternalAssetsPath();
 
@@ -329,13 +343,18 @@ public class DetectDuplicatesEndpoint : IEndpoint
                     }, cancellationToken);
                 }
 
+                var physCompletionMsg = BuildPhysicalCompletionMessage(stats);
                 await channel.Writer.WriteAsync(new DuplicatesProgressUpdate
                 {
-                    Message = BuildPhysicalCompletionMessage(stats),
+                    Message = physCompletionMsg,
                     Percentage = 100,
                     Statistics = Clone(stats),
                     IsCompleted = true
                 }, cancellationToken);
+
+                if (userId != Guid.Empty)
+                    await notificationService.CreateAsync(userId, NotificationType.JobCompleted,
+                        "Detección de duplicados (físico) completada", physCompletionMsg);
             }
             catch (OperationCanceledException)
             {

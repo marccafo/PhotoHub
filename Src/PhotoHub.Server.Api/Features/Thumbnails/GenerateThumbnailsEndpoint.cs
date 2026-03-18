@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Security.Claims;
 using System.Threading.Channels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -18,8 +19,11 @@ public class GenerateThumbnailsEndpoint : IEndpoint
         app.MapGet("/api/assets/thumbnails/stream", (
             [FromQuery] bool regenerate,
             [FromServices] ApplicationDbContext dbContext,
+            HttpContext httpContext,
             CancellationToken cancellationToken) =>
-            HandleStream(regenerate, serviceProvider, cancellationToken))
+            HandleStream(regenerate, serviceProvider,
+                Guid.TryParse(httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var uid) ? uid : Guid.Empty,
+                cancellationToken))
         .WithName("GenerateThumbnailsStream")
         .WithTags("Assets")
         .WithDescription("Streams thumbnail generation progress. Use regenerate=true to force-regenerate all thumbnails.")
@@ -29,6 +33,7 @@ public class GenerateThumbnailsEndpoint : IEndpoint
     private async IAsyncEnumerable<ThumbnailProgressUpdate> HandleStream(
         bool regenerate,
         IServiceProvider serviceProvider,
+        Guid userId,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var channel = Channel.CreateUnbounded<ThumbnailProgressUpdate>();
@@ -41,6 +46,7 @@ public class GenerateThumbnailsEndpoint : IEndpoint
                 var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
                 var thumbnailService = scope.ServiceProvider.GetRequiredService<ThumbnailGeneratorService>();
                 var settingsService = scope.ServiceProvider.GetRequiredService<SettingsService>();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
                 var assets = await dbContext.Assets
                     .OrderBy(a => a.CreatedDate)
@@ -127,13 +133,18 @@ public class GenerateThumbnailsEndpoint : IEndpoint
                     }, cancellationToken);
                 }
 
+                var completionMsg = BuildCompletionMessage(stats, regenerate);
                 await channel.Writer.WriteAsync(new ThumbnailProgressUpdate
                 {
-                    Message = BuildCompletionMessage(stats, regenerate),
+                    Message = completionMsg,
                     Percentage = 100,
                     Statistics = Clone(stats),
                     IsCompleted = true
                 }, cancellationToken);
+
+                if (userId != Guid.Empty)
+                    await notificationService.CreateAsync(userId, NotificationType.JobCompleted,
+                        "Miniaturas generadas", completionMsg);
             }
             catch (OperationCanceledException)
             {

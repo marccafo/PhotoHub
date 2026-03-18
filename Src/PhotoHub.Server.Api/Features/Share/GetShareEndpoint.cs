@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PhotoHub.Server.Api.Shared.Data;
 using PhotoHub.Server.Api.Shared.Interfaces;
+using PhotoHub.Server.Api.Shared.Models;
 using PhotoHub.Server.Api.Shared.Services;
 
 namespace PhotoHub.Server.Api.Features.Share;
@@ -19,6 +20,7 @@ public class GetShareEndpoint : IEndpoint
 
     private static async Task<IResult> Handle(
         [FromServices] ApplicationDbContext dbContext,
+        [FromServices] INotificationService notificationService,
         [FromRoute] string token,
         [FromQuery] string? pw,
         CancellationToken ct)
@@ -50,6 +52,19 @@ public class GetShareEndpoint : IEndpoint
         // Increment view count
         link.ViewCount++;
         await dbContext.SaveChangesAsync(ct);
+
+        // Notify album owner at view milestones
+        if (link.AlbumId.HasValue && ShouldNotifyShareView(link.ViewCount))
+        {
+            var albumName = link.Album?.Name ?? "tu álbum";
+            var viewText = link.ViewCount == 1 ? "vez" : "veces";
+            await notificationService.CreateAsync(
+                link.CreatedById,
+                NotificationType.ShareViewed,
+                "Álbum compartido visitado",
+                $"\"{albumName}\" ha sido visitado {link.ViewCount} {viewText}.",
+                $"/albums/{link.AlbumId}");
+        }
 
         // Append password to media URLs so the media endpoints can also validate it
         var pwSuffix = !string.IsNullOrEmpty(pw) ? $"?pw={Uri.EscapeDataString(pw)}" : string.Empty;
@@ -91,6 +106,10 @@ public class GetShareEndpoint : IEndpoint
 
         return Results.NotFound(new { error = "Shared content not found" });
     }
+
+    private static bool ShouldNotifyShareView(int viewCount)
+        => viewCount is 1 or 5 or 10 or 25 or 50 or 100
+           || (viewCount > 100 && viewCount % 100 == 0);
 }
 
 public class SharedContentResponse

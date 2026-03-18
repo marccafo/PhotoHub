@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using System.Security.Claims;
 using System.Threading.Channels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -26,7 +27,10 @@ public class IndexAssetsEndpoint : IEndpoint
             [FromServices] IMlJobService mlJobService,
             [FromServices] SettingsService settingsService,
             [FromServices] ApplicationDbContext dbContext,
-            CancellationToken cancellationToken) => HandleStream(directoryScanner, hashService, exifService, thumbnailService, mediaRecognitionService, mlJobService, settingsService, dbContext, serviceProvider, cancellationToken))
+            HttpContext httpContext,
+            CancellationToken cancellationToken) => HandleStream(directoryScanner, hashService, exifService, thumbnailService, mediaRecognitionService, mlJobService, settingsService, dbContext, serviceProvider,
+                Guid.TryParse(httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var uid) ? uid : Guid.Empty,
+                cancellationToken))
         .WithName("IndexAssetsStream")
         .WithTags("Assets")
         .WithDescription("Streams the scanning process progress for the internal assets directory")
@@ -58,6 +62,7 @@ public class IndexAssetsEndpoint : IEndpoint
         SettingsService settingsService,
         ApplicationDbContext dbContext,
         IServiceProvider serviceProvider,
+        Guid userId,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var channel = Channel.CreateUnbounded<IndexProgressUpdate>();
@@ -77,6 +82,7 @@ public class IndexAssetsEndpoint : IEndpoint
                 var scopedMediaRecognitionService = scope.ServiceProvider.GetRequiredService<MediaRecognitionService>();
                 var scopedThumbnailService = scope.ServiceProvider.GetRequiredService<ThumbnailGeneratorService>();
                 var scopedMlJobService = scope.ServiceProvider.GetRequiredService<IMlJobService>();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
                 
                 // Obtener la ruta interna del NAS (ASSETS_PATH)
                 var directoryPath = scopedSettingsService.GetInternalAssetsPath();
@@ -196,13 +202,17 @@ public class IndexAssetsEndpoint : IEndpoint
                 stats.IndexCompletedAt = DateTime.UtcNow;
                 stats.IndexDuration = stats.IndexCompletedAt - indexStartTime;
                 
-                await channel.Writer.WriteAsync(new IndexProgressUpdate 
-                { 
-                    Message = "Indexación completada con éxito.", 
-                    Percentage = 100, 
+                await channel.Writer.WriteAsync(new IndexProgressUpdate
+                {
+                    Message = "Indexación completada con éxito.",
+                    Percentage = 100,
                     Statistics = MapToBlazorStats(stats),
                     IsCompleted = true
                 }, cancellationToken);
+
+                if (userId != Guid.Empty)
+                    await notificationService.CreateAsync(userId, NotificationType.JobCompleted,
+                        "Indexación completada", "Indexación completada con éxito.");
             }
             catch (Exception ex)
             {

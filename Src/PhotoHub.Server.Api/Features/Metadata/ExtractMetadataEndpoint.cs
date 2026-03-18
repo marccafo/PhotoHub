@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Security.Claims;
 using System.Threading.Channels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,8 +18,11 @@ public class ExtractMetadataEndpoint : IEndpoint
         var serviceProvider = app.ServiceProvider;
         app.MapGet("/api/assets/metadata/stream", (
             [FromQuery] bool overwrite,
+            HttpContext httpContext,
             CancellationToken cancellationToken) =>
-            HandleStream(overwrite, serviceProvider, cancellationToken))
+            HandleStream(overwrite, serviceProvider,
+                Guid.TryParse(httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var uid) ? uid : Guid.Empty,
+                cancellationToken))
         .WithName("ExtractMetadataStream")
         .WithTags("Assets")
         .WithDescription("Streams metadata extraction progress. Use overwrite=true to re-extract all assets.")
@@ -28,6 +32,7 @@ public class ExtractMetadataEndpoint : IEndpoint
     private async IAsyncEnumerable<MetadataProgressUpdate> HandleStream(
         bool overwrite,
         IServiceProvider serviceProvider,
+        Guid userId,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var channel = Channel.CreateUnbounded<MetadataProgressUpdate>();
@@ -40,6 +45,7 @@ public class ExtractMetadataEndpoint : IEndpoint
                 var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
                 var exifService = scope.ServiceProvider.GetRequiredService<ExifExtractorService>();
                 var settingsService = scope.ServiceProvider.GetRequiredService<SettingsService>();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
                 var assets = await dbContext.Assets
                     .Include(a => a.Exif)
@@ -126,13 +132,18 @@ public class ExtractMetadataEndpoint : IEndpoint
                     }, cancellationToken);
                 }
 
+                var completionMsg = BuildCompletionMessage(stats);
                 await channel.Writer.WriteAsync(new MetadataProgressUpdate
                 {
-                    Message = BuildCompletionMessage(stats),
+                    Message = completionMsg,
                     Percentage = 100,
                     Statistics = Clone(stats),
                     IsCompleted = true
                 }, cancellationToken);
+
+                if (userId != Guid.Empty)
+                    await notificationService.CreateAsync(userId, NotificationType.JobCompleted,
+                        "Metadatos extraídos", completionMsg);
             }
             catch (OperationCanceledException)
             {

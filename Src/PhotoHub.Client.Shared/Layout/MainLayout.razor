@@ -1,5 +1,6 @@
 @inherits LayoutComponentBase
 @using PhotoHub.Client.Shared.Services
+@using PhotoHub.Client.Shared.Models
 @implements IDisposable
 @inject NavigationManager Navigation
 @inject LayoutService LayoutService
@@ -7,6 +8,7 @@
 @inject IAuthService AuthService
 @inject IDialogService DialogService
 @inject ApiErrorNotifier ApiErrorNotifier
+@inject INotificationService NotificationService
 
 <MudThemeProvider IsDarkMode="LayoutService.IsDarkMode" Theme="ThemeService.Theme" />
 <MudPopoverProvider />
@@ -60,29 +62,42 @@
                 </MudTooltip>
                 <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
                     <ActivatorContent>
-                        <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Inherit" OnClick="@context.ToggleAsync" />
+                        <MudBadge Content="@_unreadCount" Color="Color.Error" Overlap="true" Visible="@(_unreadCount > 0)">
+                            <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Inherit"
+                                           OnClick="@(async () => { await LoadRecentNotificationsAsync(); await context.ToggleAsync(); })" />
+                        </MudBadge>
                     </ActivatorContent>
                     <ChildContent>
-                        <div class="d-flex justify-space-between align-center px-4 pt-3">
+                        <div class="d-flex justify-space-between align-center px-4 pt-3" style="min-width: 320px;">
                             <MudText Typo="Typo.subtitle1">Notificaciones</MudText>
-                            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="MarkAllNotificationsRead" Disabled="@(!_notifications.Any())">
-                                Marcar todas como leídas
+                            <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                                       OnClick="MarkAllNotificationsReadAsync"
+                                       Disabled="@(_unreadCount == 0)">
+                                Marcar leídas
                             </MudButton>
                         </div>
                         <MudDivider Class="my-2" />
-                        <MudList T="NotificationItem" Class="px-2 pb-2">
-                            @if (_notifications.Any())
+                        <MudList T="NotificationDto" Class="px-2 pb-1">
+                            @if (_recentNotifications.Any())
                             {
-                                @foreach (var notification in _notifications)
+                                @foreach (var notification in _recentNotifications)
                                 {
-                                    <MudListItem>
-                                        <div class="d-flex flex-column">
-                                            <MudText Typo="Typo.body2" Class="@(notification.IsRead ? "mud-text-secondary" : "")">
-                                                @notification.Message
-                                            </MudText>
-                                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                                @notification.Timestamp.ToString("dd/MM/yyyy HH:mm")
-                                            </MudText>
+                                    <MudListItem Class="@(notification.IsRead ? "" : "mud-background-gray")">
+                                        <div class="d-flex align-start gap-2">
+                                            <MudIcon Icon="@GetNotificationIcon(notification.Type)"
+                                                     Color="@GetNotificationColor(notification.Type)"
+                                                     Size="Size.Small" Class="mt-1 flex-shrink-0" />
+                                            <div>
+                                                <MudText Typo="Typo.body2" Class="@(notification.IsRead ? "mud-text-secondary" : "font-weight-medium")">
+                                                    @notification.Title
+                                                </MudText>
+                                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                                    @notification.Message
+                                                </MudText>
+                                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                                    @FormatNotificationDate(notification.CreatedAt)
+                                                </MudText>
+                                            </div>
                                         </div>
                                     </MudListItem>
                                 }
@@ -94,6 +109,13 @@
                                 </MudListItem>
                             }
                         </MudList>
+                        <MudDivider />
+                        <div class="px-4 py-2">
+                            <MudButton Variant="Variant.Text" FullWidth="true" Color="Color.Primary"
+                                       OnClick="@(() => Navigation.NavigateTo("/notifications"))">
+                                Ver todas las notificaciones
+                            </MudButton>
+                        </div>
                     </ChildContent>
                 </MudMenu>
                 <AuthorizeView>
@@ -197,6 +219,9 @@
     private bool _drawerOpen = true;
     private string _searchQuery = "";
     private bool _isNavigating = false;
+    private int _unreadCount;
+    private List<NotificationDto> _recentNotifications = [];
+    private CancellationTokenSource? _pollingCts;
 
     private string GetAppBarClass()
     {
@@ -241,6 +266,8 @@
     {
         await LayoutService.InitializeAsync();
         await LoadCurrentUserAsync();
+        await LoadUnreadCountAsync();
+        StartNotificationPolling();
     }
 
     private void EnsureNavbarMatchesLocation()
@@ -283,6 +310,8 @@
 
     public void Dispose()
     {
+        _pollingCts?.Cancel();
+        _pollingCts?.Dispose();
         LayoutService.OnMajorUpdate -= StateHasChanged;
         AuthService.OnAuthStateChanged -= HandleAuthStateChanged;
         Navigation.LocationChanged -= HandleLocationChanged;
@@ -290,11 +319,6 @@
     }
 
     private UserDto? _currentUser;
-    private readonly List<NotificationItem> _notifications = new()
-    {
-        new NotificationItem { Message = "Indexación finalizada correctamente.", Timestamp = DateTime.UtcNow.AddMinutes(-12) },
-        new NotificationItem { Message = "Se han generado nuevas miniaturas.", Timestamp = DateTime.UtcNow.AddHours(-2) }
-    };
 
     private string UserInitial
         => !string.IsNullOrWhiteSpace(_currentUser?.FirstName)
@@ -399,12 +423,76 @@
         return $"/login?returnUrl={Uri.EscapeDataString(returnUrl)}";
     }
 
-    private void MarkAllNotificationsRead()
+    private void StartNotificationPolling()
     {
-        foreach (var notification in _notifications)
+        _pollingCts = new CancellationTokenSource();
+        var token = _pollingCts.Token;
+        _ = Task.Run(async () =>
         {
-            notification.IsRead = true;
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(60));
+            while (!token.IsCancellationRequested && await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
+            {
+                await InvokeAsync(async () =>
+                {
+                    await LoadUnreadCountAsync();
+                    StateHasChanged();
+                });
+            }
+        }, token);
+    }
+
+    private async Task LoadUnreadCountAsync()
+    {
+        try { _unreadCount = await NotificationService.GetUnreadCountAsync(); }
+        catch { /* no interrumpir el layout por fallo de notificaciones */ }
+    }
+
+    private async Task LoadRecentNotificationsAsync()
+    {
+        try
+        {
+            var result = await NotificationService.GetNotificationsAsync(page: 1, pageSize: 5);
+            _recentNotifications = result.Items;
+            _unreadCount = result.UnreadCount;
         }
+        catch { /* ignorar errores en el dropdown */ }
+    }
+
+    private async Task MarkAllNotificationsReadAsync()
+    {
+        try
+        {
+            await NotificationService.MarkAllAsReadAsync();
+            foreach (var n in _recentNotifications) n.IsRead = true;
+            _unreadCount = 0;
+        }
+        catch { }
+    }
+
+    private static string GetNotificationIcon(NotificationTypeDto type) => type switch
+    {
+        NotificationTypeDto.JobCompleted => Icons.Material.Filled.CheckCircle,
+        NotificationTypeDto.JobFailed   => Icons.Material.Filled.Error,
+        NotificationTypeDto.ShareViewed => Icons.Material.Filled.Visibility,
+        _                               => Icons.Material.Filled.Notifications
+    };
+
+    private static Color GetNotificationColor(NotificationTypeDto type) => type switch
+    {
+        NotificationTypeDto.JobCompleted => Color.Success,
+        NotificationTypeDto.JobFailed   => Color.Error,
+        NotificationTypeDto.ShareViewed => Color.Info,
+        _                               => Color.Default
+    };
+
+    private static string FormatNotificationDate(DateTime dt)
+    {
+        var diff = DateTime.UtcNow - dt;
+        if (diff.TotalMinutes < 1) return "Ahora mismo";
+        if (diff.TotalHours < 1)   return $"Hace {(int)diff.TotalMinutes} min";
+        if (diff.TotalDays < 1)    return $"Hace {(int)diff.TotalHours}h";
+        if (diff.TotalDays < 7)    return $"Hace {(int)diff.TotalDays}d";
+        return dt.ToLocalTime().ToString("dd/MM/yyyy");
     }
 
     private void OnSearchQueryChanged(string value)
@@ -474,10 +562,4 @@
         return result;
     }
 
-    private sealed class NotificationItem
-    {
-        public string Message { get; set; } = string.Empty;
-        public DateTime Timestamp { get; set; }
-        public bool IsRead { get; set; }
-    }
 }
