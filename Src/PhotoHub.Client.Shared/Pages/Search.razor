@@ -164,11 +164,11 @@ else
     private void OpenAsset(TimelineItem asset)
     {
         if (asset.SyncStatus == AssetSyncStatus.Synced)
-            Navigation.NavigateTo($"/asset/{asset.Id}");
+            Navigation.NavigateTo($"/asset/{asset.Id}?returnTo=search");
         else
         {
             var encodedPath = System.Net.WebUtility.UrlEncode(asset.FullPath);
-            Navigation.NavigateTo($"/asset/{Guid.Empty}?path={encodedPath}");
+            Navigation.NavigateTo($"/asset/{Guid.Empty}?path={encodedPath}&returnTo=search");
         }
     }
 }

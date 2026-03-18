@@ -358,7 +358,7 @@
         if (cluster.FirstAssetId.HasValue)
         {
             Console.WriteLine($"Opening asset {cluster.FirstAssetId.Value} from cluster with {cluster.Count} assets.");
-            Navigation.NavigateTo($"/asset/{cluster.FirstAssetId.Value}");
+            Navigation.NavigateTo($"/asset/{cluster.FirstAssetId.Value}?returnTo=map");
         }
         else
         {

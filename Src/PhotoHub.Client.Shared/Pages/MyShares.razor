@@ -227,7 +227,7 @@ else
     private List<SentShareLinkDto> _links = new();
     private bool _loading = true;
 
-    private void GoToAsset(Guid assetId) => Navigation.NavigateTo("/asset/" + assetId);
+    private void GoToAsset(Guid assetId) => Navigation.NavigateTo($"/asset/{assetId}?returnTo=my-shares");
 
     protected override async Task OnInitializedAsync()
     {

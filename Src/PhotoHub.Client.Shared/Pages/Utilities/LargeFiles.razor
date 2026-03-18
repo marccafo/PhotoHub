@@ -66,7 +66,7 @@ else
                 </div>
             </MudTd>
             <MudTd>
-                <MudLink Href="@($"/asset/{context.Id}")" Underline="Underline.None">
+                <MudLink Href="@($"/asset/{context.Id}?returnTo=utilities/large-files")" Underline="Underline.None">
                     <MudText Typo="Typo.body2" Style="word-break:break-all;">@context.FileName</MudText>
                 </MudLink>
             </MudTd>
@@ -84,7 +84,7 @@ else
             </MudTd>
             <MudTd>
                 <MudIconButton Icon="@Icons.Material.Outlined.OpenInNew" Size="Size.Small"
-                               Href="@($"/asset/{context.Id}")" Title="Ver detalle" />
+                               Href="@($"/asset/{context.Id}?returnTo=utilities/large-files")" Title="Ver detalle" />
             </MudTd>
         </RowTemplate>
     </MudTable>

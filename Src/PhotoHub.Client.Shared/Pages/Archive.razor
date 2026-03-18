@@ -423,7 +423,7 @@
             ToggleAssetSelection(asset.Id, !IsAssetSelected(asset.Id));
             return;
         }
-        Navigation.NavigateTo($"/asset/{asset.Id}");
+        Navigation.NavigateTo($"/asset/{asset.Id}?returnTo=archive");
     }
 
     private string GetGroupId(string groupName) => "group-" + groupName.Replace(" ", "-").ToLower();

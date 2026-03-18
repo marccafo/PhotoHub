@@ -105,7 +105,7 @@ else
                                          onerror="this.style.display='none'" />
                                 </div>
 
-                                <MudLink Href="@($"/asset/{asset.Id}")" Underline="Underline.None">
+                                <MudLink Href="@($"/asset/{asset.Id}?returnTo=utilities/duplicates")" Underline="Underline.None">
                                     <MudText Typo="Typo.body2" Style="word-break:break-all;font-weight:600;">@asset.FileName</MudText>
                                 </MudLink>
                                 <div class="d-flex gap-1 mt-1 flex-wrap">

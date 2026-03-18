@@ -489,12 +489,12 @@
 
         if (asset.SyncStatus == AssetSyncStatus.Synced)
         {
-            Navigation.NavigateTo($"/asset/{asset.Id}");
+            Navigation.NavigateTo($"/asset/{asset.Id}?returnTo=trash");
         }
         else
         {
             var encodedPath = System.Net.WebUtility.UrlEncode(asset.FullPath);
-            Navigation.NavigateTo($"/asset/{Guid.Empty}?path={encodedPath}");
+            Navigation.NavigateTo($"/asset/{Guid.Empty}?path={encodedPath}&returnTo=trash");
         }
     }
 
