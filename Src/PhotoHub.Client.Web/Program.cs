@@ -47,6 +47,7 @@ builder.Services.AddScoped<IAssetService>(sp =>
 });
 builder.Services.AddScoped<IIndexService, IndexService>();
 builder.Services.AddScoped<IThumbnailQueueService, ThumbnailQueueService>();
+builder.Services.AddScoped<IMetadataQueueService, MetadataQueueService>();
 builder.Services.AddScoped<IFolderService>(sp =>
 {
     var httpClient = sp.GetRequiredService<HttpClient>();
