@@ -75,6 +75,20 @@ public class FolderService : IFolderService
         }
     }
 
+    public async Task<List<FolderItem>> GetMyFolderTreeAsync()
+    {
+        try
+        {
+            await SetAuthHeaderAsync();
+            var response = await _httpClient.GetFromJsonAsync<List<FolderItem>>("/api/utilities/folders/tree");
+            return response ?? new List<FolderItem>();
+        }
+        catch
+        {
+            return new List<FolderItem>();
+        }
+    }
+
     public async Task<List<TimelineItem>> GetFolderAssetsAsync(Guid folderId)
     {
         try

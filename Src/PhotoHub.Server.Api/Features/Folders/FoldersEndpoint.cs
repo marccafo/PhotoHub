@@ -818,7 +818,7 @@ public class FoldersEndpoint : IEndpoint
         return Results.NoContent();
     }
 
-    private static bool TryGetUserId(ClaimsPrincipal user, out Guid userId)
+    internal static bool TryGetUserId(ClaimsPrincipal user, out Guid userId)
     {
         userId = Guid.Empty;
         var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
@@ -932,7 +932,7 @@ public class FoldersEndpoint : IEndpoint
             .AnyAsync(p => p.UserId == userId && p.FolderId == folderId && p.CanDelete, ct);
     }
 
-    private static async Task<List<Folder>> GetFoldersForUserAsync(
+    internal static async Task<List<Folder>> GetFoldersForUserAsync(
         ApplicationDbContext dbContext,
         Guid userId,
         bool isAdmin,
@@ -982,7 +982,7 @@ public class FoldersEndpoint : IEndpoint
         return allFolders.Where(f => allowedIds.Contains(f.Id)).ToList();
     }
 
-    private static void AddAncestorFolders(List<Folder> allFolders, HashSet<Guid> allowedIds)
+    internal static void AddAncestorFolders(List<Folder> allFolders, HashSet<Guid> allowedIds)
     {
         var lookup = allFolders.ToDictionary(f => f.Id, f => f);
 
@@ -1131,7 +1131,7 @@ public class FoldersEndpoint : IEndpoint
         return path.Replace('\\', '/').TrimEnd('/');
     }
 
-    private static bool TryGetUserIdFromPath(string path, out Guid userId)
+    internal static bool TryGetUserIdFromPath(string path, out Guid userId)
     {
         userId = Guid.Empty;
         if (string.IsNullOrWhiteSpace(path))
@@ -1150,7 +1150,7 @@ public class FoldersEndpoint : IEndpoint
         return Guid.TryParse(parts[usersIndex + 1], out userId);
     }
 
-    private static string GetUserRootPath(Guid userId)
+    internal static string GetUserRootPath(Guid userId)
     {
         return $"/assets/users/{userId}";
     }
@@ -1160,7 +1160,7 @@ public class FoldersEndpoint : IEndpoint
         return "/assets/shared";
     }
 
-    private static bool IsBinPath(string path)
+    internal static bool IsBinPath(string path)
     {
         var normalized = NormalizePath(path);
         return normalized.Contains("/_trash", StringComparison.OrdinalIgnoreCase);
@@ -1193,7 +1193,7 @@ public class FoldersEndpoint : IEndpoint
         }
     }
 
-    private static int UpdateTotalAssetCount(FolderResponse folder)
+    internal static int UpdateTotalAssetCount(FolderResponse folder)
     {
         var total = folder.AssetCount;
         foreach (var child in folder.SubFolders)

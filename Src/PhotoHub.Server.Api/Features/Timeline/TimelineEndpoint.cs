@@ -48,8 +48,8 @@ public class TimelineEndpoint : IEndpoint
                 return Results.Unauthorized();
             }
 
-            var isAdmin = user.IsInRole("Admin");
             var userRootPath = GetUserRootPath(userId);
+            var allowedFolderIds = await GetAllowedFolderIdsForUserAsync(dbContext, userId, userRootPath, cancellationToken);
 
             var query = dbContext.Assets
                 .Include(a => a.Exif)
@@ -57,13 +57,8 @@ public class TimelineEndpoint : IEndpoint
                 .Include(a => a.Tags)
                 .Include(a => a.UserTags)
                 .ThenInclude(ut => ut.UserTag)
-                .Where(a => a.DeletedAt == null && !a.IsArchived);
-
-            if (!isAdmin)
-            {
-                var allowedFolderIds = await GetAllowedFolderIdsForUserAsync(dbContext, userId, userRootPath, cancellationToken);
-                query = query.Where(a => a.FolderId.HasValue && allowedFolderIds.Contains(a.FolderId.Value));
-            }
+                .Where(a => a.DeletedAt == null && !a.IsArchived
+                         && a.FolderId.HasValue && allowedFolderIds.Contains(a.FolderId.Value));
 
             // Apply cursor (exclusive upper bound on CreatedDate)
             if (cursor.HasValue)
@@ -86,7 +81,7 @@ public class TimelineEndpoint : IEndpoint
             // (solo se usa en el scan de filesystem, que solo ocurre en la primera página)
             var allowedFolderPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             List<string> normalizedAllowedFolderPaths = new();
-            if (!isAdmin && !cursor.HasValue)
+            if (!cursor.HasValue)
             {
                 allowedFolderPaths = await GetAllowedFolderPathsForUserAsync(dbContext, userId, userRootPath, cancellationToken);
                 normalizedAllowedFolderPaths = allowedFolderPaths
@@ -183,30 +178,27 @@ public class TimelineEndpoint : IEndpoint
                                 continue;
                             }
 
-                            if (!isAdmin)
+                            var normalizedVirtualPath = NormalizePathForPrefix(virtualizedPath);
+                            var normalizedUserRootPath = NormalizePathForPrefix(userRootPath);
+
+                            // Si es una ruta de /assets/users/, debe pertenecer al usuario actual
+                            if (normalizedVirtualPath.StartsWith("/assets/users/", StringComparison.OrdinalIgnoreCase) &&
+                                !normalizedVirtualPath.StartsWith(normalizedUserRootPath, StringComparison.OrdinalIgnoreCase))
                             {
-                                var normalizedVirtualPath = NormalizePathForPrefix(virtualizedPath);
-                                var normalizedUserRootPath = NormalizePathForPrefix(userRootPath);
-
-                                // Si es una ruta de /assets/users/, debe pertenecer al usuario actual
-                                if (normalizedVirtualPath.StartsWith("/assets/users/", StringComparison.OrdinalIgnoreCase) &&
-                                    !normalizedVirtualPath.StartsWith(normalizedUserRootPath, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    continue;
-                                }
-
-                                var isAllowed = false;
-                                foreach (var allowedPath in normalizedAllowedFolderPaths)
-                                {
-                                    if (normalizedVirtualPath.StartsWith(allowedPath, StringComparison.OrdinalIgnoreCase))
-                                    {
-                                        isAllowed = true;
-                                        break;
-                                    }
-                                }
-
-                                if (!isAllowed) continue;
+                                continue;
                             }
+
+                            var isAllowed = false;
+                            foreach (var allowedPath in normalizedAllowedFolderPaths)
+                            {
+                                if (normalizedVirtualPath.StartsWith(allowedPath, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    isAllowed = true;
+                                    break;
+                                }
+                            }
+
+                            if (!isAllowed) continue;
 
                             copiedFileNames.Add(fileName);
                             copiedCount++;

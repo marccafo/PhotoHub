@@ -1,10 +1,250 @@
 @page "/utilities/duplicates"
+@using PhotoHub.Client.Shared.Models
+@using PhotoHub.Client.Shared.Services
+@inject IAssetService AssetService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
 
-<PageTitle>Buscar duplicados - PhotoHub</PageTitle>
+<PageTitle>Duplicados - PhotoHub</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.Medium" Class="pt-4">
-    <MudText Typo="Typo.h5" Class="mb-2">Buscar duplicados</MudText>
-    <MudText Typo="Typo.body1" Class="mud-text-secondary">
-        Aquí podrás identificar fotos y videos duplicados. Próximamente.
-    </MudText>
-</MudContainer>
+<div class="d-flex align-center gap-3 mb-4 flex-wrap">
+    <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack"
+               OnClick="@(() => Navigation.NavigateTo("/utilities"))">
+        Utilidades
+    </MudButton>
+    <MudText Typo="Typo.h5">Buscar duplicados</MudText>
+</div>
+
+@if (_loading)
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Analizando tu biblioteca...</MudText>
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_groups.Count == 0)
+{
+    <MudAlert Severity="Severity.Success" Icon="@Icons.Material.Filled.CheckCircle">
+        No se encontraron duplicados en tu biblioteca.
+    </MudAlert>
+}
+else
+{
+    <div class="d-flex align-center justify-space-between mb-4 flex-wrap gap-2">
+        <MudText Typo="Typo.body1">
+            <strong>@_groups.Count grupos</strong> · @TotalDuplicates archivos redundantes ·
+            <span class="mud-error-text">@FormatBytes(TotalWasted) recuperables</span>
+        </MudText>
+
+        @if (!_deleting)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Error"
+                       StartIcon="@Icons.Material.Filled.Delete"
+                       Disabled="@(SelectedToDelete == 0)"
+                       OnClick="@(() => _confirmOpen = true)">
+                Mover @SelectedToDelete a la papelera
+            </MudButton>
+        }
+        else
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Error" Disabled="true">
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                Eliminando...
+            </MudButton>
+        }
+    </div>
+
+    @if (_confirmOpen)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mb-4">
+            <div class="d-flex align-center justify-space-between flex-wrap gap-2">
+                <span>Se moverán <strong>@SelectedToDelete archivos</strong> a la papelera.</span>
+                <div class="d-flex gap-2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" OnClick="ConfirmDelete">
+                        Confirmar
+                    </MudButton>
+                    <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => _confirmOpen = false)">
+                        Cancelar
+                    </MudButton>
+                </div>
+            </div>
+        </MudAlert>
+    }
+
+    @foreach (var group in _groups)
+    {
+        <MudCard Class="mb-4" Elevation="2">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <div class="d-flex align-center gap-2 flex-wrap">
+                        <MudText Typo="Typo.subtitle1">
+                            <strong>@group.Assets.Count copias idénticas</strong>
+                        </MudText>
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@group.TotalSizeFormatted</MudChip>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Text">
+                            @group.WastedFormatted desperdiciados
+                        </MudChip>
+                    </div>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">SHA-256: @group.Hash[..12]…</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent Class="pt-0">
+                <MudGrid>
+                    @foreach (var asset in group.Assets)
+                    {
+                        bool isKeep = _keepSelection.TryGetValue(group.Hash, out var keepId) && keepId == asset.Id;
+                        bool isToDelete = !isKeep && _keepSelection.ContainsKey(group.Hash);
+
+                        <MudItem xs="12" sm="6" md="@(12 / Math.Min(group.Assets.Count, 4))">
+                            <MudPaper Elevation="0"
+                                      Style="@(isKeep ? "border:2px solid var(--mud-palette-primary);" : isToDelete ? "border:2px solid var(--mud-palette-error);opacity:.75;" : "border:2px solid transparent;")"
+                                      Class="pa-3 rounded">
+
+                                <div class="d-flex justify-center mb-2"
+                                     style="height:120px;overflow:hidden;border-radius:8px;background:#111;">
+                                    <img src="@asset.ThumbnailUrl" alt="@asset.FileName"
+                                         style="height:100%;object-fit:cover;width:100%;"
+                                         onerror="this.style.display='none'" />
+                                </div>
+
+                                <MudLink Href="@($"/asset/{asset.Id}")" Underline="Underline.None">
+                                    <MudText Typo="Typo.body2" Style="word-break:break-all;font-weight:600;">@asset.FileName</MudText>
+                                </MudLink>
+                                <div class="d-flex gap-1 mt-1 flex-wrap">
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@asset.FileSizeFormatted</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@asset.DisplayDate</MudChip>
+                                </div>
+
+                                <div class="mt-2">
+                                    @if (isKeep)
+                                    {
+                                        <MudChip T="string" Color="Color.Primary" Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small">
+                                            Conservar
+                                        </MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
+                                                   OnClick="@(() => SetKeep(group.Hash, asset.Id))">
+                                            Conservar este
+                                        </MudButton>
+                                    }
+                                </div>
+                            </MudPaper>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudCardContent>
+        </MudCard>
+    }
+
+    @if (_groups.Count > 2)
+    {
+        <div class="d-flex justify-end mb-8">
+            <MudButton Variant="Variant.Filled" Color="Color.Error"
+                       StartIcon="@Icons.Material.Filled.Delete"
+                       Disabled="@(SelectedToDelete == 0 || _deleting)"
+                       OnClick="@(() => _confirmOpen = true)">
+                Mover @SelectedToDelete a la papelera
+            </MudButton>
+        </div>
+    }
+}
+
+@code {
+    private List<UserDuplicateGroup> _groups = new();
+    private bool _loading;
+    private bool _deleting;
+    private bool _confirmOpen;
+
+    // Hash -> AssetId to keep
+    private Dictionary<string, Guid> _keepSelection = new();
+
+    private int TotalDuplicates => _groups.Sum(g => g.Assets.Count - 1);
+    private long TotalWasted => _groups.Sum(g => g.WastedBytes);
+
+    private int SelectedToDelete => _keepSelection.Count == 0 ? 0
+        : _groups.Sum(g => _keepSelection.ContainsKey(g.Hash) ? g.Assets.Count - 1 : 0);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+        try
+        {
+            _groups = await AssetService.GetMyDuplicatesAsync();
+            AutoSelectAll();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al analizar: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void AutoSelectAll()
+    {
+        foreach (var group in _groups)
+        {
+            // Keep the most recently created asset
+            var keep = group.Assets
+                .OrderByDescending(a => a.CreatedDate)
+                .ThenByDescending(a => a.FileSize)
+                .First();
+            _keepSelection[group.Hash] = keep.Id;
+        }
+    }
+
+    private void SetKeep(string hash, Guid assetId)
+    {
+        _keepSelection[hash] = assetId;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        _confirmOpen = false;
+        _deleting = true;
+        StateHasChanged();
+
+        try
+        {
+            var toDelete = _groups
+                .Where(g => _keepSelection.ContainsKey(g.Hash))
+                .SelectMany(g => g.Assets.Where(a => a.Id != _keepSelection[g.Hash]))
+                .Select(a => a.Id)
+                .ToList();
+
+            await AssetService.DeleteAssetsAsync(new DeleteAssetsRequest { AssetIds = toDelete });
+
+            // Remove deleted assets from view
+            foreach (var group in _groups.ToList())
+            {
+                if (!_keepSelection.TryGetValue(group.Hash, out var keepId)) continue;
+                group.Assets.RemoveAll(a => a.Id != keepId);
+            }
+            _groups.RemoveAll(g => g.Assets.Count <= 1);
+
+            Snackbar.Add($"{toDelete.Count} archivos movidos a la papelera.", Severity.Success);
+
+            if (_groups.Count == 0)
+                _keepSelection.Clear();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _deleting = false;
+        }
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        double len = bytes;
+        int order = 0;
+        while (len >= 1024 && order < sizes.Length - 1) { order++; len /= 1024; }
+        return $"{len:0.##} {sizes[order]}";
+    }
+}

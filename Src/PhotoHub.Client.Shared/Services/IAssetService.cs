@@ -29,6 +29,8 @@ public interface IAssetService
     Task ArchiveAssetsAsync(ArchiveAssetsRequest request);
     Task UnarchiveAssetsAsync(UnarchiveAssetsRequest request);
     Task UnarchiveAllAsync();
+    Task<List<UserDuplicateGroup>> GetMyDuplicatesAsync();
+    Task<List<TimelineItem>> GetLargeFilesAsync(int count = 50);
 }
 
 public class ArchiveAssetsRequest
