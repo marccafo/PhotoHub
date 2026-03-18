@@ -48,13 +48,10 @@
                                Color="Color.Primary"
                                StartIcon="@Icons.Material.Filled.CloudUpload"
                                Size="Size.Medium"
-                               Class="d-none d-md-flex mr-1"
+                               Class="mr-1"
                                OnClick="@(() => Navigation.NavigateTo("/upload"))">
                         Subir
                     </MudButton>
-                    <MudTooltip Text="Subir" Class="d-flex d-md-none">
-                        <MudIconButton Icon="@Icons.Material.Filled.CloudUpload" Color="Color.Inherit" OnClick="@(() => Navigation.NavigateTo("/upload"))" />
-                    </MudTooltip>
                 }
                 <MudTooltip Text="Alternar modo claro/oscuro">
                     <MudIconButton Icon="@(LayoutService.IsDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" 
