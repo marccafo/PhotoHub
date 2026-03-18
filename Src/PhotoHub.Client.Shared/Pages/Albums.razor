@@ -189,10 +189,18 @@
         color: var(--mud-palette-text-secondary);
     }
 
-    .album-shared-badge {
+    .album-grid-badges {
         position: absolute;
         top: 8px;
         right: 8px;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 4px;
+        z-index: 5;
+    }
+
+    .album-shared-badge {
         background: rgba(0,0,0,0.5);
         color: white;
         padding: 2px 6px;
@@ -200,13 +208,9 @@
         display: flex;
         align-items: center;
         gap: 4px;
-        z-index: 5;
     }
 
     .album-grid-share-btn {
-        position: absolute;
-        top: 8px;
-        right: 8px;
         background: rgba(0,0,0,0.5);
         color: white;
         padding: 3px 5px;
@@ -227,9 +231,6 @@
         color: white;
     }
 
-    .album-grid-share-btn.with-group-badge {
-        top: 40px;
-    }
 
     .album-list-share-btn {
         flex-shrink: 0;
@@ -440,22 +441,24 @@
                                                      Value="@IsAlbumSelected(album.Id)"
                                                      ValueChanged="@(EventCallback.Factory.Create<bool>(this, value => ToggleAlbumSelection(album.Id, value)))" />
                                     </div>
-                                    @if (album.SharedWithCount > 0)
-                                    {
-                                        <div class="album-shared-badge" title="Compartido con @album.SharedWithCount usuarios">
-                                            <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" />
-                                            <span>@album.SharedWithCount</span>
-                                        </div>
-                                    }
-                                    @if (album.IsOwner)
-                                    {
-                                        <div class="album-grid-share-btn @(album.HasActiveShareLink ? "active" : "") @(album.SharedWithCount > 0 ? "with-group-badge" : "")"
-                                             title="@(album.HasActiveShareLink ? "Gestionar enlace" : "Compartir álbum")"
-                                             @onclick:stopPropagation="true"
-                                             @onclick="() => OpenShareDialogForAlbum(album.Id, album.Name)">
-                                            <MudIcon Icon="@Icons.Material.Outlined.Share" Size="Size.Small" />
-                                        </div>
-                                    }
+                                    <div class="album-grid-badges">
+                                        @if (album.SharedWithCount > 0)
+                                        {
+                                            <div class="album-shared-badge" title="Compartido con @album.SharedWithCount usuarios">
+                                                <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" Color="Color.Inherit" />
+                                                <span>@album.SharedWithCount</span>
+                                            </div>
+                                        }
+                                        @if (album.IsOwner)
+                                        {
+                                            <div class="album-grid-share-btn @(album.HasActiveShareLink ? "active" : "")"
+                                                 title="@(album.HasActiveShareLink ? "Gestionar enlace" : "Compartir álbum")"
+                                                 @onclick:stopPropagation="true"
+                                                 @onclick="() => OpenShareDialogForAlbum(album.Id, album.Name)">
+                                                <MudIcon Icon="@Icons.Material.Outlined.Share" Size="Size.Small" Color="Color.Inherit" />
+                                            </div>
+                                        }
+                                    </div>
                                     <MudCard Class="album-card" Style="cursor: pointer;">
                                         <MudCardContent Style="padding: 0;">
                                             <div class="album-thumb-collage">

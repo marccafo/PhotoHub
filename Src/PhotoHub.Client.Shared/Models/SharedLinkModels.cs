@@ -62,6 +62,26 @@ public class CreateShareLinkResponse
     public int ViewCount { get; set; }
 }
 
+// ── Update share link ─────────────────────────────────────────────────────────
+
+public class UpdateShareLinkRequest
+{
+    public DateTime? ExpiresAt { get; set; }
+    /// <summary>null = keep current | "" = remove | value = set new</summary>
+    public string? Password { get; set; }
+    public bool AllowDownload { get; set; } = true;
+    public int? MaxViews { get; set; }
+}
+
+public class UpdateShareLinkResponse
+{
+    public string Token { get; set; } = string.Empty;
+    public DateTime? ExpiresAt { get; set; }
+    public bool HasPassword { get; set; }
+    public bool AllowDownload { get; set; }
+    public int? MaxViews { get; set; }
+}
+
 // ── Sent share links ──────────────────────────────────────────────────────────
 
 public class SentShareLinkDto

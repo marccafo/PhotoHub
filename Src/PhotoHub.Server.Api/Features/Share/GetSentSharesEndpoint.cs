@@ -28,8 +28,10 @@ public class GetSentSharesEndpoint : IEndpoint
             return Results.Unauthorized();
 
         var allLinks = await dbContext.SharedLinks
+            .Include(l => l.Asset)
             .Include(l => l.Album)
-            .Where(l => l.CreatedById == userId && l.AlbumId != null)
+                .ThenInclude(a => a!.AlbumAssets.OrderBy(aa => aa.Order).Take(1))
+            .Where(l => l.CreatedById == userId)
             .OrderByDescending(l => l.CreatedAt)
             .ToListAsync(ct);
 
@@ -40,17 +42,33 @@ public class GetSentSharesEndpoint : IEndpoint
                         (l.MaxViews == null || l.ViewCount < l.MaxViews))
             .ToList();
 
-        var result = links.Select(l => new SentShareLinkDto
+        var result = links.Select(l =>
         {
-            Token = l.Token,
-            CreatedAt = l.CreatedAt,
-            ExpiresAt = l.ExpiresAt,
-            HasPassword = l.PasswordHash != null,
-            AllowDownload = l.AllowDownload,
-            MaxViews = l.MaxViews,
-            ViewCount = l.ViewCount,
-            AlbumId = l.AlbumId,
-            AlbumName = l.Album?.Name
+            string? albumCoverUrl = null;
+            if (l.Album != null)
+            {
+                var coverId = l.Album.CoverAssetId ?? l.Album.AlbumAssets.FirstOrDefault()?.AssetId;
+                if (coverId.HasValue)
+                    albumCoverUrl = $"/api/assets/{coverId}/thumbnail?size=Medium";
+            }
+
+            return new SentShareLinkDto
+            {
+                Token = l.Token,
+                CreatedAt = l.CreatedAt,
+                ExpiresAt = l.ExpiresAt,
+                HasPassword = l.PasswordHash != null,
+                AllowDownload = l.AllowDownload,
+                MaxViews = l.MaxViews,
+                ViewCount = l.ViewCount,
+                AssetId = l.AssetId,
+                AssetFileName = l.Asset?.FileName,
+                AssetType = l.Asset?.Type.ToString(),
+                AssetThumbnailUrl = l.AssetId.HasValue ? $"/api/assets/{l.AssetId}/thumbnail?size=Medium" : null,
+                AlbumId = l.AlbumId,
+                AlbumName = l.Album?.Name,
+                AlbumCoverUrl = albumCoverUrl
+            };
         }).ToList();
 
         return Results.Ok(result);
@@ -66,6 +84,11 @@ public class SentShareLinkDto
     public bool AllowDownload { get; set; } = true;
     public int? MaxViews { get; set; }
     public int ViewCount { get; set; }
+    public Guid? AssetId { get; set; }
+    public string? AssetFileName { get; set; }
+    public string? AssetType { get; set; }
+    public string? AssetThumbnailUrl { get; set; }
     public Guid? AlbumId { get; set; }
     public string? AlbumName { get; set; }
+    public string? AlbumCoverUrl { get; set; }
 }

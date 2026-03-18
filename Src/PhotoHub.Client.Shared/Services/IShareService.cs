@@ -14,4 +14,5 @@ public interface IShareService
 
     // Sent links
     Task<List<SentShareLinkDto>> GetSentShareLinksAsync();
+    Task<UpdateShareLinkResponse?> UpdateShareAsync(string token, UpdateShareLinkRequest request);
 }

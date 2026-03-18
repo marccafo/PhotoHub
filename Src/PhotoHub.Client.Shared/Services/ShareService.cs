@@ -66,4 +66,12 @@ public class ShareService : IShareService
         var result = await _http.GetFromJsonAsync<List<SentShareLinkDto>>("/api/share/sent");
         return result ?? new();
     }
+
+    public async Task<UpdateShareLinkResponse?> UpdateShareAsync(string token, UpdateShareLinkRequest request)
+    {
+        await SetAuthAsync();
+        var response = await _http.PatchAsJsonAsync($"/api/share/{token}", request);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<UpdateShareLinkResponse>();
+    }
 }
