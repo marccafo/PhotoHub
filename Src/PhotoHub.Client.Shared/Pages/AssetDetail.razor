@@ -644,6 +644,26 @@ else
             _lastLoadedAssetId = AssetId;
             _lastLoadedPath = Path ?? string.Empty;
 
+            // Reinicializar el minimapa si el panel de info estaba abierto y el asset cambió
+            if (_infoOpen && _asset != null)
+            {
+                var hasGps = _asset.Exif?.Latitude.HasValue == true && _asset.Exif?.Longitude.HasValue == true;
+                if (hasGps && _miniMapAssetId != _asset.Id)
+                {
+                    _miniMapAssetId = _asset.Id;
+                    _ = JSRuntime.InvokeVoidAsync("miniMapHelpers.initWhenVisible",
+                        "asset-mini-map",
+                        _asset.Exif!.Latitude!.Value,
+                        _asset.Exif.Longitude!.Value,
+                        LayoutService.IsDarkMode).AsTask();
+                }
+                else if (!hasGps && _miniMapAssetId != Guid.Empty)
+                {
+                    _miniMapAssetId = Guid.Empty;
+                    _ = JSRuntime.InvokeVoidAsync("miniMapHelpers.destroy", "asset-mini-map").AsTask();
+                }
+            }
+
             if (_slideshowActive && !_slideshowPaused)
             {
                 _slideshowProgressKey++;
