@@ -436,6 +436,7 @@ else
     private System.Timers.Timer? _controlsHideTimer;
 
     private ElementReference _containerRef;
+    private bool _enterAnimationPlayed = false;
 
     /// <summary>Evita cargar dos veces el mismo asset (OnInitializedAsync y OnParametersSetAsync se ejecutan ambos al navegar).</summary>
     private Guid _lastLoadedAssetId = Guid.Empty;
@@ -454,11 +455,17 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && _containerRef.Context != null)
+        if (_containerRef.Context != null)
         {
-            await JSRuntime.InvokeVoidAsync("focusElement", _containerRef);
-        }
+            if (firstRender)
+                await JSRuntime.InvokeVoidAsync("focusElement", _containerRef);
 
+            if (!_enterAnimationPlayed)
+            {
+                _enterAnimationPlayed = true;
+                await JSRuntime.InvokeVoidAsync("assetTransition.playEnterAnimation", _containerRef);
+            }
+        }
     }
 
     protected override async Task OnParametersSetAsync()

@@ -3,7 +3,7 @@
 @using Microsoft.JSInterop
 @implements IAsyncDisposable
 
-<div class="asset-card-container" @onclick="@OnClick" @onmouseover="HandleMouseOver" @onmouseleave="HandleMouseLeave">
+<div class="asset-card-container" @ref="_containerRef" @onclick="@OnClick" @onmouseover="HandleMouseOver" @onmouseleave="HandleMouseLeave">
     <style>
         .asset-card-container {
             position: relative;
@@ -185,6 +185,7 @@
     [Inject] private IAssetService AssetService { get; set; } = null!;
     [Inject] private ISnackbar Snackbar { get; set; } = null!;
 
+    private ElementReference _containerRef;
     private ElementReference _videoRef;
     private ElementReference _imgRef;
     private string _thumbnailUrl = string.Empty;
@@ -232,6 +233,8 @@
     private async Task OnClick()
     {
         if (Asset.SyncStatus == AssetSyncStatus.Syncing) return;
+        if (_containerRef.Context != null)
+            await JS.InvokeVoidAsync("assetTransition.saveOrigin", _containerRef);
         await OnAssetClick.InvokeAsync(Asset);
     }
 
