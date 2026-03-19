@@ -48,14 +48,22 @@
             <div class="d-flex align-center">
                 @if (!IsAdminSection)
                 {
+                    <MudIconButton Icon="@Icons.Material.Filled.Search"
+                                   Color="Color.Inherit"
+                                   Class="d-flex d-md-none"
+                                   OnClick="@(() => Navigation.NavigateTo("/search"))" />
                     <MudButton Variant="Variant.Filled"
                                Color="Color.Primary"
                                StartIcon="@Icons.Material.Filled.CloudUpload"
                                Size="Size.Medium"
-                               Class="mr-1"
+                               Class="mr-1 d-none d-md-flex"
                                OnClick="@(() => Navigation.NavigateTo("/upload"))">
                         Subir
                     </MudButton>
+                    <MudIconButton Icon="@Icons.Material.Filled.CloudUpload"
+                                   Color="Color.Primary"
+                                   Class="d-flex d-md-none mr-1"
+                                   OnClick="@(() => Navigation.NavigateTo("/upload"))" />
                 }
                 <MudTooltip Text="Alternar modo claro/oscuro">
                     <MudIconButton Icon="@(LayoutService.IsDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" 
@@ -64,7 +72,7 @@
                 </MudTooltip>
                 <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
                     <ActivatorContent>
-                        <MudBadge Content="@_unreadCount" Color="Color.Error" Overlap="true" Visible="@(_unreadCount > 0)">
+                        <MudBadge Content="@_unreadCount" Color="Color.Error" Overlap="true" Visible="@(_unreadCount > 0)" Class="notification-badge">
                             <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Inherit"
                                            OnClick="@(async () => { await LoadRecentNotificationsAsync(); await context.ToggleAsync(); })" />
                         </MudBadge>
@@ -206,6 +214,9 @@
         .search-input .mud-input::before,
         .search-input .mud-input::after {
             display: none !important;
+        }
+        .notification-badge .mud-badge {
+            top: -4px !important;
         }
         @* .custom-navbar { *@
         @*     z-index: 1200; *@

@@ -599,6 +599,8 @@ else
                     else
                     {
                         @* Indexado: Favorito · Zoom · Info · Descargar · Añadir álbum · Slideshow · Archivar · Eliminar *@
+
+                        @* Favorito — siempre visible *@
                         <MudTooltip Text="@(_asset != null && _asset.IsFavorite ? "Quitar de favoritos" : "Añadir a favoritos")">
                             <MudIconButton Icon="@(_asset != null && _asset.IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
                                            Color="@(_asset != null && _asset.IsFavorite ? Color.Error : Color.Inherit)"
@@ -606,47 +608,76 @@ else
                                            Disabled="@_favoriteBusy" />
                         </MudTooltip>
 
-                        <MudTooltip Text="@(_zoomed ? "Ajustar" : "Zoom")">
-                            <MudIconButton Icon="@(_zoomed ? Icons.Material.Outlined.ZoomOut : Icons.Material.Outlined.ZoomIn)"
-                                           Color="Color.Inherit" OnClick="ToggleZoom" />
-                        </MudTooltip>
-
+                        @* Info — siempre visible *@
                         <MudTooltip Text="Información">
                             <MudIconButton Icon="@(_infoOpen ? Icons.Material.Filled.Info : Icons.Material.Outlined.Info)"
                                            Color="Color.Inherit" OnClick="ToggleInfo" />
                         </MudTooltip>
 
-                        <MudTooltip Text="Descargar">
-                            <MudIconButton Icon="@Icons.Material.Outlined.Download"
-                                           Color="Color.Inherit" OnClick="DownloadAsset" />
-                        </MudTooltip>
-
+                        @* Añadir a álbum — siempre visible *@
                         <MudTooltip Text="Añadir a álbum">
                             <MudIconButton Icon="@Icons.Material.Outlined.AddPhotoAlternate"
                                            Color="Color.Inherit" OnClick="OpenAddToAlbumDialog" />
                         </MudTooltip>
 
-                        @if (_allAssets.Count > 1)
-                        {
-                            <MudTooltip Text="Presentación">
-                                <MudIconButton Icon="@Icons.Material.Outlined.Slideshow"
-                                               Color="Color.Inherit" OnClick="StartSlideshow" />
+                        @* Botones secundarios — solo en md+ *@
+                        <span class="d-none d-md-flex align-center">
+                            <MudTooltip Text="@(_zoomed ? "Ajustar" : "Zoom")">
+                                <MudIconButton Icon="@(_zoomed ? Icons.Material.Outlined.ZoomOut : Icons.Material.Outlined.ZoomIn)"
+                                               Color="Color.Inherit" OnClick="ToggleZoom" />
                             </MudTooltip>
-                        }
+                            <MudTooltip Text="Descargar">
+                                <MudIconButton Icon="@Icons.Material.Outlined.Download"
+                                               Color="Color.Inherit" OnClick="DownloadAsset" />
+                            </MudTooltip>
+                            @if (_allAssets.Count > 1)
+                            {
+                                <MudTooltip Text="Presentación">
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Slideshow"
+                                                   Color="Color.Inherit" OnClick="StartSlideshow" />
+                                </MudTooltip>
+                            }
+                            <MudTooltip Text="@(_asset != null && _asset.IsArchived ? "Quitar del archivo" : "Archivar")">
+                                <MudIconButton Icon="@(_asset != null && _asset.IsArchived ? Icons.Material.Filled.Unarchive : Icons.Material.Outlined.Archive)"
+                                               Color="Color.Inherit"
+                                               OnClick="ToggleArchiveAsync"
+                                               Disabled="@_archiveBusy" />
+                            </MudTooltip>
+                            <MudTooltip Text="Eliminar">
+                                <MudIconButton Icon="@Icons.Material.Outlined.Delete"
+                                               Color="Color.Error"
+                                               OnClick="@(() => _deleteConfirmOpen = true)"
+                                               Disabled="@_deleting" />
+                            </MudTooltip>
+                        </span>
 
-                        <MudTooltip Text="@(_asset != null && _asset.IsArchived ? "Quitar del archivo" : "Archivar")">
-                            <MudIconButton Icon="@(_asset != null && _asset.IsArchived ? Icons.Material.Filled.Unarchive : Icons.Material.Outlined.Archive)"
-                                           Color="Color.Inherit"
-                                           OnClick="ToggleArchiveAsync"
-                                           Disabled="@_archiveBusy" />
-                        </MudTooltip>
-
-                        <MudTooltip Text="Eliminar">
-                            <MudIconButton Icon="@Icons.Material.Outlined.Delete"
-                                           Color="Color.Error"
-                                           OnClick="@(() => _deleteConfirmOpen = true)"
-                                           Disabled="@_deleting" />
-                        </MudTooltip>
+                        @* Menú de desbordamiento — solo en móvil *@
+                        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Color="Color.Inherit"
+                                 AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+                                 Class="d-flex d-md-none">
+                            <MudMenuItem Icon="@(_zoomed ? Icons.Material.Outlined.ZoomOut : Icons.Material.Outlined.ZoomIn)"
+                                         OnClick="ToggleZoom">
+                                @(_zoomed ? "Ajustar" : "Zoom")
+                            </MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Outlined.Download" OnClick="DownloadAsset">
+                                Descargar
+                            </MudMenuItem>
+                            @if (_allAssets.Count > 1)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Outlined.Slideshow" OnClick="StartSlideshow">
+                                    Presentación
+                                </MudMenuItem>
+                            }
+                            <MudMenuItem Icon="@(_asset != null && _asset.IsArchived ? Icons.Material.Filled.Unarchive : Icons.Material.Outlined.Archive)"
+                                         OnClick="ToggleArchiveAsync">
+                                @(_asset != null && _asset.IsArchived ? "Quitar del archivo" : "Archivar")
+                            </MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Outlined.Delete"
+                                         IconColor="Color.Error"
+                                         OnClick="@(() => _deleteConfirmOpen = true)">
+                                <MudText Color="Color.Error">Eliminar</MudText>
+                            </MudMenuItem>
+                        </MudMenu>
                     }
                 </div>
             </text>,
