@@ -3,25 +3,29 @@ services:
     image: ghcr.io/marccafo/photohub:latest
     container_name: photohub-api
     ports:
-      - "8080:8080"
+      - "${API_PORT:-1107}:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__Postgres=Host=photohub-db;Port=5432;Database=${POSTGRES_DB:-photohub};Username=${POSTGRES_USER:-photohub_user};Password=${POSTGRES_PASSWORD}
-      - Jwt__Key=${JWT_KEY}
+      - Jwt__Key=${JWT_KEY:-TOKEN_SUPER_SECRET}
       - Jwt__Issuer=PhotoHub
       - Jwt__Audience=PhotoHub
       - ASSETS_PATH=/data/assets
       - THUMBNAILS_PATH=/data/thumbnails
       - HTTPS_REDIRECT=${HTTPS_REDIRECT:-false}
+      - AdminUser__Username=${ADMIN_USERNAME:-admin}
+      - AdminUser__Email=${ADMIN_EMAIL:-admin@photohub.local}
+      - AdminUser__Password=${ADMIN_PASSWORD:-admin123}
+      - AdminUser__FirstName=${ADMIN_FIRSTNAME:-Administrador}
+      - AdminUser__LastName=${ADMIN_LASTNAME:-Sistema}
     volumes:
       - ${ASSETS_PATH:-/DATA/Media/Photos}:/data/assets:ro
       - photohub_thumbnails:/data/thumbnails
-    depends_on:
-      photohub-db:
-        condition: service_healthy
     restart: unless-stopped
 
+  # Si ya tienes una instancia de PostgreSQL externa, comenta este servicio
+  # y ajusta ConnectionStrings__Postgres apuntando a tu instancia.   
   photohub-db:
     image: postgres:17-alpine
     container_name: photohub-db
@@ -38,6 +42,21 @@ services:
       retries: 5
     restart: unless-stopped
 
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: photohub-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      photohub-db:
+        condition: service_healthy
+
 volumes:
-  photohub_db_data:
   photohub_thumbnails:

@@ -79,6 +79,14 @@ public static class DependencyInjection
     public static async Task EnsureFFmpegAsync(this WebApplication app)
     {
         var ffmpegPath = FFmpeg.ExecutablesPath;
+
+        // En Linux/Docker el path puede ser null; FFmpeg se resuelve desde el PATH del sistema
+        if (string.IsNullOrEmpty(ffmpegPath))
+        {
+            Console.WriteLine("[INFO] FFmpeg executables path not set — relying on system PATH.");
+            return;
+        }
+
         var ffmpegExe = OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg";
         var ffprobeExe = OperatingSystem.IsWindows() ? "ffprobe.exe" : "ffprobe";
 
