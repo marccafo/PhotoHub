@@ -13,13 +13,9 @@ public class ThumbnailGeneratorService
     
     public ThumbnailGeneratorService()
     {
-        // Use /app/thumbnails in Docker (persistent volume photohub_thumbnails)
-        // or a local "thumbnails" folder for development
-        _thumbnailsBasePath = Directory.Exists("/app/thumbnails") 
-            ? "/app/thumbnails" 
-            : Path.Combine(Directory.GetCurrentDirectory(), "thumbnails");
-        
-        // Ensure directory exists
+        _thumbnailsBasePath = Environment.GetEnvironmentVariable("THUMBNAILS_PATH")
+            ?? Path.Combine(Directory.GetCurrentDirectory(), "thumbnails");
+
         if (!Directory.Exists(_thumbnailsBasePath))
         {
             Directory.CreateDirectory(_thumbnailsBasePath);
