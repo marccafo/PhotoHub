@@ -61,10 +61,92 @@ window.assetTransition = {
 };
 
 window.assetGridHelpers = {
-    getAssetIdAtPoint(x, y) {
-        const el = document.elementFromPoint(x, y);
-        const container = el?.closest('[data-asset-id]');
-        return container?.dataset.assetId ?? null;
+    _dotNetRef: null,
+    _lastAssetId: null,
+    _lastRowItem: null,
+    _sentIds: null,
+    _moveHandler: null,
+    _endHandler: null,
+    SIDE_ZONE_PX: 56,
+
+    _getRowAssetIds(el) {
+        const item = el?.closest('.masonry-item');
+        if (!item) return [];
+        const grid = item.closest('.masonry-grid');
+        if (!grid) return [];
+        const rect = item.getBoundingClientRect();
+        const ids = [];
+        grid.querySelectorAll('[data-asset-id]').forEach(container => {
+            const r = container.getBoundingClientRect();
+            if (r.top < rect.bottom && r.bottom > rect.top) {
+                ids.push(container.dataset.assetId);
+            }
+        });
+        return ids;
+    },
+
+    startDragSelect(dotNetRef, selectMode) {
+        this.stopDragSelect();
+        this._dotNetRef = dotNetRef;
+        this._selectMode = selectMode;
+        this._lastAssetId = null;
+        this._lastRowItem = null;
+        this._sentIds = new Set();
+
+        this._moveHandler = (e) => {
+            if (!e.touches.length) return;
+            const t = e.touches[0];
+            const el = document.elementFromPoint(t.clientX, t.clientY);
+
+            const inSideZone = t.clientX < this.SIDE_ZONE_PX ||
+                               t.clientX > window.innerWidth - this.SIDE_ZONE_PX;
+
+            if (inSideZone) {
+                // Modo fila: procesar todos los assets de la fila actual
+                const item = el?.closest('.masonry-item');
+                if (!item || item === this._lastRowItem) return;
+                this._lastRowItem = item;
+
+                this._getRowAssetIds(el).forEach(id => {
+                    if (!this._sentIds.has(id)) {
+                        this._sentIds.add(id);
+                        dotNetRef.invokeMethodAsync('OnDragSelectAsset', id, this._selectMode);
+                    }
+                });
+            } else {
+                // Modo normal: procesar el asset individual bajo el dedo
+                const id = el?.closest('[data-asset-id]')?.dataset.assetId;
+                if (id && id !== this._lastAssetId) {
+                    this._lastAssetId = id;
+                    if (!this._sentIds.has(id)) {
+                        this._sentIds.add(id);
+                        dotNetRef.invokeMethodAsync('OnDragSelectAsset', id, this._selectMode);
+                    }
+                }
+            }
+        };
+
+        this._endHandler = () => this.stopDragSelect();
+
+        document.addEventListener('touchmove', this._moveHandler, { passive: true });
+        document.addEventListener('touchend', this._endHandler, { once: true });
+        document.addEventListener('touchcancel', this._endHandler, { once: true });
+    },
+
+    stopDragSelect() {
+        if (this._moveHandler) {
+            document.removeEventListener('touchmove', this._moveHandler);
+            this._moveHandler = null;
+        }
+        if (this._endHandler) {
+            document.removeEventListener('touchend', this._endHandler);
+            document.removeEventListener('touchcancel', this._endHandler);
+            this._endHandler = null;
+        }
+        this._dotNetRef = null;
+        this._lastAssetId = null;
+        this._lastRowItem = null;
+        this._sentIds = null;
     }
 };
 

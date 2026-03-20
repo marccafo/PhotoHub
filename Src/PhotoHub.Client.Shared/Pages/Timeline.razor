@@ -353,6 +353,14 @@
         pointer-events: auto;
     }
 
+    /* En dispositivos táctiles el checkbox siempre es visible y tappable */
+    @@media (hover: none) {
+        .asset-select-checkbox {
+            opacity: 0.5;
+            pointer-events: auto;
+        }
+    }
+
     /* ===== Custom Scrubber ===== */
     .scrubber-overlay {
         position: absolute;
@@ -941,76 +949,53 @@
     // ── Touch / long-press / drag-select ───────────────────────────────────
     private System.Threading.Timer? _longPressTimer;
     private bool _longPressHandled;
-    private bool _isDraggingSelection;
     private double _touchStartX;
     private double _touchStartY;
-    private double _lastDragX;
-    private double _lastDragY;
 
-    private void OnCardTouchStart(TouchEventArgs e, TimelineItem asset)
+    private async Task OnCardTouchStart(TouchEventArgs e, TimelineItem asset)
     {
         if (e.Touches.Length == 0) return;
         _touchStartX = e.Touches[0].ClientX;
         _touchStartY = e.Touches[0].ClientY;
         _longPressHandled = false;
-        _isDraggingSelection = false;
 
-        // Si ya estamos en modo selección, el dedo abajo inicia el arrastre directamente
+        // Si ya estamos en modo selección, el dedo inicia el arrastre directamente
         if (_selectionMode)
         {
-            _isDraggingSelection = true;
-            _lastDragX = _touchStartX;
-            _lastDragY = _touchStartY;
-            ToggleAssetSelection(asset.Id, !IsAssetSelected(asset.Id));
+            // El modo se determina por el estado inicial del asset tocado
+            var selectMode = !IsAssetSelected(asset.Id);
+            ToggleAssetSelection(asset.Id, selectMode);
+            if (_objRef != null)
+                await JS.InvokeVoidAsync("assetGridHelpers.startDragSelect", _objRef, selectMode);
             return;
         }
 
-        // Long press → entrar en modo selección
+        // Long press → entrar en modo selección y arrancar arrastre
         _longPressTimer?.Dispose();
         _longPressTimer = new System.Threading.Timer(_ =>
         {
-            InvokeAsync(() =>
+            InvokeAsync(async () =>
             {
                 _longPressHandled = true;
-                _isDraggingSelection = true;
-                _lastDragX = _touchStartX;
-                _lastDragY = _touchStartY;
                 ToggleAssetSelection(asset.Id, true);
+                // Long press siempre entra en modo seleccionar (el asset no estaba seleccionado)
+                if (_objRef != null)
+                    await JS.InvokeVoidAsync("assetGridHelpers.startDragSelect", _objRef, true);
                 StateHasChanged();
             });
         }, null, 500, System.Threading.Timeout.Infinite);
     }
 
-    private async Task OnCardTouchMove(TouchEventArgs e)
+    private void OnCardTouchMove(TouchEventArgs e)
     {
-        if (e.Touches.Length == 0) return;
-        var touch = e.Touches[0];
-
-        if (!_isDraggingSelection)
+        // Solo necesario para cancelar el long press si el dedo se mueve antes de 500ms
+        if (e.Touches.Length == 0 || _longPressTimer == null) return;
+        var dx = e.Touches[0].ClientX - _touchStartX;
+        var dy = e.Touches[0].ClientY - _touchStartY;
+        if (Math.Sqrt(dx * dx + dy * dy) > 10)
         {
-            // Cancelar long press si el dedo se movió más de 10px
-            var dx = touch.ClientX - _touchStartX;
-            var dy = touch.ClientY - _touchStartY;
-            if (Math.Sqrt(dx * dx + dy * dy) > 10)
-            {
-                _longPressTimer?.Dispose();
-                _longPressTimer = null;
-            }
-            return;
-        }
-
-        // Drag-to-select: solo si el dedo se movió al menos 8px desde la última comprobación
-        var ddx = touch.ClientX - _lastDragX;
-        var ddy = touch.ClientY - _lastDragY;
-        if (Math.Abs(ddx) < 8 && Math.Abs(ddy) < 8) return;
-
-        _lastDragX = touch.ClientX;
-        _lastDragY = touch.ClientY;
-
-        var assetIdStr = await JS.InvokeAsync<string?>("assetGridHelpers.getAssetIdAtPoint", touch.ClientX, touch.ClientY);
-        if (Guid.TryParse(assetIdStr, out var assetId) && !IsAssetSelected(assetId))
-        {
-            ToggleAssetSelection(assetId, true);
+            _longPressTimer.Dispose();
+            _longPressTimer = null;
         }
     }
 
@@ -1018,7 +1003,16 @@
     {
         _longPressTimer?.Dispose();
         _longPressTimer = null;
-        _isDraggingSelection = false;
+        // El arrastre JS se limpia solo (escucha touchend en el documento)
+    }
+
+    [JSInvokable]
+    public void OnDragSelectAsset(string assetIdStr, bool select)
+    {
+        if (!Guid.TryParse(assetIdStr, out var assetId)) return;
+        if (select == IsAssetSelected(assetId)) return; // ya está en el estado deseado
+        ToggleAssetSelection(assetId, select);
+        StateHasChanged();
     }
     // ───────────────────────────────────────────────────────────────────────
 
