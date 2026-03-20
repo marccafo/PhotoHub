@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Http.Headers;
-using PhotoHub.Client.Shared.Services;
 
 namespace PhotoHub.Client.Shared.Services;
 

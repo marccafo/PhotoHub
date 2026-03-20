@@ -1,6 +1,5 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MudBlazor.Services;
 using PhotoHub.Client.Shared.Services;

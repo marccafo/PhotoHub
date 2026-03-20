@@ -1,5 +1,4 @@
 using System.Net.Http.Json;
-using Microsoft.Maui.Storage;
 using PhotoHub.Client.Shared.Services;
 
 namespace PhotoHub.Client.Native.Services;

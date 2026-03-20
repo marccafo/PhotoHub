@@ -1,7 +1,5 @@
 using PhotoHub.Client.Shared.Services;
 using PhotoHub.Client.Shared.Models;
-using Microsoft.Maui.Storage;
-using Microsoft.Maui.Media;
 
 namespace PhotoHub.Client.Native.Services;
 

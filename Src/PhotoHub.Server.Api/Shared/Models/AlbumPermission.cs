@@ -1,5 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace PhotoHub.Server.Api.Shared.Models;
 
 public class AlbumPermission

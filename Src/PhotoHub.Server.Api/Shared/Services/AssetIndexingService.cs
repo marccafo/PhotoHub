@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using PhotoHub.Server.Api.Shared.Data;
-using PhotoHub.Server.Api.Shared.Interfaces;
 using PhotoHub.Server.Api.Shared.Models;
 
 namespace PhotoHub.Server.Api.Shared.Services;

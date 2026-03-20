@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PhotoHub.Server.Api.Features.Auth;
@@ -7,7 +6,6 @@ using PhotoHub.Server.Api.Shared.Data;
 using PhotoHub.Server.Api.Shared.Interfaces;
 using PhotoHub.Server.Api.Shared.Models;
 using PhotoHub.Server.Api.Shared.Services;
-using Scalar.AspNetCore;
 
 namespace PhotoHub.Server.Api.Features.Users;
 
