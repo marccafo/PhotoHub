@@ -60,6 +60,14 @@ window.assetTransition = {
     }
 };
 
+window.assetGridHelpers = {
+    getAssetIdAtPoint(x, y) {
+        const el = document.elementFromPoint(x, y);
+        const container = el?.closest('[data-asset-id]');
+        return container?.dataset.assetId ?? null;
+    }
+};
+
 async function shareOrCopyUrl(url, title) {
     if (navigator.share) {
         try {

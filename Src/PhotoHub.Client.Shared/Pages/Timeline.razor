@@ -64,7 +64,11 @@
                                              data-aspect-ratio="@asset.AspectRatio.ToString("F4", System.Globalization.CultureInfo.InvariantCulture)"
                                              data-width="@(asset.Width?.ToString() ?? "0")"
                                              data-height="@(asset.Height?.ToString() ?? "0")">
-                                            <div class="asset-select-container @(_selectionMode ? "selection-mode" : "") @(IsAssetSelected(asset.Id) ? "selected" : "")">
+                                            <div class="asset-select-container @(_selectionMode ? "selection-mode" : "") @(IsAssetSelected(asset.Id) ? "selected" : "")"
+                                                 data-asset-id="@asset.Id"
+                                                 @ontouchstart="@(e => OnCardTouchStart(e, asset))"
+                                                 @ontouchmove="OnCardTouchMove"
+                                                 @ontouchend="OnCardTouchEnd">
                                                 <AssetCard Asset="@asset" OnAssetClick="OnTimelineAssetClick" />
                                                 <div class="asset-select-checkbox" @onclick:stopPropagation="true">
                                                     <MudCheckBox T="bool"
@@ -326,6 +330,7 @@
         left: 8px;
         z-index: 5;
         opacity: 0;
+        pointer-events: none;
         transition: opacity 0.2s;
         background: rgba(0,0,0,0.4);
         border-radius: 999px;
@@ -339,11 +344,13 @@
 
     .asset-select-container:hover .asset-select-checkbox {
         opacity: 1;
+        pointer-events: auto;
     }
 
     .asset-select-container.selection-mode .asset-select-checkbox,
     .asset-select-container.selected .asset-select-checkbox {
         opacity: 1;
+        pointer-events: auto;
     }
 
     /* ===== Custom Scrubber ===== */
@@ -931,8 +938,99 @@
         }
     }
 
+    // ── Touch / long-press / drag-select ───────────────────────────────────
+    private System.Threading.Timer? _longPressTimer;
+    private bool _longPressHandled;
+    private bool _isDraggingSelection;
+    private double _touchStartX;
+    private double _touchStartY;
+    private double _lastDragX;
+    private double _lastDragY;
+
+    private void OnCardTouchStart(TouchEventArgs e, TimelineItem asset)
+    {
+        if (e.Touches.Length == 0) return;
+        _touchStartX = e.Touches[0].ClientX;
+        _touchStartY = e.Touches[0].ClientY;
+        _longPressHandled = false;
+        _isDraggingSelection = false;
+
+        // Si ya estamos en modo selección, el dedo abajo inicia el arrastre directamente
+        if (_selectionMode)
+        {
+            _isDraggingSelection = true;
+            _lastDragX = _touchStartX;
+            _lastDragY = _touchStartY;
+            ToggleAssetSelection(asset.Id, !IsAssetSelected(asset.Id));
+            return;
+        }
+
+        // Long press → entrar en modo selección
+        _longPressTimer?.Dispose();
+        _longPressTimer = new System.Threading.Timer(_ =>
+        {
+            InvokeAsync(() =>
+            {
+                _longPressHandled = true;
+                _isDraggingSelection = true;
+                _lastDragX = _touchStartX;
+                _lastDragY = _touchStartY;
+                ToggleAssetSelection(asset.Id, true);
+                StateHasChanged();
+            });
+        }, null, 500, System.Threading.Timeout.Infinite);
+    }
+
+    private async Task OnCardTouchMove(TouchEventArgs e)
+    {
+        if (e.Touches.Length == 0) return;
+        var touch = e.Touches[0];
+
+        if (!_isDraggingSelection)
+        {
+            // Cancelar long press si el dedo se movió más de 10px
+            var dx = touch.ClientX - _touchStartX;
+            var dy = touch.ClientY - _touchStartY;
+            if (Math.Sqrt(dx * dx + dy * dy) > 10)
+            {
+                _longPressTimer?.Dispose();
+                _longPressTimer = null;
+            }
+            return;
+        }
+
+        // Drag-to-select: solo si el dedo se movió al menos 8px desde la última comprobación
+        var ddx = touch.ClientX - _lastDragX;
+        var ddy = touch.ClientY - _lastDragY;
+        if (Math.Abs(ddx) < 8 && Math.Abs(ddy) < 8) return;
+
+        _lastDragX = touch.ClientX;
+        _lastDragY = touch.ClientY;
+
+        var assetIdStr = await JS.InvokeAsync<string?>("assetGridHelpers.getAssetIdAtPoint", touch.ClientX, touch.ClientY);
+        if (Guid.TryParse(assetIdStr, out var assetId) && !IsAssetSelected(assetId))
+        {
+            ToggleAssetSelection(assetId, true);
+        }
+    }
+
+    private void OnCardTouchEnd(TouchEventArgs e)
+    {
+        _longPressTimer?.Dispose();
+        _longPressTimer = null;
+        _isDraggingSelection = false;
+    }
+    // ───────────────────────────────────────────────────────────────────────
+
     private void OnTimelineAssetClick(TimelineItem asset)
     {
+        // Suprimir el click sintético que el navegador emite tras un long press
+        if (_longPressHandled)
+        {
+            _longPressHandled = false;
+            return;
+        }
+
         if (_selectionMode)
         {
             ToggleAssetSelection(asset.Id, !IsAssetSelected(asset.Id));
@@ -1255,21 +1353,46 @@
                 <MudTooltip Text="@(allSelected ? "Deseleccionar todo" : "Seleccionar todo")">
                     <MudIconButton Icon="@Icons.Material.Filled.SelectAll" Color="Color.Inherit" Disabled="@(!_assets.Any())" OnClick="ToggleSelectAll" />
                 </MudTooltip>
-                <MudTooltip Text="Compartir selección">
-                    <MudIconButton Icon="@Icons.Material.Outlined.Share" Color="Color.Inherit" Disabled="@(!_selectedAssetIds.Any())" OnClick="OpenShareSelectionDialog" />
-                </MudTooltip>
-                <MudTooltip Text="Añadir a álbum">
-                    <MudIconButton Icon="@Icons.Material.Outlined.AddToPhotos" Color="Color.Inherit" Disabled="@(!_selectedAssetIds.Any())" OnClick="OpenAddToAlbumDialog" />
-                </MudTooltip>
-                <MudTooltip Text="Descargar">
-                    <MudIconButton Icon="@Icons.Material.Outlined.Download" Color="Color.Inherit" Disabled="@(!_selectedAssetIds.Any() || _downloadingZip)" OnClick="DownloadSelectedAsync" />
-                </MudTooltip>
-                <MudTooltip Text="Archivar">
-                    <MudIconButton Icon="@Icons.Material.Outlined.Archive" Color="Color.Inherit" Disabled="@(!_selectedAssetIds.Any())" OnClick="ArchiveSelectedAsync" />
-                </MudTooltip>
-                <MudTooltip Text="Eliminar">
-                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Inherit" Disabled="@(!_selectedAssetIds.Any())" OnClick="OpenDeleteAssetsDialog" />
-                </MudTooltip>
+
+                @* Botones individuales — solo desktop *@
+                <span class="d-none d-md-flex">
+                    <MudTooltip Text="Compartir selección">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Share" Color="Color.Inherit" Disabled="@(!_selectedAssetIds.Any())" OnClick="OpenShareSelectionDialog" />
+                    </MudTooltip>
+                    <MudTooltip Text="Añadir a álbum">
+                        <MudIconButton Icon="@Icons.Material.Outlined.AddToPhotos" Color="Color.Inherit" Disabled="@(!_selectedAssetIds.Any())" OnClick="OpenAddToAlbumDialog" />
+                    </MudTooltip>
+                    <MudTooltip Text="Descargar">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Download" Color="Color.Inherit" Disabled="@(!_selectedAssetIds.Any() || _downloadingZip)" OnClick="DownloadSelectedAsync" />
+                    </MudTooltip>
+                    <MudTooltip Text="Archivar">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Archive" Color="Color.Inherit" Disabled="@(!_selectedAssetIds.Any())" OnClick="ArchiveSelectedAsync" />
+                    </MudTooltip>
+                    <MudTooltip Text="Eliminar">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Inherit" Disabled="@(!_selectedAssetIds.Any())" OnClick="OpenDeleteAssetsDialog" />
+                    </MudTooltip>
+                </span>
+
+                @* Menú de desbordamiento — solo móvil *@
+                <MudMenu Icon="@Icons.Material.Filled.MoreVert" Color="Color.Inherit"
+                         AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+                         Class="d-flex d-md-none">
+                    <MudMenuItem Icon="@Icons.Material.Outlined.Share" Disabled="@(!_selectedAssetIds.Any())" OnClick="OpenShareSelectionDialog">
+                        Compartir
+                    </MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Outlined.AddToPhotos" Disabled="@(!_selectedAssetIds.Any())" OnClick="OpenAddToAlbumDialog">
+                        Añadir a álbum
+                    </MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Outlined.Download" Disabled="@(!_selectedAssetIds.Any() || _downloadingZip)" OnClick="DownloadSelectedAsync">
+                        Descargar
+                    </MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Outlined.Archive" Disabled="@(!_selectedAssetIds.Any())" OnClick="ArchiveSelectedAsync">
+                        Archivar
+                    </MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Outlined.Delete" IconColor="Color.Error" Disabled="@(!_selectedAssetIds.Any())" OnClick="OpenDeleteAssetsDialog">
+                        <MudText Color="Color.Error">Eliminar</MudText>
+                    </MudMenuItem>
+                </MudMenu>
             </text>
         , keepDrawerVisible: true);
     }
@@ -1314,6 +1437,7 @@
     {
         _isDisposed = true;
         _objRef?.Dispose();
+        _longPressTimer?.Dispose();
         JS.InvokeVoidAsync("scrollHelpers.disableTimelineScroll");
         JS.InvokeVoidAsync("scrubberHelpers.cleanup");
         JS.InvokeVoidAsync("disconnectLoadMoreObserver");
