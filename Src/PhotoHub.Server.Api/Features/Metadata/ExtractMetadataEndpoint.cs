@@ -3,11 +3,12 @@ using System.Security.Claims;
 using System.Threading.Channels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using PhotoHub.Client.Web.Models;
 using PhotoHub.Server.Api.Shared.Data;
 using PhotoHub.Server.Api.Shared.Interfaces;
 using PhotoHub.Server.Api.Shared.Models;
 using PhotoHub.Server.Api.Shared.Services;
-using PhotoHub.Client.Shared.Models;
+using PhotoHub.Server.Api.Shared.Dtos;
 
 namespace PhotoHub.Server.Api.Features.Metadata;
 

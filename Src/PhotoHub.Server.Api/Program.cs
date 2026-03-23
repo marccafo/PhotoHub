@@ -21,7 +21,6 @@ var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "PhotoHub";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "PhotoHub";
 
 // CORS — cualquier origen permitido. La seguridad la gestiona el JWT, no el origen.
-// Necesario para el WebView de MAUI (origen nativo variable según plataforma/dispositivo).
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>

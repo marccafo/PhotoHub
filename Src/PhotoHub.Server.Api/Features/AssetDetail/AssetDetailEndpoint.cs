@@ -91,7 +91,7 @@ public class AssetDetailEndpoint : IEndpoint
                     AssetId = t.AssetId
                 }).ToList(),
                 Tags = BuildTagList(asset),
-                SyncStatus = PhotoHub.Client.Shared.Models.AssetSyncStatus.Synced,
+                SyncStatus = PhotoHub.Server.Api.Shared.Dtos.AssetSyncStatus.Synced,
                 IsFavorite = asset.IsFavorite,
                 IsArchived = asset.IsArchived,
                 Description = asset.Description

@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using PhotoHub.Server.Api.Shared.Interfaces;
 using PhotoHub.Server.Api.Shared.Models;
 using PhotoHub.Server.Api.Shared.Services;
-using PhotoHub.Client.Shared.Models;
+using PhotoHub.Server.Api.Shared.Dtos;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Formats.Jpeg;

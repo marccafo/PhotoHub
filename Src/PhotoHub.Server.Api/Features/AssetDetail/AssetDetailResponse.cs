@@ -19,7 +19,7 @@ public class AssetDetailResponse
     public ExifDataResponse? Exif { get; set; }
     public List<ThumbnailInfoResponse> Thumbnails { get; set; } = new();
     public List<string> Tags { get; set; } = new();
-    public PhotoHub.Client.Shared.Models.AssetSyncStatus SyncStatus { get; set; } = PhotoHub.Client.Shared.Models.AssetSyncStatus.Synced;
+    public PhotoHub.Server.Api.Shared.Dtos.AssetSyncStatus SyncStatus { get; set; } = PhotoHub.Server.Api.Shared.Dtos.AssetSyncStatus.Synced;
     public bool IsFavorite { get; set; }
     public bool IsArchived { get; set; }
     public string? Description { get; set; }

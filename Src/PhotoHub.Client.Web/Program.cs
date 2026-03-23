@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using PhotoHub.Client.Web;
 using MudBlazor.Services;
-using PhotoHub.Client.Shared.Services;
 using PhotoHub.Client.Web.Services;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
@@ -36,13 +35,13 @@ builder.Services.AddMudServices();
 builder.Services.AddScoped<IAssetListNavigationState, AssetListNavigationState>();
 builder.Services.AddScoped<LayoutService>();
 builder.Services.AddScoped<ThemeService>();
-builder.Services.AddScoped<PhotoHub.Client.Shared.Services.IAuthService, PhotoHub.Client.Web.Services.AuthService>();
-builder.Services.AddScoped<PhotoHub.Client.Web.Services.AuthService>(sp => 
-    (PhotoHub.Client.Web.Services.AuthService)sp.GetRequiredService<PhotoHub.Client.Shared.Services.IAuthService>());
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<AuthService>(sp =>
+    (AuthService)sp.GetRequiredService<IAuthService>());
 builder.Services.AddScoped<IAssetService>(sp =>
 {
     var httpClient = sp.GetRequiredService<HttpClient>();
-    var authService = sp.GetRequiredService<PhotoHub.Client.Web.Services.AuthService>();
+    var authService = sp.GetRequiredService<AuthService>();
     return new AssetService(httpClient, async () => await authService.GetTokenAsync());
 });
 builder.Services.AddScoped<IIndexService, IndexService>();
@@ -52,7 +51,7 @@ builder.Services.AddScoped<IDuplicatesQueueService, DuplicatesQueueService>();
 builder.Services.AddScoped<IFolderService>(sp =>
 {
     var httpClient = sp.GetRequiredService<HttpClient>();
-    var authService = sp.GetRequiredService<PhotoHub.Client.Web.Services.AuthService>();
+    var authService = sp.GetRequiredService<AuthService>();
     return new FolderService(httpClient, async () => await authService.GetTokenAsync());
 });
 builder.Services.AddScoped<IPendingAssetsProvider, WebPendingAssetsProvider>();
@@ -60,49 +59,49 @@ builder.Services.AddScoped<IMapService, MapService>();
 builder.Services.AddScoped<IAlbumService>(sp =>
 {
     var httpClient = sp.GetRequiredService<HttpClient>();
-    var authService = sp.GetRequiredService<PhotoHub.Client.Web.Services.AuthService>();
+    var authService = sp.GetRequiredService<AuthService>();
     return new AlbumService(httpClient, async () => await authService.GetTokenAsync());
 });
 builder.Services.AddScoped<ISettingsService>(sp =>
 {
     var httpClient = sp.GetRequiredService<HttpClient>();
-    var authService = sp.GetRequiredService<PhotoHub.Client.Web.Services.AuthService>();
-    return new PhotoHub.Client.Shared.Services.SettingsService(httpClient, async () => await authService.GetTokenAsync());
+    var authService = sp.GetRequiredService<AuthService>();
+    return new SettingsService(httpClient, async () => await authService.GetTokenAsync());
 });
 builder.Services.AddScoped<IUserService>(sp =>
 {
     var httpClient = sp.GetRequiredService<HttpClient>();
-    var authService = sp.GetRequiredService<PhotoHub.Client.Web.Services.AuthService>();
+    var authService = sp.GetRequiredService<AuthService>();
     return new UserService(httpClient, async () => await authService.GetTokenAsync());
 });
 builder.Services.AddScoped<IAlbumPermissionService>(sp =>
 {
     var httpClient = sp.GetRequiredService<HttpClient>();
-    var authService = sp.GetRequiredService<PhotoHub.Client.Web.Services.AuthService>();
+    var authService = sp.GetRequiredService<AuthService>();
     return new AlbumPermissionService(httpClient, async () => await authService.GetTokenAsync());
 });
 builder.Services.AddScoped<IFolderPermissionService>(sp =>
 {
     var httpClient = sp.GetRequiredService<HttpClient>();
-    var authService = sp.GetRequiredService<PhotoHub.Client.Web.Services.AuthService>();
+    var authService = sp.GetRequiredService<AuthService>();
     return new FolderPermissionService(httpClient, async () => await authService.GetTokenAsync());
 });
 builder.Services.AddScoped<IAdminStatsService>(sp =>
 {
     var httpClient = sp.GetRequiredService<HttpClient>();
-    var authService = sp.GetRequiredService<PhotoHub.Client.Web.Services.AuthService>();
+    var authService = sp.GetRequiredService<AuthService>();
     return new AdminStatsService(httpClient, async () => await authService.GetTokenAsync());
 });
 builder.Services.AddScoped<IShareService>(sp =>
 {
     var httpClient = sp.GetRequiredService<HttpClient>();
-    var authService = sp.GetRequiredService<PhotoHub.Client.Web.Services.AuthService>();
+    var authService = sp.GetRequiredService<AuthService>();
     return new ShareService(httpClient, async () => await authService.GetTokenAsync());
 });
 builder.Services.AddScoped<INotificationService>(sp =>
 {
     var httpClient = sp.GetRequiredService<HttpClient>();
-    var authService = sp.GetRequiredService<PhotoHub.Client.Web.Services.AuthService>();
+    var authService = sp.GetRequiredService<AuthService>();
     return new NotificationService(httpClient, async () => await authService.GetTokenAsync());
 });
 

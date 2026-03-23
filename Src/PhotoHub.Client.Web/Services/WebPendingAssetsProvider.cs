@@ -1,5 +1,5 @@
-using PhotoHub.Client.Shared.Models;
-using PhotoHub.Client.Shared.Services;
+using PhotoHub.Client.Web.Models;
+using PhotoHub.Client.Web.Services;
 
 namespace PhotoHub.Client.Web.Services;
 

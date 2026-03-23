@@ -3,7 +3,6 @@
 @inject NavigationManager Navigation
 
 <Router AppAssembly="@typeof(App).Assembly"
-        AdditionalAssemblies="new[] { typeof(PhotoHub.Client.Shared.Services.IAuthService).Assembly }"
         OnNavigateAsync="OnNavigateAsync">
     <Found Context="routeData">
         <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />

@@ -12,18 +12,17 @@ Sistema de gestión de fotos y videos auto-hospedado. Indexa, organiza y visuali
 - **Etiquetas** — Tags automáticos por ML y tags manuales de usuario
 - **Archivado** — Archiva assets para ocultarlos de la vista principal sin eliminarlos
 - **Multi-usuario** — Roles, permisos por carpeta y álbum, admin principal protegido
-- **Sincronización desde dispositivo** — Subida de assets desde navegador o app nativa
+- **Sincronización desde dispositivo** — Subida de assets desde el navegador
 - **JWT + Refresh Token** — Autenticación con soporte multi-dispositivo
-- **Multiplataforma** — Web (Blazor WASM), Android, iOS, Windows, macOS
+- **PWA** — Instalable como app en escritorio y móvil, carga offline del app shell
 
 ## Stack tecnológico
 
 | Capa | Tecnología |
 |---|---|
 | Backend | ASP.NET Core 10, EF Core, PostgreSQL |
-| Frontend Web | Blazor WebAssembly |
-| App nativa | .NET MAUI |
-| UI | MudBlazor 8 |
+| Frontend | Blazor WebAssembly (PWA) |
+| UI | MudBlazor 9 |
 | Imágenes | ImageSharp, Magick.NET |
 | Video | FFmpeg (vía Xabe.FFmpeg) |
 | EXIF | MetadataExtractor |
@@ -35,10 +34,8 @@ Sistema de gestión de fotos y videos auto-hospedado. Indexa, organiza y visuali
 ```
 PhotoHub.sln
 └── Src/
-    ├── PhotoHub.Server.Api/        # API REST ASP.NET Core 10
-    ├── PhotoHub.Client.Shared/     # Razor Class Library (páginas y servicios compartidos)
-    ├── PhotoHub.Client.Web/        # Blazor WASM (cliente web)
-    └── PhotoHub.Client.Native/     # .NET MAUI (Android, iOS, Windows, macOS)
+    ├── PhotoHub.Server.Api/    # API REST ASP.NET Core 10
+    └── PhotoHub.Client.Web/    # Blazor WASM PWA
 ```
 
 ### Responsabilidades por proyecto
@@ -49,20 +46,12 @@ PhotoHub.sln
 - Autenticación JWT + Refresh Tokens, gestión de usuarios y permisos
 - Migraciones de base de datos (EF Core + PostgreSQL)
 
-**`Client.Shared`** — Todo lo platform-agnostic:
-- Componentes: `AssetCard`, `ApiErrorDialog`, `EmptyState`
+**`Client.Web`** — Cliente Blazor WASM completo:
+- Componentes: `AssetCard`, `ApiErrorDialog`, `EmptyState`, etc.
 - Layout: `MainLayout`, `NavMenu`, `LoginLayout`
 - Páginas: Albums, Timeline, Folders, Trash, AssetDetail, Login, etc.
-- Servicios: interfaces + implementaciones compartidas
-
-**`Client.Web`** — Solo específico de WASM:
-- `AuthService` — usa `IJSRuntime`/`localStorage`
-- `WebPendingAssetsProvider` — endpoint `/api/assets/device`
-- `Device.razor` — página de sincronización desde navegador
-
-**`Client.Native`** — Solo específico de MAUI:
-- `MauiAuthService` — usa `SecureStorage`
-- `MauiPendingAssetsProvider` — stub (pendiente de implementar)
+- Servicios: interfaces + implementaciones (AuthService usa `IJSRuntime`/`localStorage`)
+- PWA: `manifest.webmanifest`, `service-worker.js` con cache del app shell
 
 ## Requisitos
 
@@ -193,15 +182,6 @@ docker compose up --build
 ```
 
 La imagen base es `mcr.microsoft.com/dotnet/aspnet:10.0` con `ffmpeg` y `libgdiplus` instalados.
-
-## Plataformas soportadas (MAUI)
-
-| Plataforma | Versión mínima |
-|---|---|
-| Android | API 24 (Android 7.0) |
-| iOS | 15.0 |
-| macOS (Catalyst) | 15.0 |
-| Windows | 10.0.19041.0 |
 
 ## Licencia
 

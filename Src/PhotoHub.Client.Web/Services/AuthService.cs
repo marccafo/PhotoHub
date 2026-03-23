@@ -1,6 +1,5 @@
 using System.Net.Http.Json;
 using Microsoft.JSInterop;
-using PhotoHub.Client.Shared.Services;
 
 namespace PhotoHub.Client.Web.Services;
 

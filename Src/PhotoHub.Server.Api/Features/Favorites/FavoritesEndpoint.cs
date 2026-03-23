@@ -5,7 +5,7 @@ using PhotoHub.Server.Api.Shared.Data;
 using PhotoHub.Server.Api.Shared.Interfaces;
 using PhotoHub.Server.Api.Shared.Models;
 using PhotoHub.Server.Api.Features.Timeline;
-using PhotoHub.Client.Shared.Models;
+using PhotoHub.Server.Api.Shared.Dtos;
 
 namespace PhotoHub.Server.Api.Features.Favorites;
 

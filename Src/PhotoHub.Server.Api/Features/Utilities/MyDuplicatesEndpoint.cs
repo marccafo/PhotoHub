@@ -1,6 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
-using PhotoHub.Client.Shared.Models;
+using PhotoHub.Server.Api.Shared.Dtos;
 using PhotoHub.Server.Api.Features.Timeline;
 using PhotoHub.Server.Api.Shared.Data;
 using PhotoHub.Server.Api.Shared.Interfaces;
