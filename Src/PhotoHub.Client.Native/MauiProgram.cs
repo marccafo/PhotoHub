@@ -48,18 +48,27 @@ public static class MauiProgram
         // Agregar MudBlazor
         builder.Services.AddMudServices();
 
-        // Configurar HttpClient — URL leída desde appsettings.json embebido
-        var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "https://localhost:7255";
+        // ServerUrlService — singleton que persiste la URL del servidor en Preferences.
+        // Si no hay URL guardada, se usa la de appsettings.json como valor inicial (útil en desarrollo).
+        var serverUrlService = new ServerUrlService();
+        if (!serverUrlService.IsConfigured)
+        {
+            var defaultUrl = builder.Configuration["ApiBaseUrl"];
 #if ANDROID
-        // En emulador Android, localhost del host es 10.0.2.2
-        if (apiBaseUrl.Contains("localhost", StringComparison.OrdinalIgnoreCase))
-            apiBaseUrl = apiBaseUrl.Replace("localhost", "10.0.2.2", StringComparison.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(defaultUrl) &&
+                defaultUrl.Contains("localhost", StringComparison.OrdinalIgnoreCase))
+                defaultUrl = defaultUrl.Replace("localhost", "10.0.2.2", StringComparison.OrdinalIgnoreCase);
 #endif
+            if (!string.IsNullOrWhiteSpace(defaultUrl))
+                serverUrlService.Url = defaultUrl;
+        }
+        builder.Services.AddSingleton(serverUrlService);
 
         builder.Services.AddScoped<ApiErrorNotifier>();
         builder.Services.AddScoped(sp =>
         {
             var notifier = sp.GetRequiredService<ApiErrorNotifier>();
+            var urlService = sp.GetRequiredService<ServerUrlService>();
 #if DEBUG
             // En desarrollo, ignorar errores de certificado HTTPS (dev cert no confiado por defecto en MAUI)
             var innerHandler = new HttpClientHandler
@@ -69,17 +78,24 @@ public static class MauiProgram
 #else
             var innerHandler = new HttpClientHandler();
 #endif
-            var refreshHandler = new AuthRefreshHandler(() => sp.GetRequiredService<IAuthService>())
+            var serverUrlHandler = new ServerUrlHandler(urlService)
             {
                 InnerHandler = innerHandler
+            };
+            var refreshHandler = new AuthRefreshHandler(() => sp.GetRequiredService<IAuthService>())
+            {
+                InnerHandler = serverUrlHandler
             };
             var errorHandler = new ApiErrorHandler(notifier)
             {
                 InnerHandler = refreshHandler
             };
+            // BaseAddress placeholder — ServerUrlHandler la reemplaza dinámicamente en cada request
+            // con la URL real configurada por el usuario. HttpClient requiere una BaseAddress
+            // absoluta para poder enviar URIs relativas (lanza InvalidOperationException si no).
             return new HttpClient(errorHandler)
             {
-                BaseAddress = new Uri(apiBaseUrl)
+                BaseAddress = new Uri("http://photohub-native.placeholder/")
             };
         });
 

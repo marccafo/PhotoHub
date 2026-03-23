@@ -21,31 +21,24 @@ public class MauiAuthService : IAuthService
 
     public async Task<bool> LoginAsync(string username, string password)
     {
-        try
-        {
-            var deviceId = await EnsureDeviceIdAsync();
-            var request = new LoginRequest { Username = username, Password = password, DeviceId = deviceId };
-            var response = await _httpClient.PostAsJsonAsync("/api/auth/login", request);
+        var deviceId = await EnsureDeviceIdAsync();
+        var request = new LoginRequest { Username = username, Password = password, DeviceId = deviceId };
+        var response = await _httpClient.PostAsJsonAsync("/api/auth/login", request);
 
-            if (response.IsSuccessStatusCode)
-            {
-                var loginResponse = await response.Content.ReadFromJsonAsync<LoginResponse>();
-                if (loginResponse != null)
-                {
-                    await SaveTokenAsync(loginResponse.Token);
-                    await SaveRefreshTokenAsync(loginResponse.RefreshToken);
-                    await SaveUserAsync(loginResponse.User);
-                    _currentUser = loginResponse.User;
-                    OnAuthStateChanged?.Invoke();
-                    return true;
-                }
-            }
-            return false;
-        }
-        catch
+        if (response.IsSuccessStatusCode)
         {
-            return false;
+            var loginResponse = await response.Content.ReadFromJsonAsync<LoginResponse>();
+            if (loginResponse != null)
+            {
+                await SaveTokenAsync(loginResponse.Token);
+                await SaveRefreshTokenAsync(loginResponse.RefreshToken);
+                await SaveUserAsync(loginResponse.User);
+                _currentUser = loginResponse.User;
+                OnAuthStateChanged?.Invoke();
+                return true;
+            }
         }
+        return false;
     }
 
     public async Task LogoutAsync()
