@@ -289,13 +289,6 @@
         font-size: 0.85rem;
     }
 
-    .fab-container {
-        position: fixed;
-        bottom: 24px;
-        right: 24px;
-        z-index: 100;
-    }
-
 
     /* Estilos para el Hero del álbum */
     .album-hero {
@@ -374,6 +367,24 @@
             min-height: 260px;
         }
     }
+
+    /* View toggle in filter sheet */
+    .album-view-toggle {
+        gap: 8px;
+        border: none !important;
+        box-shadow: none !important;
+    }
+
+    .album-view-toggle .mud-toggle-item {
+        border-radius: 20px !important;
+        background: var(--mud-palette-action-default-hover);
+        flex: 1;
+    }
+
+    .album-view-toggle .mud-toggle-item-selected {
+        background: var(--mud-palette-primary) !important;
+        color: var(--mud-palette-primary-text) !important;
+    }
 </style>
 
 @if (_selectedAlbum == null)
@@ -382,47 +393,25 @@
     <div class="d-flex align-center justify-space-between mb-4">
         <MudText Typo="Typo.h5">@PageHeader</MudText>
         
-        <div class="d-flex align-center gap-2">
+        <div class="d-flex align-center gap-1">
             <MudTextField @bind-Value="_albumSearch"
                           Placeholder="Buscar"
                           Variant="Variant.Outlined"
                           Margin="Margin.Dense"
-                                                   Immediate="true"
+                          Immediate="true"
                           Adornment="Adornment.Start"
                           AdornmentIcon="@Icons.Material.Filled.Search"
                           Class="albums-search d-none d-sm-flex" />
-
-            <MudMenu Icon="@Icons.Material.Filled.Tune" Label="Opciones de vista" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Variant="Variant.Outlined"  Size="Size.Small">
-                <div class="pa-4" style="min-width: 250px;">
-                    <MudText Typo="Typo.subtitle2" Class="mb-2">Ordenar por</MudText>
-                    <MudSelect T="AlbumSort"
-                               @bind-Value="_albumSort"
-                               Variant="Variant.Outlined"
-                               Margin="Margin.Dense"
-                                                             Class="mb-4">
-                        <MudSelectItem Value="AlbumSort.Recent">Foto más reciente</MudSelectItem>
-                        <MudSelectItem Value="AlbumSort.Oldest">Foto más antigua</MudSelectItem>
-                        <MudSelectItem Value="AlbumSort.Name">Nombre</MudSelectItem>
-                    </MudSelect>
-
-                    <MudDivider Class="my-2" />
-
-                    <MudSwitch T="bool" Value="_groupByYear" ValueChanged="ToggleGroupByYear" Color="Color.Primary" Label="Agrupar por año" />
-                    
-                    <MudDivider Class="my-2" />
-                    
-                    <MudText Typo="Typo.subtitle2" Class="mb-2">Vista</MudText>
-                    <MudToggleGroup T="AlbumViewMode" Value="_albumViewMode" ValueChanged="OnViewModeChanged" Color="Color.Primary" Outline="true" Delimiters="true" Size="Size.Small">
-                        <MudToggleItem Value="AlbumViewMode.Grid" Icon="@Icons.Material.Filled.ViewModule" />
-                        <MudToggleItem Value="AlbumViewMode.List" Icon="@Icons.Material.Filled.ViewList" />
-                    </MudToggleGroup>
-                </div>
-            </MudMenu>
+            <MudIconButton Icon="@Icons.Material.Filled.Add"
+                           Color="Color.Primary"
+                           Size="Size.Small"
+                           Title="Nuevo álbum"
+                           OnClick="OpenCreateDialog" />
+            <MudIconButton Icon="@Icons.Material.Filled.Tune"
+                           Size="Size.Small"
+                           Title="Opciones de vista"
+                           OnClick="@(() => { _albumFilterSheetEverOpened = true; _albumFilterSheetOpen = true; })" />
         </div>
-    </div>
-
-    <div class="fab-container">
-        <MudFab Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog" Label="Nuevo Álbum" Extended="true" />
     </div>
 
     @if (_loading)
@@ -717,34 +706,92 @@ else
     </div>
 }
 
-<MudDialog @bind-Visible="_createDialogVisible" 
-          Options="@(new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true })">
-    <TitleContent>
-        <MudText Typo="Typo.h6">Crear Álbum</MudText>
-    </TitleContent>
-    <DialogContent>
+@* ── Crear álbum — bottom sheet ── *@
+@if (_createAlbumSheetEverOpened)
+{
+<MudDrawer @bind-Open="_createDialogVisible"
+           Anchor="Anchor.Bottom"
+           Elevation="4"
+           Variant="DrawerVariant.Temporary"
+           Class="ph-bottom-sheet">
+    <div class="ph-sheet-handle"></div>
+    <div class="d-flex justify-space-between align-center px-4 pt-1 pb-2">
+        <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Nuevo álbum</MudText>
+        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                       OnClick="CloseCreateDialog" />
+    </div>
+    <MudDivider />
+    <div class="px-4 pt-3 pb-6">
         <MudTextField @bind-Value="_newAlbumName"
-                      Label="Nombre del álbum"
+                      Label="Nombre"
                       Variant="Variant.Outlined"
+                      Margin="Margin.Dense"
                       FullWidth="true"
+                      Autofocus="true"
                       Class="mb-3" />
         <MudTextField @bind-Value="_newAlbumDescription"
                       Label="Descripción (opcional)"
                       Variant="Variant.Outlined"
+                      Margin="Margin.Dense"
                       FullWidth="true"
-                      Lines="3" />
+                      Lines="2"
+                      Class="mb-3" />
         @if (_albumFilter == AlbumFilter.Shared)
         {
-            <MudAlert Severity="Severity.Info" Class="mt-3" >
+            <MudAlert Severity="Severity.Info" Class="mb-3">
                 Al crear podrás añadir colaboradores de inmediato.
             </MudAlert>
         }
-    </DialogContent>
-    <DialogActions>
-        <MudButton OnClick="CloseCreateDialog">Cancelar</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="CreateAlbum">Crear</MudButton>
-    </DialogActions>
-</MudDialog>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   FullWidth="true" Size="Size.Medium"
+                   OnClick="CreateAlbum">
+            Crear
+        </MudButton>
+    </div>
+</MudDrawer>
+}
+
+@* ── Opciones de vista — bottom sheet ── *@
+@if (_albumFilterSheetEverOpened)
+{
+<MudDrawer @bind-Open="_albumFilterSheetOpen"
+           Anchor="Anchor.Bottom"
+           Elevation="4"
+           Variant="DrawerVariant.Temporary"
+           Class="ph-bottom-sheet">
+    <div class="ph-sheet-handle"></div>
+    <div class="d-flex justify-space-between align-center px-4 pt-1 pb-2">
+        <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Opciones de vista</MudText>
+        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                       OnClick="@(() => _albumFilterSheetOpen = false)" />
+    </div>
+    <MudDivider />
+    <div class="px-4 pt-3 pb-6">
+        <MudText Typo="Typo.caption" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--mud-palette-text-secondary);" Class="mb-2 d-block">Ordenar por</MudText>
+        <MudSelect T="AlbumSort"
+                   @bind-Value="_albumSort"
+                   Variant="Variant.Outlined"
+                   Margin="Margin.Dense"
+                   FullWidth="true"
+                   Class="mb-4">
+            <MudSelectItem Value="AlbumSort.Recent">Foto más reciente</MudSelectItem>
+            <MudSelectItem Value="AlbumSort.Oldest">Foto más antigua</MudSelectItem>
+            <MudSelectItem Value="AlbumSort.Name">Nombre</MudSelectItem>
+        </MudSelect>
+        <MudDivider Class="mb-3" />
+        <MudSwitch T="bool" Value="_groupByYear" ValueChanged="ToggleGroupByYear"
+                   Color="Color.Primary" Label="Agrupar por año" Class="mb-3" />
+        <MudDivider Class="mb-3" />
+        <MudText Typo="Typo.caption" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--mud-palette-text-secondary);" Class="mb-2 d-block">Vista</MudText>
+        <MudToggleGroup T="AlbumViewMode" Value="_albumViewMode" ValueChanged="OnViewModeChanged"
+                        Color="Color.Primary" Outline="false" Delimiters="false" Size="Size.Small"
+                        Class="w-100 album-view-toggle">
+            <MudToggleItem Value="AlbumViewMode.Grid" Icon="@Icons.Material.Filled.ViewModule" Text="Cuadrícula" />
+            <MudToggleItem Value="AlbumViewMode.List" Icon="@Icons.Material.Filled.ViewList" Text="Lista" />
+        </MudToggleGroup>
+    </div>
+</MudDrawer>
+}
 
 <MudDialog @bind-Visible="_editDialogVisible" Options="@(new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true })">
     <TitleContent>
@@ -846,6 +893,9 @@ else
 
     // Dialogs
     private bool _createDialogVisible = false;
+    private bool _createAlbumSheetEverOpened = false;
+    private bool _albumFilterSheetOpen = false;
+    private bool _albumFilterSheetEverOpened = false;
     private bool _editDialogVisible = false;
     private bool _deleteDialogVisible = false;
     private bool _deleteSelectedDialogVisible = false;
@@ -1054,6 +1104,7 @@ else
     {
         _newAlbumName = "";
         _newAlbumDescription = "";
+        _createAlbumSheetEverOpened = true;
         _createDialogVisible = true;
     }
 

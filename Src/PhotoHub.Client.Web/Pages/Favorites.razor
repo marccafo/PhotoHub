@@ -20,7 +20,7 @@
         {
             var dayDate = DateTime.ParseExact(group.Key, "yyyy-MM-dd", null);
             <div class="day-group">
-                <MudText Typo="Typo.h6" Class="day-header">@FormatDayHeader(dayDate)</MudText>
+                <MudText Typo="Typo.body2" Class="day-header">@FormatDayHeader(dayDate)</MudText>
                 <div class="masonry-grid">
                     @foreach (var asset in group.Value)
                     {
@@ -59,8 +59,17 @@
         padding: 4px;
     }
     .day-header {
-        padding: 16px 0 8px;
         font-weight: 600;
+        color: var(--mud-palette-text-secondary);
+        text-transform: capitalize;
+        padding: 0 4px 6px 4px;
+        display: block;
+    }
+
+    @@media (max-width: 599.98px) {
+        .day-header {
+            font-size: 0.78rem !important;
+        }
     }
     .masonry-grid {
         display: flex;

@@ -67,7 +67,7 @@
                         {
                             var dayDate = DateTime.ParseExact(group.Key, "yyyy-MM-dd", null);
                             <div class="day-group" id="@GetGroupId(group.Key)">
-                                <MudText Typo="Typo.h6" Class="day-header">@FormatDayHeader(dayDate)</MudText>
+                                <MudText Typo="Typo.body2" Class="day-header">@FormatDayHeader(dayDate)</MudText>
                                 <div class="masonry-grid" data-day-group="@GetGroupId(group.Key)">
                                     @foreach (var asset in group.Value)
                                     {
@@ -404,11 +404,11 @@
     }
 
     .day-header {
-        margin-bottom: 16px !important;
-        margin-left: 4px;
         font-weight: 600;
-        color: var(--mud-palette-text-primary);
+        color: var(--mud-palette-text-secondary);
         text-transform: capitalize;
+        padding: 0 4px 6px 4px;
+        display: block;
     }
 
     /* Layout tipo masonry justificado - llena todo el ancho */
@@ -600,11 +600,7 @@
         }
 
         .day-header {
-            margin-bottom: 6px !important;
-            margin-left: 4px;
-            font-size: 0.85rem !important;
-            font-weight: 600 !important;
-            line-height: 1.2 !important;
+            font-size: 0.78rem !important;
         }
 
         /* Handle: pill draggable con flechas arriba/abajo — estilo Google Photos */
