@@ -43,12 +43,9 @@
     }
     else if (_pagedResult == null || _pagedResult.Items.Count == 0)
     {
-        <MudPaper Class="pa-8 d-flex flex-column align-center justify-center" Elevation="0" Outlined="true">
-            <MudIcon Icon="@Icons.Material.Outlined.NotificationsNone" Size="Size.Large" Color="Color.Default" Class="mb-2" Style="font-size: 48px;" />
-            <MudText Typo="Typo.body1" Color="Color.Secondary">
-                @(_unreadOnly ? "No hay notificaciones sin leer." : "No hay notificaciones.")
-            </MudText>
-        </MudPaper>
+        <EmptyState Icon="@Icons.Material.Outlined.NotificationsNone"
+                    Title="@(_unreadOnly ? "No hay notificaciones sin leer." : "No hay notificaciones.")"
+                    Description="Aquí aparecerán los avisos sobre tu biblioteca." />
     }
     else
     {

@@ -169,8 +169,20 @@ window.scrubberHelpers = {
     _track: null,
     _thumb: null,
     _label: null,
+    _overlay: null,
     _groupMap: [],
     _isDragging: false,
+    _isMobile: false,
+    _hideTimer: null,
+
+    _showScrubber: function () {
+        if (!this._isMobile || !this._overlay) return;
+        this._overlay.classList.add('scrubber-visible');
+        clearTimeout(this._hideTimer);
+        this._hideTimer = setTimeout(() => {
+            if (!this._isDragging) this._overlay.classList.remove('scrubber-visible');
+        }, 2000);
+    },
 
     init: function (groupMap) {
         this._groupMap = groupMap || [];
@@ -178,8 +190,21 @@ window.scrubberHelpers = {
         this._track = document.getElementById('scrubber-track');
         this._thumb = document.getElementById('scrubber-thumb');
         this._label = document.getElementById('scrubber-thumb-label');
+        this._overlay = document.querySelector('.scrubber-overlay');
 
         if (!this._sc || !this._track || !this._thumb) return;
+
+        this._isMobile = window.matchMedia('(hover: none)').matches;
+
+        // Mobile auto-hide: show scrubber on scroll, hide after 2s idle
+        if (this._isMobile && this._overlay) {
+            var self = this;
+            this._sc.addEventListener('scroll', function () { self._showScrubber(); }, { passive: true });
+            this._track.addEventListener('touchstart', function () {
+                self._overlay.classList.add('scrubber-visible');
+                clearTimeout(self._hideTimer);
+            }, { passive: true });
+        }
 
         // Track click — handles both year marker clicks and bare track clicks.
         // Using event delegation so markers added via pagination are covered automatically.
@@ -247,6 +272,13 @@ window.scrubberHelpers = {
             document.removeEventListener('mouseup', stop);
             document.removeEventListener('touchmove', onTouchMove);
             document.removeEventListener('touchend', stop);
+            // Mobile: restart hide timer after drag ends
+            if (self._isMobile && self._overlay) {
+                clearTimeout(self._hideTimer);
+                self._hideTimer = setTimeout(() => {
+                    self._overlay.classList.remove('scrubber-visible');
+                }, 2000);
+            }
         };
 
         document.addEventListener('mousemove', onMouseMove);
@@ -317,11 +349,15 @@ window.scrubberHelpers = {
     },
 
     cleanup: function () {
+        clearTimeout(this._hideTimer);
         this._sc = null;
         this._track = null;
         this._thumb = null;
         this._label = null;
+        this._overlay = null;
         this._groupMap = [];
+        this._isMobile = false;
+        this._hideTimer = null;
     }
 };
 

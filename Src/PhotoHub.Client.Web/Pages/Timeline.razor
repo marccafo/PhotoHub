@@ -21,29 +21,40 @@
         <div class="timeline-content-wrapper">
 
             <div class="filter-chips-bar">
-                <MudChip T="string" Color="@(_activeFilter == "All" ? Color.Primary : Color.Inherit)" Variant="Variant.Filled" OnClick="@(async () => await SetFilter("All"))">Todas</MudChip>
-                <MudChip T="string" Color="@(_activeFilter == "Photos" ? Color.Primary : Color.Inherit)" Variant="Variant.Filled" OnClick="@(async () => await SetFilter("Photos"))">Fotos</MudChip>
-                <MudChip T="string" Color="@(_activeFilter == "Videos" ? Color.Primary : Color.Inherit)" Variant="Variant.Filled" OnClick="@(async () => await SetFilter("Videos"))">Vídeos</MudChip>
-                <MudChip T="string" Color="@(_activeFilter == "Favorites" ? Color.Primary : Color.Inherit)" Variant="Variant.Filled" OnClick="@(async () => await SetFilter("Favorites"))">Favoritos</MudChip>
-                <MudSpacer />
-                <MudTooltip Text="Compacto">
-                    <MudIconButton Icon="@Icons.Material.Outlined.GridOn"
-                                   Size="Size.Small"
-                                   Color="@(_density == "S" ? Color.Primary : Color.Inherit)"
-                                   OnClick="@(async () => await SetDensity("S"))" />
-                </MudTooltip>
-                <MudTooltip Text="Mediano">
-                    <MudIconButton Icon="@Icons.Material.Outlined.GridView"
-                                   Size="Size.Small"
-                                   Color="@(_density == "M" ? Color.Primary : Color.Inherit)"
-                                   OnClick="@(async () => await SetDensity("M"))" />
-                </MudTooltip>
-                <MudTooltip Text="Grande">
-                    <MudIconButton Icon="@Icons.Material.Outlined.PhotoSizeSelectLarge"
-                                   Size="Size.Small"
-                                   Color="@(_density == "L" ? Color.Primary : Color.Inherit)"
-                                   OnClick="@(async () => await SetDensity("L"))" />
-                </MudTooltip>
+                <!-- Desktop: chips de filtro -->
+                <div class="filter-chips-scroll filter-chips-desktop">
+                    <MudChip T="string" Color="@(_activeFilter == "All" ? Color.Primary : Color.Inherit)" Variant="Variant.Filled" OnClick="@(async () => await SetFilter("All"))">Todas</MudChip>
+                    <MudChip T="string" Color="@(_activeFilter == "Photos" ? Color.Primary : Color.Inherit)" Variant="Variant.Filled" OnClick="@(async () => await SetFilter("Photos"))">Fotos</MudChip>
+                    <MudChip T="string" Color="@(_activeFilter == "Videos" ? Color.Primary : Color.Inherit)" Variant="Variant.Filled" OnClick="@(async () => await SetFilter("Videos"))">Vídeos</MudChip>
+                    <MudChip T="string" Color="@(_activeFilter == "Favorites" ? Color.Primary : Color.Inherit)" Variant="Variant.Filled" OnClick="@(async () => await SetFilter("Favorites"))">Favoritos</MudChip>
+                </div>
+                <!-- Móvil: botón que abre el bottom sheet de filtros -->
+                <button class="filter-mobile-btn filter-chips-mobile" @onclick="OpenFilterSheet">
+                    <MudIcon Icon="@Icons.Material.Filled.FilterList" Size="Size.Small" />
+                    <span>@GetFilterLabel()</span>
+                    <MudIcon Icon="@Icons.Material.Filled.ExpandMore" Size="Size.Small" Class="filter-mobile-btn-chevron" />
+                </button>
+                <div class="filter-density-controls">
+                    <!-- Desktop: 3 botones individuales -->
+                    <MudTooltip Text="Compacto" Class="density-btn-desktop">
+                        <MudIconButton Icon="@Icons.Material.Outlined.GridOn"
+                                       Size="Size.Small"
+                                       Color="@(_density == "S" ? Color.Primary : Color.Inherit)"
+                                       OnClick="@(async () => await SetDensity("S"))" />
+                    </MudTooltip>
+                    <MudTooltip Text="Mediano" Class="density-btn-desktop">
+                        <MudIconButton Icon="@Icons.Material.Outlined.GridView"
+                                       Size="Size.Small"
+                                       Color="@(_density == "M" ? Color.Primary : Color.Inherit)"
+                                       OnClick="@(async () => await SetDensity("M"))" />
+                    </MudTooltip>
+                    <MudTooltip Text="Grande" Class="density-btn-desktop">
+                        <MudIconButton Icon="@Icons.Material.Outlined.PhotoSizeSelectLarge"
+                                       Size="Size.Small"
+                                       Color="@(_density == "L" ? Color.Primary : Color.Inherit)"
+                                       OnClick="@(async () => await SetDensity("L"))" />
+                    </MudTooltip>
+                </div>
             </div>
 
             <div class="timeline-container" id="timeline-scroll-container">
@@ -112,40 +123,74 @@
             </div>
         </div>
         
-        <div class="timeline-sidebar">
+        @if (_groupedAssets.Any())
+        {
+            <div class="scrubber-overlay">
+                <div class="scrubber-track" id="scrubber-track">
+                    <div class="scrubber-thumb" id="scrubber-thumb">
+                        <span class="scrubber-thumb-label" id="scrubber-thumb-label"></span>
+                        <svg class="scrubber-arrow" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14l5-5 5 5z"/></svg>
+                        <div class="scrubber-thumb-bar"></div>
+                        <svg class="scrubber-arrow" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
+                    </div>
+                    @{
+                        var renderedScrubYears = new HashSet<string>();
+                    }
+                    @foreach (var group in _groupedAssets)
+                    {
+                        var scrubYear = GetYearFromGroup(group.Key);
+                        @if (!renderedScrubYears.Contains(scrubYear))
+                        {
+                            renderedScrubYears.Add(scrubYear);
+                            var scrubPos = GetGroupPosition(group.Key);
+                            var scrubPosStr = scrubPos.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+                            <div class="scrubber-year-marker @(IsActiveYear(scrubYear) ? "active" : "")"
+                                 data-group-id="@GetGroupId(group.Key)"
+                                 style="top: @($"{scrubPosStr}%")">
+                                <span class="scrubber-year-label">@scrubYear</span>
+                                <div class="scrubber-year-dot"></div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+@if (_filterSheetOpen)
+{
+    <div class="filter-sheet-backdrop" @onclick="CloseFilterSheet"></div>
+    <div class="filter-sheet">
+        <div class="filter-sheet-handle"></div>
+        <MudText Typo="Typo.subtitle2" Class="filter-sheet-title">Filtrar por</MudText>
+        <div class="filter-sheet-options">
+            <button class="filter-sheet-option @(_activeFilter == "All" ? "active" : "")"
+                    @onclick="@(async () => { await SetFilter("All"); CloseFilterSheet(); })">
+                <MudIcon Icon="@Icons.Material.Outlined.PhotoLibrary" />
+                <span>Todas</span>
+                @if (_activeFilter == "All") { <MudIcon Icon="@Icons.Material.Filled.Check" Class="filter-sheet-check" /> }
+            </button>
+            <button class="filter-sheet-option @(_activeFilter == "Photos" ? "active" : "")"
+                    @onclick="@(async () => { await SetFilter("Photos"); CloseFilterSheet(); })">
+                <MudIcon Icon="@Icons.Material.Outlined.Image" />
+                <span>Fotos</span>
+                @if (_activeFilter == "Photos") { <MudIcon Icon="@Icons.Material.Filled.Check" Class="filter-sheet-check" /> }
+            </button>
+            <button class="filter-sheet-option @(_activeFilter == "Videos" ? "active" : "")"
+                    @onclick="@(async () => { await SetFilter("Videos"); CloseFilterSheet(); })">
+                <MudIcon Icon="@Icons.Material.Outlined.Videocam" />
+                <span>Vídeos</span>
+                @if (_activeFilter == "Videos") { <MudIcon Icon="@Icons.Material.Filled.Check" Class="filter-sheet-check" /> }
+            </button>
+            <button class="filter-sheet-option @(_activeFilter == "Favorites" ? "active" : "")"
+                    @onclick="@(async () => { await SetFilter("Favorites"); CloseFilterSheet(); })">
+                <MudIcon Icon="@Icons.Material.Outlined.FavoriteBorder" />
+                <span>Favoritos</span>
+                @if (_activeFilter == "Favorites") { <MudIcon Icon="@Icons.Material.Filled.Check" Class="filter-sheet-check" /> }
+            </button>
         </div>
     </div>
-    
-    @if (_groupedAssets.Any())
-    {
-        <div class="scrubber-overlay">
-            <div class="scrubber-track" id="scrubber-track">
-                <div class="scrubber-thumb" id="scrubber-thumb">
-                    <span class="scrubber-thumb-label" id="scrubber-thumb-label"></span>
-                    <div class="scrubber-thumb-bar"></div>
-                </div>
-                @{
-                    var renderedScrubYears = new HashSet<string>();
-                }
-                @foreach (var group in _groupedAssets)
-                {
-                    var scrubYear = GetYearFromGroup(group.Key);
-                    @if (!renderedScrubYears.Contains(scrubYear))
-                    {
-                        renderedScrubYears.Add(scrubYear);
-                        var scrubPos = GetGroupPosition(group.Key);
-                        var scrubPosStr = scrubPos.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
-                        <div class="scrubber-year-marker @(IsActiveYear(scrubYear) ? "active" : "")"
-                             data-group-id="@GetGroupId(group.Key)"
-                             style="top: @($"{scrubPosStr}%")">
-                            <span class="scrubber-year-label">@scrubYear</span>
-                            <div class="scrubber-year-dot"></div>
-                        </div>
-                    }
-                }
-            </div>
-        </div>
-    }
+}
 </div>
 
 <style>
@@ -201,8 +246,129 @@
         gap: 4px;
         padding: 0 48px 4px 0;
         flex-shrink: 0;
-        flex-wrap: wrap;
         margin-bottom: 4px;
+    }
+
+    .filter-chips-scroll {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex: 1;
+        min-width: 0;
+        flex-wrap: wrap;
+    }
+
+    .filter-density-controls {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        flex-shrink: 0;
+    }
+
+    /* Botón de filtro móvil (oculto en desktop) */
+    .filter-chips-mobile {
+        display: none;
+    }
+
+    /* Bottom sheet de filtros */
+    .filter-sheet-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        z-index: 1200;
+        animation: fadeIn 0.2s ease;
+    }
+
+    .filter-sheet {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: var(--mud-palette-surface);
+        border-radius: 16px 16px 0 0;
+        padding: 8px 0 32px;
+        z-index: 1201;
+        animation: slideUp 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+
+    .filter-sheet-handle {
+        width: 36px;
+        height: 4px;
+        background: var(--mud-palette-divider);
+        border-radius: 2px;
+        margin: 0 auto 12px;
+    }
+
+    .filter-sheet-title {
+        padding: 0 20px 8px;
+        color: var(--mud-palette-text-secondary);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+
+    .filter-sheet-options {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .filter-sheet-option {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 14px 20px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--mud-palette-text-primary);
+        font-size: 1rem;
+        text-align: left;
+        transition: background 0.15s;
+    }
+
+    .filter-sheet-option:active {
+        background: var(--mud-palette-action-default-hover);
+    }
+
+    .filter-sheet-option.active {
+        color: var(--mud-palette-primary);
+    }
+
+    .filter-sheet-option span {
+        flex: 1;
+    }
+
+    .filter-sheet-check {
+        color: var(--mud-palette-primary);
+    }
+
+    /* Botón de filtro móvil */
+    .filter-mobile-btn {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 10px 4px 8px;
+        border: 1px solid var(--mud-palette-divider);
+        border-radius: 20px;
+        background: none;
+        cursor: pointer;
+        color: var(--mud-palette-text-primary);
+        font-size: 0.875rem;
+        white-space: nowrap;
+    }
+
+    .filter-mobile-btn-chevron {
+        opacity: 0.6;
+    }
+
+    @@keyframes slideUp {
+        from { transform: translateY(100%); }
+        to   { transform: translateY(0); }
+    }
+
+    @@keyframes fadeIn {
+        from { opacity: 0; }
+        to   { opacity: 1; }
     }
 
     /* Contenedor del timeline es el único con scroll */
@@ -228,13 +394,9 @@
     .timeline-content {
         flex: 1;
         padding-right: 40px;
-        padding-bottom: 200px;
+        padding-bottom: 80px;
     }
 
-    /* Sidebar con barra de scroll */
-    .timeline-sidebar {
-        display: none; 
-    }
 
     /* Estilos para agrupación por día */
     .day-group {
@@ -359,6 +521,146 @@
             opacity: 0.5;
             pointer-events: auto;
         }
+
+        /* Móvil: contenido a full width, scrubber flota encima */
+        .filter-chips-bar {
+            padding-right: 4px;
+        }
+
+        .filter-chips-desktop {
+            display: none;
+        }
+
+        .filter-chips-mobile {
+            display: flex;
+        }
+
+        .filter-density-controls {
+            display: none;
+        }
+
+        /* Forzar compact en móvil independientemente de la densidad seleccionada */
+        .timeline-content .masonry-item {
+            height: 120px !important;
+        }
+
+        .timeline-content {
+            padding: 4px 4px 80px 4px;
+        }
+
+        /* En móvil el scrubber es columna flex, no flotante */
+        .scrubber-overlay {
+            position: relative;
+            top: auto;
+            bottom: auto;
+            right: auto;
+            width: 40px;
+            flex-shrink: 0;
+            pointer-events: auto;
+            opacity: 0;
+            transition: opacity 0.25s ease;
+        }
+
+        .scrubber-overlay.scrubber-visible {
+            opacity: 1;
+        }
+
+        .scrubber-track {
+            position: relative;
+            top: 0;
+            bottom: 0;
+            height: 100%;
+        }
+
+        /* Ocultar línea del track y markers de año */
+        .scrubber-track::before {
+            display: none !important;
+        }
+
+        .scrubber-year-marker,
+        .scrubber-year-dot,
+        .scrubber-year-label {
+            display: none !important;
+        }
+
+        .timeline-wrapper {
+            height: calc(100vh - var(--mud-appbar-height, 64px));
+        }
+
+        /* Márgenes de contenido reducidos */
+        .filter-chips-bar {
+            padding: 4px 4px 2px 4px;
+            margin-bottom: 0;
+        }
+
+        .day-group {
+            margin-bottom: 12px;
+        }
+
+        .day-header {
+            margin-bottom: 6px !important;
+            margin-left: 4px;
+            font-size: 0.85rem !important;
+            font-weight: 600 !important;
+            line-height: 1.2 !important;
+        }
+
+        /* Handle: pill draggable con flechas arriba/abajo */
+        .scrubber-thumb {
+            width: 40px;
+            height: 88px;
+            left: auto;
+            right: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 0;
+            background: var(--mud-palette-primary);
+            border-radius: 14px 0 0 14px;
+            cursor: grab;
+            touch-action: none;
+            box-shadow: -2px 0 8px rgba(0,0,0,0.3);
+        }
+
+        .scrubber-thumb.dragging {
+            cursor: grabbing;
+            filter: brightness(1.1);
+        }
+
+        /* Ocultar la barra horizontal del thumb desktop */
+        .scrubber-thumb-bar {
+            display: none;
+        }
+
+        /* Flechas arriba/abajo */
+        .scrubber-arrow {
+            display: block;
+            width: 28px;
+            height: 28px;
+            color: white;
+            pointer-events: none;
+            flex-shrink: 0;
+        }
+
+        /* Etiqueta de fecha: siempre visible a la izquierda del handle */
+        .scrubber-thumb-label {
+            opacity: 1 !important;
+            position: absolute;
+            right: calc(100% + 10px);
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 0.78rem;
+            font-weight: 600;
+            padding: 4px 10px;
+            white-space: nowrap;
+            background: rgba(30, 30, 30, 0.75);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            border-radius: 8px;
+            color: white;
+            pointer-events: none;
+        }
     }
 
     /* ===== Custom Scrubber ===== */
@@ -370,6 +672,13 @@
         width: 40px;
         z-index: 100;
         pointer-events: none;
+    }
+
+    /* Arrows — only visible on touch devices */
+    @@media (hover: hover) {
+        .scrubber-arrow {
+            display: none;
+        }
     }
 
     /* Large invisible hit area + visual bar via ::before */
@@ -407,7 +716,7 @@
         left: 0;
         right: 0;
         width: 100%;
-        height: 32px;
+        height: 60px;
         display: flex;
         flex-direction: column;
         align-items: stretch;
@@ -618,6 +927,7 @@
     private bool _deleteDialogVisible = false;
     private string _activeFilter = "All"; // All, Photos, Videos, Favorites
     private string _density = "M"; // S, M, L
+    private bool _filterSheetOpen = false;
 
     private IEnumerable<TimelineItem> FilteredAssets => _activeFilter switch
     {
@@ -626,6 +936,17 @@
         "Favorites" => _assets.Where(a => a.IsFavorite),
         _           => _assets
     };
+
+    private string GetFilterLabel() => _activeFilter switch
+    {
+        "Photos"    => "Fotos",
+        "Videos"    => "Vídeos",
+        "Favorites" => "Favoritos",
+        _           => "Todas"
+    };
+
+    private void OpenFilterSheet() => _filterSheetOpen = true;
+    private void CloseFilterSheet() => _filterSheetOpen = false;
 
     private async Task SetDensity(string density)
     {

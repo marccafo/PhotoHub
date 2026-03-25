@@ -9,7 +9,7 @@
 
 <PageTitle>Papelera - PhotoHub</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">Papelera</MudText>
+<MudText Typo="Typo.h5" Class="mb-4">Papelera</MudText>
 
 @if (_loading)
 {
@@ -64,7 +64,8 @@
                     else if (!_loading)
                     {
                         <EmptyState Icon="@Icons.Material.Filled.Delete"
-                                    Title="La papelera está vacía" />
+                                    Title="La papelera está vacía"
+                                    Description="Los elementos eliminados aparecerán aquí." />
                     }
                 </div>
             </div>

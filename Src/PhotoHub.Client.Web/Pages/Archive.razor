@@ -8,7 +8,7 @@
 
 <PageTitle>Archivo - PhotoHub</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">Archivo</MudText>
+<MudText Typo="Typo.h5" Class="mb-4">Archivo</MudText>
 
 @if (_loading)
 {
@@ -58,7 +58,8 @@
                     else if (!_loading)
                     {
                         <EmptyState Icon="@Icons.Material.Filled.Archive"
-                                    Title="El archivo está vacío" />
+                                    Title="El archivo está vacío"
+                                    Description="Los elementos archivados aparecerán aquí." />
                     }
                 </div>
             </div>
