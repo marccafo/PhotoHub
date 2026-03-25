@@ -101,6 +101,15 @@
         <MudNavLink Href="/notifications" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Outlined.Notifications" IconColor="Color.Inherit">
             Notificaciones
         </MudNavLink>
+
+        <MudDivider Class="my-2" />
+
+        <MudNavGroup Title="Configuración" Icon="@Icons.Material.Outlined.Settings" Expanded="false">
+            <MudNavLink Href="/settings/profile"    Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Person">Perfil</MudNavLink>
+            <MudNavLink Href="/settings/security"   Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Lock">Seguridad</MudNavLink>
+            <MudNavLink Href="/settings/appearance" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Palette">Apariencia</MudNavLink>
+            <MudNavLink Href="/settings/device"     Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.PhoneAndroid">Dispositivo</MudNavLink>
+        </MudNavGroup>
     </text>;
 
     private bool IsAdminSection

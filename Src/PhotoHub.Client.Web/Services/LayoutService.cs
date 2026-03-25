@@ -111,6 +111,9 @@ public class LayoutService
         }
     }
 
+    // True when in full-screen mode (e.g. AssetDetail) — hides bottom nav and FAB
+    public bool HideBottomNav => _isOverlayNavbar;
+
     public void SetCustomNavbar(RenderFragment? content, bool keepDrawerVisible = false, bool overlay = false)
     {
         IsNavbarCustom = true;

@@ -1,0 +1,102 @@
+@page "/settings/device"
+@inject ISettingsService SettingsService
+@inject ISnackbar Snackbar
+
+<PageTitle>Dispositivo - PhotoHub</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="page-loading-bar" />
+}
+
+<div class="page-pad">
+    <MudText Typo="Typo.h5" Class="mb-6">Dispositivo</MudText>
+
+    @if (!_loading)
+    {
+        <MudGrid>
+            <MudItem xs="12" md="8">
+                <MudCard>
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">Almacenamiento del dispositivo</MudText>
+                            <MudText Typo="Typo.body2">Ruta donde se encuentran tus fotos y vídeos en este dispositivo.</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudTextField @bind-Value="_assetsPath"
+                                      Label="Ruta de assets"
+                                      HelperText="Esta ruta se usará para sincronizar con el servidor."
+                                      Variant="Variant.Outlined"
+                                      FullWidth="true"
+                                      Class="mb-4" />
+                        <MudAlert Severity="Severity.Info">
+                            Ruta actual en el servidor: <strong>@_currentServerPath</strong>
+                        </MudAlert>
+                    </MudCardContent>
+                    <MudCardActions Class="px-4 pb-4">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAssetsPath"
+                                   Disabled="_saving" StartIcon="@Icons.Material.Filled.Save">
+                            @if (_saving)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            }
+                            Guardar ruta
+                        </MudButton>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private bool _saving;
+    private string _assetsPath = "";
+    private string _currentServerPath = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _currentServerPath = await SettingsService.GetAssetsPathAsync();
+            _assetsPath = _currentServerPath;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveAssetsPath()
+    {
+        if (string.IsNullOrWhiteSpace(_assetsPath))
+        {
+            Snackbar.Add("La ruta no puede estar vacía", Severity.Warning);
+            return;
+        }
+        try
+        {
+            _saving = true;
+            var success = await SettingsService.SaveSettingAsync("AssetsPath", _assetsPath);
+            if (success)
+            {
+                Snackbar.Add("Ruta guardada correctamente", Severity.Success);
+                _currentServerPath = await SettingsService.GetAssetsPathAsync();
+            }
+            else
+            {
+                Snackbar.Add("Error al guardar la ruta", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}
