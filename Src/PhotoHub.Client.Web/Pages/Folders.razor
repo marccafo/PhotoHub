@@ -226,6 +226,7 @@
     }
 </style>
 
+<div class="page-pad">
 <div class="d-flex align-center justify-space-between mb-4">
     <div class="d-flex align-center">
         @if (!IsAtRoot)
@@ -367,6 +368,7 @@ else
         </div>
     }
 }
+</div>
 
 <MudDialog @bind-Visible="_createFolderDialogVisible" Options="@(new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true })">
     <TitleContent>

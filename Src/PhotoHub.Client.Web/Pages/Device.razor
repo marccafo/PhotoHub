@@ -7,12 +7,13 @@
 
 <PageTitle>Mi Dispositivo - PhotoHub</PageTitle>
 
-<MudText Typo="Typo.h5" Class="mb-4">Mi Dispositivo</MudText>
-
 @if (_loading)
 {
     <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="page-loading-bar" />
 }
+
+<div class="page-pad">
+    <MudText Typo="Typo.h5" Class="mb-4">Mi Dispositivo</MudText>
 
 @if (_pendingAssetsCount > 0 && !_syncingAll)
 {
@@ -94,6 +95,7 @@ else if (!_loading)
                 Title="No hay fotos pendientes de sincronizar"
                 Description="Tu dispositivo está al día." />
 }
+</div>
 
 @code {
     private List<TimelineItem> _assets = new();

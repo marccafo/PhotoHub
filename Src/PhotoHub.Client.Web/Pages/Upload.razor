@@ -4,9 +4,10 @@
 
 <PageTitle>Subir Archivos - PhotoHub</PageTitle>
 
-<MudText Typo="Typo.h5" Class="mb-4">Subir Assets</MudText>
+<div class="page-pad">
+    <MudText Typo="Typo.h5" Class="mb-4">Subir Assets</MudText>
 
-<MudGrid>
+    <MudGrid>
     <MudItem xs="12">
         <MudCard>
             <MudCardHeader>
@@ -42,7 +43,8 @@
             </MudCardContent>
         </MudCard>
     </MudItem>
-</MudGrid>
+    </MudGrid>
+</div>
 
 @code {
     private MudFileUpload<IReadOnlyList<IBrowserFile>> _fileUpload = null!;

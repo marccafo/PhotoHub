@@ -8,18 +8,20 @@
 
 <PageTitle>Archivo - PhotoHub</PageTitle>
 
-<MudText Typo="Typo.h5" Class="mb-4">Archivo</MudText>
-
 @if (_loading)
 {
     <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="page-loading-bar" />
 }
 
-<div class="archive-toolbar">
+<div class="page-pad">
+    <MudText Typo="Typo.h5" Class="mb-4">Archivo</MudText>
+
+    <div class="archive-toolbar">
     <MudSpacer />
     <MudButton Variant="Variant.Text" Disabled="@(!_assets.Any())" OnClick="OpenUnarchiveAllDialog">
         Desarchivar todo
     </MudButton>
+</div>
 </div>
 
 <div class="timeline-wrapper">
@@ -106,7 +108,7 @@
             </div>
         </div>
     }
-</div>
+    </div>
 
 <MudDialog @bind-Visible="_unarchiveAllDialogVisible" Options="@(new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true })">
     <TitleContent>

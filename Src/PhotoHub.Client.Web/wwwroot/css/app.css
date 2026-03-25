@@ -183,3 +183,13 @@ html, body {
 #blazor-error-ui .dismiss:hover {
     opacity: 1;
 }
+
+/* ── Page padding ─────────────────────────────────────── */
+.page-pad {
+    padding: 16px;
+}
+@media (min-width: 960px) {
+    .page-pad {
+        padding: 24px;
+    }
+}

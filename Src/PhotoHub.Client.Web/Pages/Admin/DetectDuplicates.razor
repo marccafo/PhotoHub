@@ -6,7 +6,8 @@
 
 <PageTitle>Detección de duplicados - PhotoHub</PageTitle>
 
-@if (!_isAuthorized)
+<div class="page-pad">
+    @if (!_isAuthorized)
 {
     <div class="mt-8">
         <MudText Typo="Typo.h5">Acceso Denegado</MudText>
@@ -396,6 +397,7 @@ else
         }
     }
 }
+</div>
 
 <style>
     .dup-card-clickable {

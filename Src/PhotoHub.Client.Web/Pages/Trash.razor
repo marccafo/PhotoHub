@@ -9,14 +9,15 @@
 
 <PageTitle>Papelera - PhotoHub</PageTitle>
 
-<MudText Typo="Typo.h5" Class="mb-4">Papelera</MudText>
-
 @if (_loading)
 {
     <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="page-loading-bar" />
 }
 
-<div class="trash-toolbar">
+<div class="page-pad">
+    <MudText Typo="Typo.h5" Class="mb-4">Papelera</MudText>
+
+    <div class="trash-toolbar">
     <div class="d-flex align-center">
     </div>
     <MudSpacer />
@@ -26,6 +27,7 @@
     <MudButton Variant="Variant.Text" Color="Color.Error" Disabled="@(!_assets.Any())" OnClick="OpenEmptyTrashDialog">
         Vaciar papelera
     </MudButton>
+</div>
 </div>
 
 <div class="timeline-wrapper">
@@ -101,7 +103,7 @@
             </div>
         </div>
     }
-</div>
+    </div>
 
 <MudDialog @bind-Visible="_purgeSelectedDialogVisible" Options="@(new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true })">
     <TitleContent>

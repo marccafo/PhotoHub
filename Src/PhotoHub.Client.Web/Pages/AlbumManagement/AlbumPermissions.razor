@@ -8,7 +8,8 @@
 
 <PageTitle>Permisos del Álbum - PhotoHub</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+<div class="page-pad">
+    <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
     <MudButton Variant="Variant.Text" 
                StartIcon="@Icons.Material.Filled.ArrowBack" 
                OnClick="@(() => Navigation.NavigateTo($"/albums/{AlbumId}"))"
@@ -83,7 +84,8 @@
             </RowTemplate>
         </MudTable>
     }
-</MudContainer>
+    </MudContainer>
+</div>
 
 @code {
     [Parameter] public Guid AlbumId { get; set; }

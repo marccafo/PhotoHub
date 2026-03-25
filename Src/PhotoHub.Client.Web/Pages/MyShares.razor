@@ -6,7 +6,8 @@
 
 <PageTitle>Mis enlaces - PhotoHub</PageTitle>
 
-<MudText Typo="Typo.h5" Class="mb-1">Mis enlaces</MudText>
+<div class="page-pad">
+    <MudText Typo="Typo.h5" Class="mb-1">Mis enlaces</MudText>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
     Gestiona todos los enlaces públicos que has creado.
 </MudText>
@@ -130,6 +131,7 @@ else
         }
     </div>
 }
+</div>
 
 @* ── Edit dialog ──────────────────────────────────────────────────────────── *@
 <MudDialog @bind-Visible="_editDialogOpen" Options="_dialogOptions">

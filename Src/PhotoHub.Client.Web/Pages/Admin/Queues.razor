@@ -4,7 +4,8 @@
 
 <PageTitle>Administración - Colas de trabajo - PhotoHub</PageTitle>
 
-@if (!_isAuthorized)
+<div class="page-pad">
+    @if (!_isAuthorized)
 {
     <div class="mt-8">
         <MudText Typo="Typo.h5">Acceso Denegado</MudText>
@@ -127,6 +128,7 @@ else
         </MudItem>
     </MudGrid>
 }
+</div>
 
 @code {
     private bool _isAuthorized = false;

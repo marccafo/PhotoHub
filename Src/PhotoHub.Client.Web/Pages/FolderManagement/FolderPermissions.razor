@@ -9,7 +9,8 @@
 
 <PageTitle>Permisos de la Carpeta - PhotoHub</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+<div class="page-pad">
+    <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
     <MudButton Variant="Variant.Text" 
                StartIcon="@Icons.Material.Filled.ArrowBack" 
                OnClick="@(() => Navigation.NavigateTo($"/folders/{FolderId}"))"
@@ -87,7 +88,8 @@
             </RowTemplate>
         </MudTable>
     }
-</MudContainer>
+    </MudContainer>
+</div>
 
 @code {
     [Parameter] public Guid FolderId { get; set; }

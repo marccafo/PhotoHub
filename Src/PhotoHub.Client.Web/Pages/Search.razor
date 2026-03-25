@@ -6,7 +6,8 @@
 
 <PageTitle>Buscar - PhotoHub</PageTitle>
 
-<div class="search-filters mb-4">
+<div class="page-pad">
+    <div class="search-filters mb-4">
     <MudGrid Spacing="2" AlignItems="AlignItems.End">
         <MudItem xs="12" Class="d-md-none">
             <MudTextField @bind-Value="_searchTerm"
@@ -91,6 +92,7 @@ else
         }
     </MudGrid>
 }
+</div>
 
 @code {
     [SupplyParameterFromQuery(Name = "search")] public string? SearchTerm { get; set; }

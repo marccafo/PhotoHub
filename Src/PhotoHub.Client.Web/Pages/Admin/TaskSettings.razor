@@ -6,7 +6,8 @@
 
 <PageTitle>Administración - Configuración de tareas - PhotoHub</PageTitle>
 
-@if (!_isAuthorized)
+<div class="page-pad">
+    @if (!_isAuthorized)
 {
     <div class="mt-8">
         <MudText Typo="Typo.h5">Acceso Denegado</MudText>
@@ -54,6 +55,7 @@ else
         </MudItem>
     </MudGrid>
 }
+</div>
 
 @code {
     private const string KeyThumbnailWorkers = "TaskSettings.ThumbnailWorkers";

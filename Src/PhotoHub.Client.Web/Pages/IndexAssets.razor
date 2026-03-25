@@ -8,19 +8,20 @@
 
 <PageTitle>Indexar - PhotoHub</PageTitle>
 
-@if (!_isAuthorized)
-{
-    <div class="mt-8">
-        <MudText Typo="Typo.h5">Acceso Denegado</MudText>
-        <MudText Typo="Typo.body1">Solo los administradores pueden acceder a esta página.</MudText>
-        <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary" Class="mt-4">
-            Volver al inicio
-        </MudButton>
-    </div>
-}
-else
-{
-    <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/admin/queues"))" Class="mb-2">
+<div class="page-pad">
+    @if (!_isAuthorized)
+    {
+        <div class="mt-8">
+            <MudText Typo="Typo.h5">Acceso Denegado</MudText>
+            <MudText Typo="Typo.body1">Solo los administradores pueden acceder a esta página.</MudText>
+            <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary" Class="mt-4">
+                Volver al inicio
+            </MudButton>
+        </div>
+    }
+    else
+    {
+        <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/admin/queues"))" Class="mb-2">
         Volver
     </MudButton>
     <MudText Typo="Typo.h5" Class="mb-4">Indexar Assets</MudText>
@@ -163,6 +164,7 @@ else
         </MudCard>
     }
 }
+</div>
 
 @code {
     private bool _isAuthorized;
