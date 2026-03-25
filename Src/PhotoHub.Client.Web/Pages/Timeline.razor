@@ -220,7 +220,7 @@
     .timeline-wrapper {
         position: relative;
         width: 100%;
-        height: calc(100vh - 64px - 48px);
+        height: calc(100vh - 64px - 56px);
     }
 
     /* Contenedor principal con flex para layout horizontal */
@@ -545,7 +545,12 @@
         }
 
         .timeline-content {
-            padding: 4px 4px 80px 4px;
+            padding: 0 0 24px 0;
+        }
+
+        /* Quitar la reserva de gutter en móvil para que el scrubber quede pegado al borde */
+        .timeline-container {
+            scrollbar-gutter: auto;
         }
 
         /* En móvil el scrubber es columna flex, no flotante */
@@ -568,8 +573,10 @@
         .scrubber-track {
             position: relative;
             top: 0;
+            right: 0; /* reset del right: 4px de desktop */
             bottom: 0;
             height: 100%;
+            width: 100%; /* ocupa los 40px del overlay para que el thumb quede flush al borde */
         }
 
         /* Ocultar línea del track y markers de año */
@@ -583,14 +590,9 @@
             display: none !important;
         }
 
-        .timeline-wrapper {
-            height: calc(100vh - var(--mud-appbar-height, 64px));
-        }
-
-        /* Márgenes de contenido reducidos */
+        /* Ocultar barra de filtros en móvil */
         .filter-chips-bar {
-            padding: 4px 4px 2px 4px;
-            margin-bottom: 0;
+            display: none;
         }
 
         .day-group {
@@ -605,27 +607,30 @@
             line-height: 1.2 !important;
         }
 
-        /* Handle: pill draggable con flechas arriba/abajo */
+        /* Handle: pill draggable con flechas arriba/abajo — estilo Google Photos */
         .scrubber-thumb {
-            width: 40px;
-            height: 88px;
+            width: 26px;
+            height: 52px;
             left: auto;
             right: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: space-between;
-            padding: 8px 0;
-            background: var(--mud-palette-primary);
-            border-radius: 14px 0 0 14px;
+            padding: 4px 0;
+            background: rgba(28, 28, 28, 0.85);
+            border-radius: 10px 0 0 10px;
             cursor: grab;
             touch-action: none;
-            box-shadow: -2px 0 8px rgba(0,0,0,0.3);
+            box-shadow: -1px 0 6px rgba(0,0,0,0.2);
+        }
+
+        .mud-dark .scrubber-thumb {
+            background: rgba(255, 255, 255, 0.22);
         }
 
         .scrubber-thumb.dragging {
             cursor: grabbing;
-            filter: brightness(1.1);
         }
 
         /* Ocultar la barra horizontal del thumb desktop */
@@ -636,11 +641,14 @@
         /* Flechas arriba/abajo */
         .scrubber-arrow {
             display: block;
-            width: 28px;
-            height: 28px;
-            color: white;
+            height: 20px;
+            color: rgba(255, 255, 255, 1);
             pointer-events: none;
             flex-shrink: 0;
+        }
+
+        .mud-dark .scrubber-arrow {
+            color: rgba(255, 255, 255, 0.75);
         }
 
         /* Etiqueta de fecha: siempre visible a la izquierda del handle */
@@ -669,7 +677,7 @@
         right: 0;
         top: 0;
         bottom: 0;
-        width: 40px;
+        width: 25px;
         z-index: 100;
         pointer-events: none;
     }
@@ -684,10 +692,10 @@
     /* Large invisible hit area + visual bar via ::before */
     .scrubber-track {
         position: absolute;
-        right: 4px;
-        top: 8px;
+        right: 0px;
+        top: 0px;
         bottom: 8px;
-        width: 32px;
+        width: 25px;
         pointer-events: auto;
         cursor: pointer;
     }
@@ -716,7 +724,7 @@
         left: 0;
         right: 0;
         width: 100%;
-        height: 60px;
+        height: 40px;
         display: flex;
         flex-direction: column;
         align-items: stretch;
