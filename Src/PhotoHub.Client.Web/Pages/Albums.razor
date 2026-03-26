@@ -799,7 +799,8 @@ else
     <div class="px-4 pt-3 pb-6">
         <MudText Typo="Typo.caption" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--mud-palette-text-secondary);" Class="mb-2 d-block">Ordenar por</MudText>
         <MudSelect T="AlbumSort"
-                   @bind-Value="_albumSort"
+                   Value="_albumSort"
+                   ValueChanged="OnAlbumSortChanged"
                    Variant="Variant.Outlined"
                    Margin="Margin.Dense"
                    FullWidth="true"
@@ -1023,9 +1024,10 @@ else
         StateHasChanged();
     }
 
-    private void OnViewModeChanged(AlbumViewMode mode)
+    private async Task OnViewModeChanged(AlbumViewMode mode)
     {
         _albumViewMode = mode;
+        await JS.InvokeVoidAsync("localStorage.setItem", "photohub:albums:viewMode", mode.ToString());
     }
 
     private void OpenPermissionsDialog(Guid albumId)
@@ -1037,10 +1039,27 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadPreferences();
         // Solo cargar la lista de álbumes cuando estamos en la vista de listado (sin AlbumId).
         // Si entramos en /albums/{id} (p. ej. volver del detalle de un asset), no pedir /api/albums.
         if (AlbumId == Guid.Empty)
             await LoadAlbums();
+    }
+
+    private async Task LoadPreferences()
+    {
+        try
+        {
+            var sort = await JS.InvokeAsync<string?>("localStorage.getItem", "photohub:albums:sort");
+            if (Enum.TryParse<AlbumSort>(sort, out var sortValue)) _albumSort = sortValue;
+
+            var viewMode = await JS.InvokeAsync<string?>("localStorage.getItem", "photohub:albums:viewMode");
+            if (Enum.TryParse<AlbumViewMode>(viewMode, out var viewModeValue)) _albumViewMode = viewModeValue;
+
+            var groupByYear = await JS.InvokeAsync<string?>("localStorage.getItem", "photohub:albums:groupByYear");
+            if (groupByYear != null) _groupByYear = groupByYear == "true";
+        }
+        catch { }
     }
 
     protected override async Task OnParametersSetAsync()
@@ -1851,14 +1870,22 @@ else
         LayoutService.ResetNavbar();
     }
 
-    private void ToggleAlbumViewMode()
+    private async Task ToggleAlbumViewMode()
     {
         _albumViewMode = _albumViewMode == AlbumViewMode.Grid ? AlbumViewMode.List : AlbumViewMode.Grid;
+        await JS.InvokeVoidAsync("localStorage.setItem", "photohub:albums:viewMode", _albumViewMode.ToString());
     }
 
-    private void ToggleGroupByYear()
+    private async Task OnAlbumSortChanged(AlbumSort sort)
+    {
+        _albumSort = sort;
+        await JS.InvokeVoidAsync("localStorage.setItem", "photohub:albums:sort", sort.ToString());
+    }
+
+    private async Task ToggleGroupByYear()
     {
         _groupByYear = !_groupByYear;
+        await JS.InvokeVoidAsync("localStorage.setItem", "photohub:albums:groupByYear", _groupByYear ? "true" : "false");
     }
 
     private sealed record AlbumYearGroup(int? Year, List<AlbumItem> Albums);

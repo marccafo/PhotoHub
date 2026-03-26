@@ -456,7 +456,8 @@ else
     <div class="px-4 pt-3 pb-6">
         <MudText Typo="Typo.caption" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--mud-palette-text-secondary);" Class="mb-2 d-block">Ordenar por</MudText>
         <MudSelect T="FolderSort"
-                   @bind-Value="_folderSort"
+                   Value="_folderSort"
+                   ValueChanged="OnFolderSortChanged"
                    Variant="Variant.Outlined"
                    Margin="Margin.Dense"
                    FullWidth="true"
@@ -637,9 +638,16 @@ else
     private int _activeTab;
     private FolderViewMode _folderViewMode = FolderViewMode.Grid;
 
-    private void OnViewModeChanged(FolderViewMode mode)
+    private async Task OnViewModeChanged(FolderViewMode mode)
     {
         _folderViewMode = mode;
+        await JS.InvokeVoidAsync("localStorage.setItem", "photohub:folders:viewMode", mode.ToString());
+    }
+
+    private async Task OnFolderSortChanged(FolderSort sort)
+    {
+        _folderSort = sort;
+        await JS.InvokeVoidAsync("localStorage.setItem", "photohub:folders:sort", sort.ToString());
     }
 
     private List<FolderItem> GetFilteredFolders(List<FolderItem> source)
@@ -884,8 +892,22 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadPreferences();
         await LoadUserRootAsync();
         await LoadFolders();
+    }
+
+    private async Task LoadPreferences()
+    {
+        try
+        {
+            var sort = await JS.InvokeAsync<string?>("localStorage.getItem", "photohub:folders:sort");
+            if (Enum.TryParse<FolderSort>(sort, out var sortValue)) _folderSort = sortValue;
+
+            var viewMode = await JS.InvokeAsync<string?>("localStorage.getItem", "photohub:folders:viewMode");
+            if (Enum.TryParse<FolderViewMode>(viewMode, out var viewModeValue)) _folderViewMode = viewModeValue;
+        }
+        catch { }
     }
     
     protected override async Task OnParametersSetAsync()
