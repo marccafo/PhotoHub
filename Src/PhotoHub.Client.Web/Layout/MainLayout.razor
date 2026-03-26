@@ -7,6 +7,8 @@
 @inject IDialogService DialogService
 @inject ApiErrorNotifier ApiErrorNotifier
 @inject INotificationService NotificationService
+@inject PwaUpdateService PwaUpdateService
+@inject IJSRuntime JS
 
 <MudThemeProvider IsDarkMode="LayoutService.IsDarkMode" Theme="ThemeService.Theme" />
 <MudPopoverProvider />
@@ -181,7 +183,35 @@
                 padding-bottom: calc(64px + env(safe-area-inset-bottom)) !important;
             }
         }
+        .pwa-update-banner {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 16px;
+            background: var(--mud-palette-info-lighten);
+            color: var(--mud-palette-info-darken);
+            border-bottom: 1px solid var(--mud-palette-info);
+            position: sticky;
+            top: var(--mud-appbar-height, 64px);
+            z-index: 1200;
+        }
+        .mud-dark .pwa-update-banner {
+            background: color-mix(in srgb, var(--mud-palette-info) 18%, transparent);
+            color: var(--mud-palette-info-lighten);
+        }
     </style>
+
+    @if (PwaUpdateService.UpdateAvailable)
+    {
+        <div class="pwa-update-banner">
+            <MudIcon Icon="@Icons.Material.Filled.SystemUpdate" Size="Size.Small" Class="flex-shrink-0" />
+            <MudText Typo="Typo.body2" Class="flex-grow-1">Nueva versión disponible</MudText>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                       OnClick="@PwaUpdateService.ApplyUpdateAsync">
+                Actualizar ahora
+            </MudButton>
+        </div>
+    }
 
     @if (_isNavigating)
     {
@@ -401,6 +431,7 @@
         AuthService.OnAuthStateChanged += HandleAuthStateChanged;
         Navigation.LocationChanged += HandleLocationChanged;
         ApiErrorNotifier.OnError += HandleApiError;
+        PwaUpdateService.OnUpdateAvailable += HandlePwaUpdateAvailable;
         UpdateSearchQueryFromUri();
     }
 
@@ -463,6 +494,7 @@
         AuthService.OnAuthStateChanged -= HandleAuthStateChanged;
         Navigation.LocationChanged -= HandleLocationChanged;
         ApiErrorNotifier.OnError -= HandleApiError;
+        PwaUpdateService.OnUpdateAvailable -= HandlePwaUpdateAvailable;
     }
 
     private UserDto? _currentUser;
@@ -504,12 +536,22 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            await PwaUpdateService.InitAsync(JS);
+        }
+
         if (_isNavigating)
         {
             _isNavigating = false;
             StateHasChanged();
         }
         await base.OnAfterRenderAsync(firstRender);
+    }
+
+    private void HandlePwaUpdateAvailable()
+    {
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private void HandleApiError(ApiErrorInfo info)

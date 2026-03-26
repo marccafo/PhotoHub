@@ -18,7 +18,8 @@ self.addEventListener('install', event => {
                 })
         )
     );
-    self.skipWaiting();
+    // Do NOT call self.skipWaiting() here — the app will prompt the user
+    // and call it explicitly via the SKIP_WAITING message below.
 });
 
 self.addEventListener('activate', event => {
@@ -28,6 +29,12 @@ self.addEventListener('activate', event => {
         )
     );
     self.clients.claim();
+});
+
+self.addEventListener('message', event => {
+    if (event.data?.type === 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
 });
 
 self.addEventListener('fetch', event => {

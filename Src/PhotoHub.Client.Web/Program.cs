@@ -104,5 +104,6 @@ builder.Services.AddScoped<INotificationService>(sp =>
     var authService = sp.GetRequiredService<AuthService>();
     return new NotificationService(httpClient, async () => await authService.GetTokenAsync());
 });
+builder.Services.AddSingleton<PwaUpdateService>();
 
 await builder.Build().RunAsync();
