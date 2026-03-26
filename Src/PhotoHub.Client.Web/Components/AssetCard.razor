@@ -104,7 +104,8 @@
     </style>
     
     <div class="@(Asset.SyncStatus == AssetSyncStatus.Pending || Asset.SyncStatus == AssetSyncStatus.Copied ? "asset-pending" : "") h-100 w-100">
-        @if (Asset.SyncStatus == AssetSyncStatus.Synced || Asset.SyncStatus == AssetSyncStatus.Pending || Asset.SyncStatus == AssetSyncStatus.Copied)
+        @if ((Asset.SyncStatus == AssetSyncStatus.Synced || Asset.SyncStatus == AssetSyncStatus.Pending || Asset.SyncStatus == AssetSyncStatus.Copied)
+             && !(Asset.IsLocalOnly && string.IsNullOrEmpty(Asset.LocalThumbnailUrl)))
         {
             @if (Asset.Type == "VIDEO")
             {
@@ -133,7 +134,7 @@
                 <MudIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Small" Color="Color.Inherit" />
             </MudTooltip>
         }
-        else if (Asset.SyncStatus == AssetSyncStatus.Pending)
+        else if (Asset.SyncStatus == AssetSyncStatus.Pending && !Asset.IsLocalOnly)
         {
             <MudTooltip Text="Sincronizar ahora">
                 <span @onclick:stopPropagation="true">
@@ -216,7 +217,7 @@
         var thumbnailUrl = Asset.ThumbnailUrl;
         var contentUrl = Asset.ContentUrl;
 
-        if (Asset.SyncStatus != AssetSyncStatus.Synced)
+        if (Asset.SyncStatus != AssetSyncStatus.Synced && !Asset.IsLocalOnly)
         {
             var token = await AuthService.GetTokenAsync();
             thumbnailUrl = AppendAccessToken(thumbnailUrl, token);

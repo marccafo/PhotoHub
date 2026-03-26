@@ -1,24 +1,39 @@
 using PhotoHub.Client.Web.Models;
-using PhotoHub.Client.Web.Services;
 
 namespace PhotoHub.Client.Web.Services;
 
 public class WebPendingAssetsProvider : IPendingAssetsProvider
 {
-    private readonly IAssetService _assetService;
+    private readonly ILocalFolderService _localFolderService;
 
-    public WebPendingAssetsProvider(IAssetService assetService)
+    public WebPendingAssetsProvider(ILocalFolderService localFolderService)
     {
-        _assetService = assetService;
+        _localFolderService = localFolderService;
     }
 
-    public Task<List<TimelineItem>> GetPendingAssetsAsync()
+    public async Task<List<TimelineItem>> GetPendingAssetsAsync()
     {
-        return _assetService.GetDeviceAssetsAsync();
+        var files = await _localFolderService.EnumerateFilesAsync();
+
+        return files.Select(f => new TimelineItem
+        {
+            Id = Guid.Empty,
+            FileName = f.Name,
+            FullPath = f.RelativePath,
+            FileSize = f.Size,
+            CreatedDate = DateTimeOffset.FromUnixTimeMilliseconds(f.LastModified).UtcDateTime,
+            ModifiedDate = DateTimeOffset.FromUnixTimeMilliseconds(f.LastModified).UtcDateTime,
+            Extension = Path.GetExtension(f.Name).TrimStart('.').ToLower(),
+            Type = f.IsImage ? "IMAGE" : "VIDEO",
+            SyncStatus = AssetSyncStatus.Pending,
+            LocalThumbnailUrl = f.ThumbnailUrl,
+            IsLocalOnly = true
+        }).ToList();
     }
 
     public Task<AssetDetail?> GetPendingAssetDetailAsync(string path)
     {
-        return _assetService.GetPendingAssetDetailAsync(path);
+        // Los assets locales no tienen detalle servidor; devuelve null.
+        return Task.FromResult<AssetDetail?>(null);
     }
 }

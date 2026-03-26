@@ -26,9 +26,16 @@ public class TimelineItem
         ? (double)Width.Value / Height.Value
         : 1.0;
 
-    public string ThumbnailUrl => SyncStatus == AssetSyncStatus.Synced
-        ? $"{ApiConfig.BaseUrl}/api/assets/{Id}/thumbnail?size=Medium"
-        : $"{ApiConfig.BaseUrl}/api/assets/pending/thumbnail?path={System.Net.WebUtility.UrlEncode(FullPath)}&size=Medium";
+    // Cuando el asset es local (leído del dispositivo vía File System Access API),
+    // se usa esta URL (blob: o data:) en lugar de llamar al servidor.
+    public string? LocalThumbnailUrl { get; set; }
+    // true cuando el asset viene del sistema de ficheros local y aún no se ha subido.
+    public bool IsLocalOnly { get; set; }
+
+    public string ThumbnailUrl => LocalThumbnailUrl
+        ?? (SyncStatus == AssetSyncStatus.Synced
+            ? $"{ApiConfig.BaseUrl}/api/assets/{Id}/thumbnail?size=Medium"
+            : $"{ApiConfig.BaseUrl}/api/assets/pending/thumbnail?path={System.Net.WebUtility.UrlEncode(FullPath)}&size=Medium");
     public string ContentUrl => SyncStatus == AssetSyncStatus.Synced
         ? $"{ApiConfig.BaseUrl}/api/assets/{Id}/content"
         : $"{ApiConfig.BaseUrl}/api/assets/pending/content?path={System.Net.WebUtility.UrlEncode(FullPath)}";

@@ -1,7 +1,7 @@
 @page "/device"
 @inject IAssetService AssetService
+@inject ILocalFolderService LocalFolderService
 @inject IPendingAssetsProvider PendingAssetsProvider
-@inject ISettingsService SettingsService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @implements IDisposable
@@ -16,42 +16,53 @@
 <div class="page-pad">
     <MudText Typo="Typo.h5" Class="mb-4">Mi Dispositivo</MudText>
 
-    @* ── Ruta configurada ────────────────────────────────────────── *@
     @if (!_loading)
     {
-        @if (string.IsNullOrWhiteSpace(_devicePath))
+        @if (string.IsNullOrWhiteSpace(_folderName))
         {
             <EmptyState Icon="@Icons.Material.Filled.FolderOff"
-                        Title="No hay ninguna ruta configurada"
-                        Description="Ve a Configuración → Dispositivo para establecer la carpeta donde están tus fotos.">
+                        Title="No hay ninguna carpeta seleccionada"
+                        Description="Ve a Configuración → Dispositivo para seleccionar la carpeta donde están tus fotos.">
                 <Actions>
                     <MudButton Variant="Variant.Filled" Color="Color.Primary"
                                StartIcon="@Icons.Material.Filled.Settings"
                                OnClick="@(() => Navigation.NavigateTo("/settings/device"))">
-                        Configurar ruta
+                        Configurar carpeta
                     </MudButton>
                 </Actions>
             </EmptyState>
         }
         else
         {
+            @* ── Header: carpeta + re-escanear ──────────────────────────── *@
             <MudPaper Class="d-flex align-center gap-3 px-4 py-3 mb-4" Elevation="0"
                       Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
                 <MudIcon Icon="@Icons.Material.Filled.Folder" Color="Color.Primary" />
                 <div class="flex-grow-1 min-width-0">
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Ruta analizada</MudText>
-                    <MudText Typo="Typo.body2" Style="word-break: break-all;">@_devicePath</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Carpeta analizada</MudText>
+                    <MudText Typo="Typo.body2" Style="word-break: break-all;">@_folderName</MudText>
                 </div>
                 <MudTooltip Text="Re-escanear">
                     <MudIconButton Icon="@Icons.Material.Filled.Refresh"
                                    Size="Size.Small"
                                    Disabled="@_loading"
-                                   OnClick="@(async () => await LoadDeviceAssets())" />
+                                   OnClick="@(async () => await LoadDeviceAssetsAsync())" />
                 </MudTooltip>
             </MudPaper>
 
-            @* ── Alerta de pendientes ────────────────────────────────── *@
-            @if (_pendingAssetsCount > 0 && !_syncingAll)
+            @* ── Permiso denegado ─────────────────────────────────────── *@
+            @if (_permissionDenied)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mb-4">
+                    Permiso de lectura denegado. Pulsa el botón para volver a solicitarlo.
+                    <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="RetryPermissionAsync" Class="ml-2">
+                        Solicitar permiso
+                    </MudButton>
+                </MudAlert>
+            }
+
+            @* ── Alerta de pendientes ─────────────────────────────────── *@
+            @if (_assets.Count > 0 && !_uploadingAll)
             {
                 <MudPaper Class="mb-4 pa-4" Elevation="0"
                           Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
@@ -59,10 +70,10 @@
                         <MudIcon Icon="@Icons.Material.Filled.CloudUpload" Color="Color.Primary" Size="Size.Small" />
                         <div>
                             <MudText Typo="Typo.body2" Class="font-weight-medium">
-                                @_pendingAssetsCount @(_pendingAssetsCount == 1 ? "foto pendiente" : "fotos pendientes") de sincronizar
+                                @_assets.Count @(_assets.Count == 1 ? "foto pendiente" : "fotos pendientes") de subir
                             </MudText>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                Se copiarán al directorio interno para su indexación
+                                Se subirán al servidor para su indexación
                             </MudText>
                         </div>
                     </div>
@@ -70,37 +81,37 @@
                                Color="Color.Primary"
                                StartIcon="@Icons.Material.Filled.CloudUpload"
                                FullWidth="true"
-                               OnClick="SyncAllPendingAssets">
-                        Sincronizar todas
+                               OnClick="UploadAllAsync">
+                        Subir todas
                     </MudButton>
                 </MudPaper>
             }
 
-            @* ── Progreso de sincronización ──────────────────────────── *@
-            @if (_syncingAll)
+            @* ── Progreso de subida ──────────────────────────────────── *@
+            @if (_uploadingAll)
             {
                 <MudPaper Class="mb-4 pa-4" Elevation="0"
                           Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
                     <div class="d-flex align-center gap-3 mb-2">
                         <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" Class="flex-shrink-0" />
-                        <MudText Typo="Typo.body2" Class="font-weight-medium flex-grow-1">@_syncProgressMessage</MudText>
-                        <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="CancelSyncAll" Size="Size.Small">
+                        <MudText Typo="Typo.body2" Class="font-weight-medium flex-grow-1">@_uploadMessage</MudText>
+                        <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="CancelUpload" Size="Size.Small">
                             Cancelar
                         </MudButton>
                     </div>
-                    <MudProgressLinear Color="Color.Primary" Value="@_syncProgress" Rounded="true" Class="mb-2" />
+                    <MudProgressLinear Color="Color.Primary" Value="@_uploadProgress" Rounded="true" Class="mb-2" />
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                        @_syncCurrent de @_syncTotal sincronizadas
-                        @if (_syncSuccessful > 0 || _syncFailed > 0)
+                        @_uploadCurrent de @_uploadTotal subidas
+                        @if (_uploadSuccessful > 0 || _uploadFailed > 0)
                         {
-                            <span> · @_syncSuccessful exitosas@(_syncFailed > 0 ? $", {_syncFailed} fallidas" : "")</span>
+                            <span> · @_uploadSuccessful exitosas@(_uploadFailed > 0 ? $", {_uploadFailed} fallidas" : "")</span>
                         }
                     </MudText>
                 </MudPaper>
             }
 
             @* ── Grid de assets ──────────────────────────────────────── *@
-            @if (_groupedAssets.Any())
+            @if (_groupedAssets.Count > 0)
             {
                 @foreach (var group in _groupedAssets)
                 {
@@ -117,11 +128,11 @@
                     </div>
                 }
             }
-            else if (!_loading)
+            else if (!_loading && !_permissionDenied)
             {
                 <EmptyState Icon="@Icons.Material.Filled.CheckCircle"
                             Title="Todo sincronizado"
-                            Description="@($"No hay archivos nuevos en {_devicePath}")" />
+                            Description="@($"No hay archivos nuevos en «{_folderName}»")" />
             }
         }
     }
@@ -146,29 +157,26 @@
     private List<TimelineItem> _assets = new();
     private Dictionary<string, List<TimelineItem>> _groupedAssets = new();
     private bool _loading = true;
-    private string _devicePath = "";
+    private bool _permissionDenied;
+    private string _folderName = "";
 
-    // Sincronización múltiple
-    private int _pendingAssetsCount = 0;
-    private bool _syncingAll = false;
-    private string _syncProgressMessage = "";
-    private double _syncProgress = 0;
-    private int _syncCurrent = 0;
-    private int _syncTotal = 0;
-    private int _syncSuccessful = 0;
-    private int _syncFailed = 0;
-    private CancellationTokenSource? _syncCancellationTokenSource;
+    private bool _uploadingAll;
+    private string _uploadMessage = "";
+    private double _uploadProgress;
+    private int _uploadCurrent;
+    private int _uploadTotal;
+    private int _uploadSuccessful;
+    private int _uploadFailed;
+    private CancellationTokenSource? _cts;
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
             _loading = true;
-            _devicePath = await SettingsService.GetAssetsPathAsync();
-            if (!string.IsNullOrWhiteSpace(_devicePath))
-            {
-                await LoadDeviceAssets();
-            }
+            _folderName = await LocalFolderService.GetStoredFolderNameAsync() ?? "";
+            if (!string.IsNullOrWhiteSpace(_folderName))
+                await LoadDeviceAssetsAsync();
         }
         finally
         {
@@ -176,23 +184,49 @@
         }
     }
 
-    private async Task LoadDeviceAssets()
+    private async Task LoadDeviceAssetsAsync()
     {
         try
         {
             _loading = true;
+            _permissionDenied = false;
             StateHasChanged();
+
             _assets = await PendingAssetsProvider.GetPendingAssetsAsync();
+
+            if (_assets.Count == 0)
+            {
+                // Si no hay assets y hay carpeta configurada, puede ser falta de permiso
+                var hasPermission = await LocalFolderService.RequestPermissionAsync();
+                if (!hasPermission)
+                {
+                    _permissionDenied = true;
+                }
+                else
+                {
+                    _assets = await PendingAssetsProvider.GetPendingAssetsAsync();
+                }
+            }
+
             GroupAssets();
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error al analizar la ruta: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Error al analizar la carpeta: {ex.Message}", Severity.Error);
         }
         finally
         {
             _loading = false;
         }
+    }
+
+    private async Task RetryPermissionAsync()
+    {
+        var granted = await LocalFolderService.RequestPermissionAsync();
+        if (granted)
+            await LoadDeviceAssetsAsync();
+        else
+            Snackbar.Add("Permiso denegado por el usuario", Severity.Warning);
     }
 
     private void GroupAssets()
@@ -200,93 +234,105 @@
         _groupedAssets = _assets
             .OrderByDescending(a => a.ModifiedDate)
             .GroupBy(a => a.ModifiedDate.ToString("MMMM yyyy", new System.Globalization.CultureInfo("es-ES")))
-            .ToDictionary(g => char.ToUpper(g.Key[0]) + g.Key.Substring(1), g => g.ToList());
-
-        _pendingAssetsCount = _assets.Count;
+            .ToDictionary(
+                g => char.ToUpper(g.Key[0]) + g.Key[1..],
+                g => g.ToList());
     }
 
     private void OpenAsset(TimelineItem asset)
     {
-        var encodedPath = System.Net.WebUtility.UrlEncode(asset.FullPath);
-        Navigation.NavigateTo($"/asset/{Guid.Empty}?path={encodedPath}");
+        // Los assets locales no tienen página de detalle en el servidor todavía.
     }
 
-    private async Task SyncAllPendingAssets()
+    private async Task UploadAllAsync()
     {
-        var pendingAssets = _assets.ToList();
-        if (!pendingAssets.Any())
-        {
-            Snackbar.Add("No hay fotos pendientes de sincronizar", Severity.Info);
-            return;
-        }
+        if (_assets.Count == 0) return;
 
-        _syncingAll = true;
-        _syncTotal = pendingAssets.Count;
-        _syncCurrent = 0;
-        _syncSuccessful = 0;
-        _syncFailed = 0;
-        _syncProgress = 0;
-        _syncProgressMessage = "Iniciando sincronización...";
-        _syncCancellationTokenSource = new CancellationTokenSource();
-
+        _uploadingAll = true;
+        _uploadTotal = _assets.Count;
+        _uploadCurrent = 0;
+        _uploadSuccessful = 0;
+        _uploadFailed = 0;
+        _uploadProgress = 0;
+        _uploadMessage = "Iniciando subida...";
+        _cts = new CancellationTokenSource();
         StateHasChanged();
 
         try
         {
-            var paths = pendingAssets.Select(a => a.FullPath).ToList();
+            var toUpload = _assets.ToList();
 
-            await foreach (var update in AssetService.SyncMultipleAssetsAsync(paths, _syncCancellationTokenSource.Token))
+            foreach (var asset in toUpload)
             {
-                _syncCurrent = update.Current;
-                _syncTotal = update.Total;
-                _syncSuccessful = update.Successful;
-                _syncFailed = update.Failed;
-                _syncProgress = update.Percentage;
-                _syncProgressMessage = update.Message;
+                _cts.Token.ThrowIfCancellationRequested();
 
-                var asset = _assets.FirstOrDefault(a => a.FullPath == update.CurrentPath);
-                if (asset != null)
-                {
-                    asset.SyncStatus = update.Message.Contains("Error")
-                        ? AssetSyncStatus.Pending
-                        : AssetSyncStatus.Copied;
-                }
-
+                _uploadMessage = $"Subiendo {asset.FileName}…";
                 StateHasChanged();
 
-                if (update.IsCompleted) break;
+                try
+                {
+                    var bytes = await LocalFolderService.ReadFileBytesAsync(asset.FullPath);
+                    if (bytes == null || bytes.Length == 0)
+                    {
+                        _uploadFailed++;
+                    }
+                    else
+                    {
+                        using var stream = new MemoryStream(bytes);
+                        var result = await AssetService.UploadAssetAsync(asset.FileName, stream, _cts.Token);
+                        if (result != null)
+                        {
+                            _uploadSuccessful++;
+                            _assets.Remove(asset);
+                        }
+                        else
+                        {
+                            _uploadFailed++;
+                        }
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch
+                {
+                    _uploadFailed++;
+                }
+
+                _uploadCurrent++;
+                _uploadProgress = (double)_uploadCurrent / _uploadTotal * 100;
+                StateHasChanged();
             }
 
-            await LoadDeviceAssets();
+            GroupAssets();
 
-            Snackbar.Add($"Sincronización completada: {_syncSuccessful} exitosas, {_syncFailed} fallidas",
-                _syncFailed > 0 ? Severity.Warning : Severity.Success);
+            Snackbar.Add(
+                $"Subida completada: {_uploadSuccessful} exitosas{(_uploadFailed > 0 ? $", {_uploadFailed} fallidas" : "")}",
+                _uploadFailed > 0 ? Severity.Warning : Severity.Success);
         }
         catch (OperationCanceledException)
         {
-            Snackbar.Add("Sincronización cancelada", Severity.Info);
+            Snackbar.Add("Subida cancelada", Severity.Info);
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error durante la sincronización: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Error durante la subida: {ex.Message}", Severity.Error);
         }
         finally
         {
-            _syncingAll = false;
-            _syncCancellationTokenSource?.Dispose();
-            _syncCancellationTokenSource = null;
+            _uploadingAll = false;
+            _cts?.Dispose();
+            _cts = null;
             StateHasChanged();
         }
     }
 
-    private void CancelSyncAll()
-    {
-        _syncCancellationTokenSource?.Cancel();
-    }
+    private void CancelUpload() => _cts?.Cancel();
 
     public void Dispose()
     {
-        _syncCancellationTokenSource?.Cancel();
-        _syncCancellationTokenSource?.Dispose();
+        _cts?.Cancel();
+        _cts?.Dispose();
     }
 }
