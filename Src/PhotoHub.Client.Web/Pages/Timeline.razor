@@ -223,6 +223,12 @@
         height: calc(100vh - 64px - 56px);
     }
 
+    @@media (max-width: 959.98px) {
+        .timeline-wrapper {
+            height: calc(100vh - 64px - 56px - 64px - env(safe-area-inset-bottom));
+        }
+    }
+
     /* Contenedor principal con flex para layout horizontal */
     .timeline-main-container {
         display: flex;
@@ -515,8 +521,8 @@
         pointer-events: auto;
     }
 
-    /* En dispositivos táctiles el checkbox siempre es visible y tappable */
-    @@media (hover: none) {
+    /* En dispositivos móviles (<960px) */
+    @@media (max-width: 959.98px) {
         .asset-select-checkbox {
             opacity: 0.5;
             pointer-events: auto;

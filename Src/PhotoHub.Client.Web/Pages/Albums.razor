@@ -591,8 +591,8 @@ else
 {
     <div class="album-detail-scroll">
     <div class="page-pad">
-    @* ── Section tabs (también en detalle) ── *@
-    <div class="ph-section-tabs">
+    @* ── Section tabs (también en detalle, solo desktop) ── *@
+    <div class="ph-section-tabs d-none d-md-flex">
         <a href="/albums/own"    class="ph-section-tab @(_selectedAlbum?.IsOwner == true ? "ph-section-tab--active" : "")">Míos</a>
         <a href="/albums/shared" class="ph-section-tab @(_selectedAlbum?.IsOwner == true ? "" : "ph-section-tab--active")">Compartidos</a>
         <a href="/my-shares"     class="ph-section-tab">Links</a>

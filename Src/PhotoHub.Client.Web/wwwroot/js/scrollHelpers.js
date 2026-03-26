@@ -194,7 +194,7 @@ window.scrubberHelpers = {
 
         if (!this._sc || !this._track || !this._thumb) return;
 
-        this._isMobile = window.matchMedia('(hover: none)').matches;
+        this._isMobile = window.matchMedia('(max-width: 959.98px)').matches;
 
         // Mobile auto-hide: show scrubber on scroll, hide after 2s idle
         if (this._isMobile && this._overlay) {
