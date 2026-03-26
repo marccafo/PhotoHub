@@ -52,83 +52,30 @@
     {
         @* ── MAIN NAV ── *@
         <nav class="ph-bottom-nav" role="navigation" aria-label="Navegación principal">
-            <a href="/" class="ph-bottom-nav__tab @(IsActive("/", exact: true) ? "ph-bottom-nav__tab--active" : "")">
-                <MudIcon Icon="@(IsActive("/", exact: true) ? Icons.Material.Filled.PhotoLibrary : Icons.Material.Outlined.PhotoLibrary)" Class="ph-bottom-nav__icon" />
+            <a href="/" class="ph-bottom-nav__tab @(IsTabActive("/", exact: true) ? "ph-bottom-nav__tab--active" : "")">
+                <MudIcon Icon="@(IsTabActive("/", exact: true) ? Icons.Material.Filled.PhotoLibrary : Icons.Material.Outlined.PhotoLibrary)" Class="ph-bottom-nav__icon" />
                 <span class="ph-bottom-nav__label">Fotos</span>
             </a>
-            <a href="/search" class="ph-bottom-nav__tab @(IsActive("/search") ? "ph-bottom-nav__tab--active" : "")">
-                <MudIcon Icon="@(IsActive("/search") ? Icons.Material.Filled.Search : Icons.Material.Outlined.Search)" Class="ph-bottom-nav__icon" />
+            <a href="/search" class="ph-bottom-nav__tab @(IsTabActive("/search") ? "ph-bottom-nav__tab--active" : "")">
+                <MudIcon Icon="@(IsTabActive("/search") ? Icons.Material.Filled.Search : Icons.Material.Outlined.Search)" Class="ph-bottom-nav__icon" />
                 <span class="ph-bottom-nav__label">Buscar</span>
             </a>
-            <a href="/albums/own" class="ph-bottom-nav__tab @(IsActive("/albums") || IsActive("/my-shares") ? "ph-bottom-nav__tab--active" : "")">
-                <MudIcon Icon="@(IsActive("/albums") || IsActive("/my-shares") ? Icons.Material.Filled.Collections : Icons.Material.Outlined.Collections)" Class="ph-bottom-nav__icon" />
+            <a href="/albums/own" class="ph-bottom-nav__tab @(IsTabActive("/albums") || IsTabActive("/my-shares") ? "ph-bottom-nav__tab--active" : "")">
+                <MudIcon Icon="@(IsTabActive("/albums") || IsTabActive("/my-shares") ? Icons.Material.Filled.Collections : Icons.Material.Outlined.Collections)" Class="ph-bottom-nav__icon" />
                 <span class="ph-bottom-nav__label">Álbumes</span>
             </a>
-            <a href="/folders/own" class="ph-bottom-nav__tab @(IsActive("/folders") ? "ph-bottom-nav__tab--active" : "")">
-                <MudIcon Icon="@(IsActive("/folders") ? Icons.Material.Filled.Folder : Icons.Material.Outlined.FolderOpen)" Class="ph-bottom-nav__icon" />
+            <a href="/folders/own" class="ph-bottom-nav__tab @(IsTabActive("/folders") ? "ph-bottom-nav__tab--active" : "")">
+                <MudIcon Icon="@(IsTabActive("/folders") ? Icons.Material.Filled.Folder : Icons.Material.Outlined.FolderOpen)" Class="ph-bottom-nav__icon" />
                 <span class="ph-bottom-nav__label">Carpetas</span>
             </a>
-            <button class="ph-bottom-nav__tab ph-bottom-nav__tab--btn @(IsMoreSection ? "ph-bottom-nav__tab--active" : "")"
-                    @onclick="OpenMoreSheet">
+            <button class="ph-bottom-nav__tab ph-bottom-nav__tab--btn @(IsMoreSection || IsMoreSheetOpen ? "ph-bottom-nav__tab--active" : "")"
+                    @onclick="@(() => OnOpenMoreSheet.InvokeAsync())">
                 <MudIcon Icon="@(IsMoreSection ? Icons.Material.Filled.GridView : Icons.Material.Outlined.GridView)" Class="ph-bottom-nav__icon" />
                 <span class="ph-bottom-nav__label">Más</span>
             </button>
         </nav>
 
-        @* FAB upload — only in main sections, not admin/settings *@
-        @if (!IsAdminPath)
-        {
-            <div class="ph-upload-fab">
-                <MudFab Color="Color.Primary"
-                        StartIcon="@Icons.Material.Filled.CloudUpload"
-                        Size="Size.Large"
-                        OnClick="@(() => Navigation.NavigateTo("/upload"))" />
-            </div>
-        }
 
-        @* ── MÁS — full-screen overlay ── *@
-        @if (_moreSheetOpen)
-        {
-            <div class="ph-more-overlay">
-                <div class="d-flex justify-space-between align-center px-4 pt-2 pb-1">
-                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Más</MudText>
-                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
-                                   OnClick="@(() => _moreSheetOpen = false)" />
-                </div>
-                <div class="ph-more-list">
-                    <button class="ph-more-row justify-start @(IsActive("/favorites") ? "ph-more-row--active" : "")"
-                            @onclick="@(() => NavigateMore("/favorites"))">
-                        <MudIcon Icon="@(IsActive("/favorites") ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)" Class="ph-more-row__icon" />
-                        <span class="ph-more-row__label">Favoritos</span>
-                    </button>
-                    <button class="ph-more-row justify-start @(IsActive("/map") ? "ph-more-row--active" : "")"
-                            @onclick="@(() => NavigateMore("/map"))">
-                        <MudIcon Icon="@(IsActive("/map") ? Icons.Material.Filled.Map : Icons.Material.Outlined.Map)" Class="ph-more-row__icon" />
-                        <span class="ph-more-row__label">Mapa</span>
-                    </button>
-                    <button class="ph-more-row justify-start @(IsActive("/device") ? "ph-more-row--active" : "")"
-                            @onclick="@(() => NavigateMore("/device"))">
-                        <MudIcon Icon="@(IsActive("/device") ? Icons.Material.Filled.PhoneAndroid : Icons.Material.Outlined.PhoneAndroid)" Class="ph-more-row__icon" />
-                        <span class="ph-more-row__label">Dispositivo</span>
-                    </button>
-                    <button class="ph-more-row justify-start @(IsActive("/archive") ? "ph-more-row--active" : "")"
-                            @onclick="@(() => NavigateMore("/archive"))">
-                        <MudIcon Icon="@(IsActive("/archive") ? Icons.Material.Filled.Archive : Icons.Material.Outlined.Archive)" Class="ph-more-row__icon" />
-                        <span class="ph-more-row__label">Archivo</span>
-                    </button>
-                    <button class="ph-more-row justify-start @(IsActive("/trash") ? "ph-more-row--active" : "")"
-                            @onclick="@(() => NavigateMore("/trash"))">
-                        <MudIcon Icon="@(IsActive("/trash") ? Icons.Material.Filled.Delete : Icons.Material.Outlined.Delete)" Class="ph-more-row__icon" />
-                        <span class="ph-more-row__label">Papelera</span>
-                    </button>
-                    <button class="ph-more-row justify-start @(IsActive("/utilities") ? "ph-more-row--active" : "")"
-                            @onclick="@(() => NavigateMore("/utilities"))">
-                        <MudIcon Icon="@(IsActive("/utilities") ? Icons.Material.Filled.Build : Icons.Material.Outlined.Build)" Class="ph-more-row__icon" />
-                        <span class="ph-more-row__label">Utilidades</span>
-                    </button>
-                </div>
-            </div>
-        }
     }
 }
 
@@ -207,81 +154,6 @@
         font-family: inherit;
     }
 
-    /* "Más" overlay — covers full screen except bottom nav */
-    .ph-more-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: calc(64px + env(safe-area-inset-bottom));
-        background-color: var(--mud-palette-surface);
-        z-index: 1300;
-        display: flex;
-        flex-direction: column;
-        overflow-y: auto;
-    }
-
-    /* "Más" sheet list */
-    .ph-more-list {
-        display: flex;
-        flex-direction: column;
-        padding: 8px 0;
-    }
-
-    .ph-more-row {
-        gap: 16px;
-        padding: 16px 24px;
-        background: none;
-        border: none;
-        cursor: pointer;
-        font-family: inherit;
-        color: var(--mud-palette-text-primary);
-        text-align: left;
-        width: 100%;
-        -webkit-tap-highlight-color: transparent;
-        transition: background 0.15s ease;
-    }
-
-    .ph-more-row:active {
-        background: var(--mud-palette-action-default-hover);
-    }
-
-    .ph-more-row--active {
-        color: var(--mud-palette-primary);
-        background: color-mix(in srgb, var(--mud-palette-primary) 10%, transparent);
-    }
-
-    .ph-more-row__icon {
-        font-size: 24px !important;
-        width: 24px !important;
-        height: 24px !important;
-        flex-shrink: 0;
-    }
-
-    .ph-more-row__label {
-        font-size: 16px;
-        font-weight: 500;
-        line-height: 1;
-    }
-
-    .ph-more-row--active .ph-more-row__label {
-        font-weight: 600;
-    }
-
-    /* FAB upload — above bottom nav */
-    .ph-upload-fab {
-        position: fixed;
-        bottom: calc(64px + env(safe-area-inset-bottom) + 16px);
-        right: 16px;
-        z-index: 1150;
-        display: none;
-    }
-
-    @@media (max-width: 959.98px) {
-        .ph-upload-fab {
-            display: block;
-        }
-    }
 </style>
 
 @code {
@@ -293,7 +165,6 @@
 
     private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
-        _moreSheetOpen = false;
         StateHasChanged();
     }
 
@@ -306,6 +177,9 @@
         LayoutService.OnMajorUpdate -= HandleMajorUpdate;
     }
 
+    [Parameter] public EventCallback OnOpenMoreSheet { get; set; }
+    [Parameter] public bool IsMoreSheetOpen { get; set; }
+
     private bool IsActive(string path, bool exact = false)
     {
         var currentPath = new Uri(Navigation.Uri).AbsolutePath;
@@ -314,19 +188,11 @@
             : currentPath.StartsWith(path, StringComparison.OrdinalIgnoreCase);
     }
 
-    private bool _moreSheetOpen = false;
-
-    private void OpenMoreSheet() => _moreSheetOpen = true;
-
-    private void NavigateMore(string path)
-    {
-        _moreSheetOpen = false;
-        Navigation.NavigateTo(path);
-    }
+    private bool IsTabActive(string path, bool exact = false)
+        => !IsMoreSheetOpen && IsActive(path, exact);
 
     private bool IsSettingsSection => IsActive("/settings");
     private bool IsAdminSection    => IsActive("/admin");
-    private bool IsAdminPath       => IsActive("/admin");
 
     private bool IsMoreSection =>
         IsActive("/favorites") || IsActive("/map")     ||
