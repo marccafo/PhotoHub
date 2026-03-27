@@ -27,13 +27,9 @@
 }
 else if (!_links.Any())
 {
-    <div class="my-shares-empty">
-        <MudIcon Icon="@Icons.Material.Outlined.LinkOff" Style="font-size:56px;" />
-        <MudText Typo="Typo.body1" Class="mt-3">No tienes enlaces activos</MudText>
-        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">
-            Puedes crear enlaces desde el detalle de cualquier foto o álbum.
-        </MudText>
-    </div>
+    <EmptyState Icon="@Icons.Material.Outlined.LinkOff"
+                Title="No tienes enlaces activos"
+                Description="Puedes crear enlaces desde el detalle de cualquier foto o álbum." />
 }
 else
 {
@@ -233,16 +229,6 @@ else
 </MudDialog>
 
 <style>
-    .my-shares-empty {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 64px 24px;
-        opacity: 0.5;
-        text-align: center;
-    }
-
     .my-shares-list {
         display: flex;
         flex-direction: column;

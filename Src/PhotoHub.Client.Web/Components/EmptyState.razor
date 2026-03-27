@@ -1,13 +1,12 @@
 <div class="d-flex flex-column align-center justify-center py-12 text-center @(string.IsNullOrWhiteSpace(Class) ? "" : Class)">
-    <div style="opacity: 0.5;">
-        <MudIcon Icon="@Icon"
-                 Style="font-size: 56px; color: var(--mud-palette-text-disabled);" />
-        <MudText Typo="Typo.body1" Class="mt-3">@Title</MudText>
-        @if (!string.IsNullOrWhiteSpace(Description))
-        {
-            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">@Description</MudText>
-        }
-    </div>
+    <MudIcon Icon="@Icon"
+             Style="font-size: 5.5rem; opacity: .45;" Color="Color.Primary" />
+    <MudText Typo="Typo.h6" Class="mt-4">@Title</MudText>
+    @if (!string.IsNullOrWhiteSpace(Description))
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 text-center"
+                 Style="max-width: 240px;">@Description</MudText>
+    }
     @if (Actions is not null)
     {
         <div class="mt-4">
