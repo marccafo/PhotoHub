@@ -1,7 +1,7 @@
 @page "/device"
 @inject IAssetService AssetService
 @inject ILocalFolderService LocalFolderService
-@inject IPendingAssetsProvider PendingAssetsProvider
+@inject DeviceAssetsCache Cache
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @implements IDisposable
@@ -18,19 +18,15 @@
 {
     <div class="local-lightbox" @onclick="CloseLightbox">
         <div class="local-lightbox-toolbar" @onclick:stopPropagation="true">
-            <MudText Typo="Typo.body2" Class="white-text flex-grow-1"
-                     Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            <MudText Typo="Typo.body2" Style="color:white; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;">
                 @_lightboxAsset.FileName
             </MudText>
             <MudText Typo="Typo.caption" Class="mud-text-secondary mr-3">
                 @_lightboxAsset.FileSizeFormatted
             </MudText>
-            <MudIconButton Icon="@Icons.Material.Filled.Close"
-                           Color="Color.Inherit"
-                           Size="Size.Small"
-                           OnClick="CloseLightbox" />
+            <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Inherit"
+                           Size="Size.Small" OnClick="CloseLightbox" />
         </div>
-
         <div class="local-lightbox-content" @onclick:stopPropagation="true">
             @if (_lightboxLoading)
             {
@@ -40,13 +36,11 @@
             {
                 @if (_lightboxAsset.Type == "VIDEO")
                 {
-                    <video src="@_lightboxBlobUrl" controls autoplay playsinline
-                           class="local-lightbox-media" />
+                    <video src="@_lightboxBlobUrl" controls autoplay playsinline class="local-lightbox-media" />
                 }
                 else
                 {
-                    <img src="@_lightboxBlobUrl" alt="@_lightboxAsset.FileName"
-                         class="local-lightbox-media" />
+                    <img src="@_lightboxBlobUrl" alt="@_lightboxAsset.FileName" class="local-lightbox-media" />
                 }
             }
             else
@@ -78,113 +72,105 @@
         }
         else
         {
-            @* ── Header: carpeta + re-escanear ──────────────────────────── *@
+            @* ── Header ─────────────────────────────────────────────────── *@
             <MudPaper Class="d-flex align-center gap-3 px-4 py-3 mb-4" Elevation="0"
-                      Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                      Style="border:1px solid var(--mud-palette-divider);border-radius:12px;">
                 <MudIcon Icon="@Icons.Material.Filled.Folder" Color="Color.Primary" />
                 <div class="flex-grow-1 min-width-0">
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">Carpeta analizada</MudText>
-                    <MudText Typo="Typo.body2" Style="word-break: break-all;">@_folderName</MudText>
+                    <MudText Typo="Typo.body2" Style="word-break:break-all;">@_folderName</MudText>
                 </div>
+                @if (_enumerating)
+                {
+                    <MudTooltip Text="Actualizando lista…">
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Default" />
+                    </MudTooltip>
+                }
                 <MudTooltip Text="Re-escanear">
-                    <MudIconButton Icon="@Icons.Material.Filled.Refresh"
-                                   Size="Size.Small"
-                                   Disabled="@(_loading || _checkingExisting)"
-                                   OnClick="@(async () => await LoadDeviceAssetsAsync())" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small"
+                                   Disabled="@_enumerating"
+                                   OnClick="RefreshAsync" />
                 </MudTooltip>
             </MudPaper>
 
-            @* ── Permiso denegado ─────────────────────────────────────── *@
+            @* ── Permiso denegado ──────────────────────────────────────── *@
             @if (_permissionDenied)
             {
                 <MudAlert Severity="Severity.Warning" Class="mb-4">
-                    Permiso de lectura denegado. Pulsa el botón para volver a solicitarlo.
+                    Permiso de lectura denegado.
                     <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="RetryPermissionAsync" Class="ml-2">
                         Solicitar permiso
                     </MudButton>
                 </MudAlert>
             }
 
-            @* ── Comprobando duplicados (Opción A) ────────────────────── *@
+            @* ── Comprobando duplicados (Opción A) ─────────────────────── *@
             @if (_checkingExisting)
             {
                 <MudPaper Class="d-flex align-center gap-3 px-4 py-3 mb-4" Elevation="0"
-                          Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                          Style="border:1px solid var(--mud-palette-divider);border-radius:12px;">
                     <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" Class="flex-shrink-0" />
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">Comprobando cuáles ya están en el servidor…</MudText>
                 </MudPaper>
             }
 
-            @* ── Resumen de estado ────────────────────────────────────── *@
+            @* ── Resumen ────────────────────────────────────────────────── *@
             @if (!_checkingExisting && _assets.Count > 0 && !_uploadingAll)
             {
-                var pendingCount = _assets.Count(a => a.SyncStatus == AssetSyncStatus.Pending);
-                var syncedCount  = _assets.Count(a => a.SyncStatus == AssetSyncStatus.Synced);
-
-                @if (pendingCount > 0)
+                var pending = _assets.Count(a => a.SyncStatus == AssetSyncStatus.Pending);
+                var synced  = _assets.Count(a => a.SyncStatus == AssetSyncStatus.Synced);
+                @if (pending > 0)
                 {
                     <MudPaper Class="mb-4 pa-4" Elevation="0"
-                              Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                              Style="border:1px solid var(--mud-palette-divider);border-radius:12px;">
                         <div class="d-flex align-center gap-3 mb-3">
                             <MudIcon Icon="@Icons.Material.Filled.CloudUpload" Color="Color.Primary" Size="Size.Small" />
                             <div class="flex-grow-1">
                                 <MudText Typo="Typo.body2" Class="font-weight-medium">
-                                    @pendingCount @(pendingCount == 1 ? "foto nueva" : "fotos nuevas") para subir
-                                    @if (syncedCount > 0)
+                                    @pending @(pending == 1 ? "foto nueva" : "fotos nuevas") para subir
+                                    @if (synced > 0)
                                     {
-                                        <span Class="mud-text-secondary font-weight-regular"> · @syncedCount ya en servidor</span>
+                                        <span Class="mud-text-secondary font-weight-regular"> · @synced ya en servidor</span>
                                     }
-                                </MudText>
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                    Se subirán al servidor para su indexación
                                 </MudText>
                             </div>
                         </div>
-                        <MudButton Variant="Variant.Filled"
-                                   Color="Color.Primary"
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary"
                                    StartIcon="@Icons.Material.Filled.CloudUpload"
-                                   FullWidth="true"
-                                   OnClick="UploadAllAsync">
-                            Subir @pendingCount @(pendingCount == 1 ? "foto" : "fotos")
+                                   FullWidth="true" OnClick="UploadAllAsync">
+                            Subir @pending @(pending == 1 ? "foto" : "fotos")
                         </MudButton>
                     </MudPaper>
                 }
-                else if (syncedCount > 0)
+                else if (synced > 0)
                 {
                     <MudAlert Severity="Severity.Success" Class="mb-4">
-                        Todo sincronizado — @syncedCount @(syncedCount == 1 ? "foto" : "fotos") ya en el servidor.
+                        Todo sincronizado — @synced @(synced == 1 ? "foto" : "fotos") ya en el servidor.
                     </MudAlert>
                 }
             }
 
-            @* ── Progreso de subida ──────────────────────────────────── *@
+            @* ── Progreso de subida ──────────────────────────────────────── *@
             @if (_uploadingAll)
             {
                 <MudPaper Class="mb-4 pa-4" Elevation="0"
-                          Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                          Style="border:1px solid var(--mud-palette-divider);border-radius:12px;">
                     <div class="d-flex align-center gap-3 mb-2">
                         <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" Class="flex-shrink-0" />
                         <MudText Typo="Typo.body2" Class="font-weight-medium flex-grow-1">@_uploadMessage</MudText>
-                        <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="CancelUpload" Size="Size.Small">
-                            Cancelar
-                        </MudButton>
+                        <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="CancelUpload">Cancelar</MudButton>
                     </div>
                     <MudProgressLinear Color="Color.Primary" Value="@_uploadProgress" Rounded="true" Class="mb-2" />
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                        @_uploadCurrent de @_uploadTotal procesadas
-                        @if (_uploadSuccessful > 0 || _uploadSkipped > 0 || _uploadFailed > 0)
-                        {
-                            <span>
-                                · @_uploadSuccessful subidas
-                                @if (_uploadSkipped > 0) { <span>, @_uploadSkipped ya existían</span> }
-                                @if (_uploadFailed > 0) { <span>, @_uploadFailed fallidas</span> }
-                            </span>
-                        }
+                        @_uploadCurrent de @_uploadTotal ·
+                        @_uploadSuccessful subidas
+                        @if (_uploadSkipped > 0) { <span>, @_uploadSkipped ya existían</span> }
+                        @if (_uploadFailed > 0)  { <span>, @_uploadFailed fallidas</span>    }
                     </MudText>
                 </MudPaper>
             }
 
-            @* ── Grid de assets ──────────────────────────────────────── *@
+            @* ── Grid ──────────────────────────────────────────────────────── *@
             @if (_groupedAssets.Count > 0)
             {
                 @foreach (var group in _groupedAssets)
@@ -202,7 +188,7 @@
                     </div>
                 }
             }
-            else if (!_loading && !_permissionDenied && !_checkingExisting)
+            else if (!_loading && !_permissionDenied && !_checkingExisting && !_enumerating)
             {
                 <EmptyState Icon="@Icons.Material.Filled.CheckCircle"
                             Title="Todo sincronizado"
@@ -219,64 +205,46 @@
         text-transform: capitalize;
         padding: 0 4px 6px 4px;
     }
-
     @@media (max-width: 599.98px) {
-        .device-date-header {
-            font-size: 0.78rem !important;
-        }
+        .device-date-header { font-size: 0.78rem !important; }
     }
-
     .local-lightbox {
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.96);
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,.96);
         z-index: 9999;
-        display: flex;
-        flex-direction: column;
+        display: flex; flex-direction: column;
     }
-
     .local-lightbox-toolbar {
-        display: flex;
-        align-items: center;
+        display: flex; align-items: center; gap: 4px;
         padding: 8px 8px 8px 16px;
-        gap: 4px;
-        background: rgba(0, 0, 0, 0.6);
+        background: rgba(0,0,0,.6);
         flex-shrink: 0;
     }
-
     .local-lightbox-content {
-        flex: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        overflow: hidden;
-        padding: 8px;
+        flex: 1; display: flex;
+        align-items: center; justify-content: center;
+        overflow: hidden; padding: 8px;
     }
-
     .local-lightbox-media {
-        max-width: 100%;
-        max-height: 100%;
-        object-fit: contain;
-        border-radius: 4px;
+        max-width: 100%; max-height: 100%;
+        object-fit: contain; border-radius: 4px;
     }
 </style>
 
 @code {
-    private List<TimelineItem> _assets = new();
-    private Dictionary<string, List<TimelineItem>> _groupedAssets = new();
+    private List<TimelineItem> _assets = [];
+    private Dictionary<string, List<TimelineItem>> _groupedAssets = [];
     private bool _loading = true;
+    private bool _enumerating;        // re-enumeración silenciosa en background
     private bool _checkingExisting;
     private bool _permissionDenied;
     private string _folderName = "";
 
+    // Upload
     private bool _uploadingAll;
     private string _uploadMessage = "";
     private double _uploadProgress;
-    private int _uploadCurrent;
-    private int _uploadTotal;
-    private int _uploadSuccessful;
-    private int _uploadSkipped;
-    private int _uploadFailed;
+    private int _uploadCurrent, _uploadTotal, _uploadSuccessful, _uploadSkipped, _uploadFailed;
     private CancellationTokenSource? _cts;
 
     // Lightbox
@@ -284,83 +252,135 @@
     private string? _lightboxBlobUrl;
     private bool _lightboxLoading;
 
+    // Thumbnail generation
+    private CancellationTokenSource? _thumbCts;
+
     protected override async Task OnInitializedAsync()
     {
-        try
-        {
-            _loading = true;
-            _folderName = await LocalFolderService.GetStoredFolderNameAsync() ?? "";
-            if (!string.IsNullOrWhiteSpace(_folderName))
-                await LoadDeviceAssetsAsync();
-        }
-        finally
+        _folderName = await LocalFolderService.GetStoredFolderNameAsync() ?? "";
+
+        if (string.IsNullOrWhiteSpace(_folderName))
         {
             _loading = false;
+            return;
         }
+
+        // ── Capa 1: memoria (navegación SPA sin coste) ───────────────────
+        if (Cache.IsValid(_folderName))
+        {
+            _assets = Cache.Assets!;
+            ApplyCachedBlobUrls();
+            GroupAssets();
+            _loading = false;
+            // Si el server check ya se hizo en esta sesión, no lo repetimos
+            if (!Cache.HasServerCheck)
+                _ = CheckExistingOnServerAsync();
+            _ = GenerateThumbnailsAsync();
+            return;
+        }
+
+        // ── Capa 2: IndexedDB (page refresh — lista al instante) ─────────
+        var cached = await LocalFolderService.LoadMetadataCacheAsync(_folderName);
+        if (cached != null && cached.Count > 0)
+        {
+            _assets = BuildTimelineItems(cached);
+            Cache.SetAssets(_folderName, _assets);
+            ApplyCachedBlobUrls();
+            GroupAssets();
+            _loading = false;
+            StateHasChanged();
+
+            // Re-enumerar en background para refrescar la cache
+            _ = BackgroundEnumerateAsync();
+            _ = CheckExistingOnServerAsync();
+            _ = GenerateThumbnailsAsync();
+            return;
+        }
+
+        // ── Capa 3: enumeración completa ─────────────────────────────────
+        await FullEnumerateAsync();
+        _loading = false;
     }
 
-    private async Task LoadDeviceAssetsAsync()
+    // ── Enumeración completa (primera vez o forzada) ─────────────────────────
+    private async Task FullEnumerateAsync()
     {
         try
         {
-            _loading = true;
             _permissionDenied = false;
-            StateHasChanged();
+            var files = await LocalFolderService.EnumerateFilesAsync();
 
-            _assets = await PendingAssetsProvider.GetPendingAssetsAsync();
-
-            if (_assets.Count == 0)
+            if (files.Count == 0)
             {
-                var hasPermission = await LocalFolderService.RequestPermissionAsync();
-                if (!hasPermission)
-                {
-                    _permissionDenied = true;
-                    return;
-                }
-                _assets = await PendingAssetsProvider.GetPendingAssetsAsync();
+                var ok = await LocalFolderService.RequestPermissionAsync();
+                if (!ok) { _permissionDenied = true; return; }
+                files = await LocalFolderService.EnumerateFilesAsync();
             }
 
+            _assets = BuildTimelineItems(files);
+            Cache.SetAssets(_folderName, _assets);
             GroupAssets();
+
+            _ = LocalFolderService.SaveMetadataCacheAsync(_folderName, files);
+            _ = CheckExistingOnServerAsync();
+            _ = GenerateThumbnailsAsync();
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Error al analizar la carpeta: {ex.Message}", Severity.Error);
         }
-        finally
-        {
-            _loading = false;
-        }
-
-        // Opción A: comprobar cuáles ya existen en el servidor por nombre+tamaño
-        await CheckExistingOnServerAsync();
     }
 
-    // ── Opción A: check por nombre + tamaño ─────────────────────────────────
+    // Re-enumeración silenciosa en background (cuando se usa cache de IndexedDB)
+    private async Task BackgroundEnumerateAsync()
+    {
+        try
+        {
+            _enumerating = true;
+            StateHasChanged();
+
+            var files = await LocalFolderService.EnumerateFilesAsync();
+            if (files.Count == 0) return;
+
+            _ = LocalFolderService.SaveMetadataCacheAsync(_folderName, files);
+
+            // Actualizar la lista si cambió el número de ficheros
+            if (files.Count != _assets.Count)
+            {
+                _assets = BuildTimelineItems(files);
+                Cache.SetAssets(_folderName, _assets);
+                ApplyCachedBlobUrls();
+                GroupAssets();
+                if (Cache.HasServerCheck)
+                    ApplyCachedServerStatus();
+                else
+                    _ = CheckExistingOnServerAsync();
+                StateHasChanged();
+                _ = GenerateThumbnailsAsync();
+            }
+        }
+        catch { }
+        finally
+        {
+            _enumerating = false;
+            StateHasChanged();
+        }
+    }
+
+    // ── Opción A: check por nombre+tamaño ────────────────────────────────────
     private async Task CheckExistingOnServerAsync()
     {
         if (_assets.Count == 0) return;
-
         _checkingExisting = true;
         StateHasChanged();
-
         try
         {
-            var filesToCheck = _assets.Select(a => (a.FileName, a.FileSize));
-            var existingKeys = await AssetService.CheckExistingAsync(filesToCheck);
-
-            foreach (var asset in _assets)
-            {
-                var key = $"{asset.FileName}|{asset.FileSize}";
-                if (existingKeys.Contains(key))
-                    asset.SyncStatus = AssetSyncStatus.Synced;
-            }
-
+            var keys = await AssetService.CheckExistingAsync(_assets.Select(a => (a.FileName, a.FileSize)));
+            Cache.SetServerExistingKeys(keys);
+            ApplyCachedServerStatus();
             GroupAssets();
         }
-        catch
-        {
-            // Si falla el check, dejamos todos como Pending (conservador)
-        }
+        catch { }
         finally
         {
             _checkingExisting = false;
@@ -368,13 +388,85 @@
         }
     }
 
-    private async Task RetryPermissionAsync()
+    private void ApplyCachedServerStatus()
     {
-        var granted = await LocalFolderService.RequestPermissionAsync();
-        if (granted)
-            await LoadDeviceAssetsAsync();
-        else
-            Snackbar.Add("Permiso denegado por el usuario", Severity.Warning);
+        foreach (var a in _assets)
+            a.SyncStatus = Cache.ServerExistingKeys.Contains($"{a.FileName}|{a.FileSize}")
+                ? AssetSyncStatus.Synced : AssetSyncStatus.Pending;
+    }
+
+    // ── Lazy thumbnails en background ────────────────────────────────────────
+    private async Task GenerateThumbnailsAsync()
+    {
+        _thumbCts?.Cancel();
+        _thumbCts = new CancellationTokenSource();
+        var token = _thumbCts.Token;
+        const int BatchSize = 10;
+
+        try
+        {
+            var images = _assets.Where(a => a.Type == "IMAGE" && string.IsNullOrEmpty(a.LocalThumbnailUrl)).ToList();
+            const int batchSize = 10;
+            for (int i = 0; i < images.Count; i += batchSize)
+            {
+                if (token.IsCancellationRequested) return;
+
+                var batch = images.Skip(i).Take(batchSize).ToList();
+                var needsGeneration = batch.Where(a => !Cache.HasBlobUrl(a.FullPath)).ToList();
+                var paths = needsGeneration.Select(a => a.FullPath).ToList();
+
+                if (paths.Count > 0)
+                {
+                    var urls = await LocalFolderService.GetBlobUrlsBatchAsync(paths);
+                    Cache.MergeBlobUrls(urls);
+                    foreach (var a in needsGeneration)
+                        if (urls.TryGetValue(a.FullPath, out var url))
+                            a.LocalThumbnailUrl = url;
+                }
+
+                // Aplicar los que ya estaban en cache
+                var alreadyCached = batch.Except(needsGeneration).ToList();
+                foreach (var a in alreadyCached)
+                {
+                    var cached = Cache.GetBlobUrl(a.FullPath);
+                    if (cached != null) a.LocalThumbnailUrl = cached;
+                }
+
+                StateHasChanged();
+                await Task.Delay(16, token); // ceder al render
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"GenerateThumbnailsAsync error: {ex.Message}");
+        }
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private static List<TimelineItem> BuildTimelineItems(List<LocalFileInfo> files) =>
+        files.Select(f => new TimelineItem
+        {
+            Id = Guid.Empty,
+            FileName = f.Name,
+            FullPath = f.RelativePath,
+            FileSize = f.Size,
+            CreatedDate  = DateTimeOffset.FromUnixTimeMilliseconds(f.LastModified).UtcDateTime,
+            ModifiedDate = DateTimeOffset.FromUnixTimeMilliseconds(f.LastModified).UtcDateTime,
+            Extension = Path.GetExtension(f.Name).TrimStart('.').ToLower(),
+            Type = f.IsImage ? "IMAGE" : "VIDEO",
+            SyncStatus = AssetSyncStatus.Pending,
+            IsLocalOnly = true
+        }).ToList();
+
+    private void ApplyCachedBlobUrls()
+    {
+        foreach (var a in _assets)
+        {
+            var url = Cache.GetBlobUrl(a.FullPath);
+            if (url != null) a.LocalThumbnailUrl = url;
+        }
     }
 
     private void GroupAssets()
@@ -387,6 +479,27 @@
                 g => g.ToList());
     }
 
+    private async Task RefreshAsync()
+    {
+        Cache.Invalidate();
+        _assets = [];
+        _groupedAssets = [];
+        _loading = true;
+        StateHasChanged();
+        await FullEnumerateAsync();
+        _loading = false;
+    }
+
+    private async Task RetryPermissionAsync()
+    {
+        if (await LocalFolderService.RequestPermissionAsync())
+            await FullEnumerateAsync();
+        else
+            Snackbar.Add("Permiso denegado por el usuario", Severity.Warning);
+    }
+
+    // ── Lightbox ─────────────────────────────────────────────────────────────
+
     private async Task OpenAsset(TimelineItem asset)
     {
         _lightboxAsset = asset;
@@ -394,21 +507,21 @@
         _lightboxLoading = true;
         StateHasChanged();
 
-        var url = await LocalFolderService.GetBlobUrlAsync(asset.FullPath);
-        _lightboxBlobUrl = url;
+        _lightboxBlobUrl = await LocalFolderService.GetBlobUrlAsync(asset.FullPath);
         _lightboxLoading = false;
         StateHasChanged();
     }
 
     private async Task CloseLightbox()
     {
-        if (_lightboxBlobUrl != null)
-            await LocalFolderService.RevokeBlobUrlAsync(_lightboxBlobUrl);
+        // No revocar: el blob URL del lightbox puede ser el mismo que el thumbnail en cache
         _lightboxAsset = null;
         _lightboxBlobUrl = null;
+        await Task.CompletedTask;
     }
 
-    // ── Upload: opción B (checksum) antes de subir cada fichero ─────────────
+    // ── Upload (Opción B: checksum antes de subir) ────────────────────────────
+
     private async Task UploadAllAsync()
     {
         var pending = _assets.Where(a => a.SyncStatus == AssetSyncStatus.Pending).ToList();
@@ -416,10 +529,7 @@
 
         _uploadingAll = true;
         _uploadTotal = pending.Count;
-        _uploadCurrent = 0;
-        _uploadSuccessful = 0;
-        _uploadSkipped = 0;
-        _uploadFailed = 0;
+        _uploadCurrent = _uploadSuccessful = _uploadSkipped = _uploadFailed = 0;
         _uploadProgress = 0;
         _uploadMessage = "Iniciando subida…";
         _cts = new CancellationTokenSource();
@@ -435,76 +545,55 @@
 
                 try
                 {
-                    // Opción B: calcular SHA-256 y comprobar antes de subir
+                    // Opción B: SHA-256 antes de subir
                     var checksum = await LocalFolderService.ComputeChecksumAsync(asset.FullPath);
                     if (checksum != null)
                     {
-                        var existingId = await AssetService.ExistsByChecksumAsync(checksum, _cts.Token);
-                        if (existingId.HasValue)
+                        var existing = await AssetService.ExistsByChecksumAsync(checksum, _cts.Token);
+                        if (existing.HasValue)
                         {
-                            // Ya existe en el servidor — marcar y saltar
                             asset.SyncStatus = AssetSyncStatus.Synced;
                             _uploadSkipped++;
-                            _uploadCurrent++;
-                            _uploadProgress = (double)_uploadCurrent / _uploadTotal * 100;
-                            StateHasChanged();
-                            continue;
+                            goto Next;
                         }
                     }
 
-                    // No existe: leer y subir
                     _uploadMessage = $"Subiendo {asset.FileName}…";
                     StateHasChanged();
 
                     var bytes = await LocalFolderService.ReadFileBytesAsync(asset.FullPath);
-                    if (bytes == null || bytes.Length == 0)
-                    {
-                        _uploadFailed++;
-                    }
-                    else
+                    if (bytes is { Length: > 0 })
                     {
                         using var stream = new MemoryStream(bytes);
                         var result = await AssetService.UploadAssetAsync(asset.FileName, stream, _cts.Token);
-                        if (result != null)
-                        {
-                            asset.SyncStatus = AssetSyncStatus.Synced;
-                            _uploadSuccessful++;
-                        }
-                        else
-                        {
-                            _uploadFailed++;
-                        }
+                        if (result != null) { asset.SyncStatus = AssetSyncStatus.Synced; _uploadSuccessful++; }
+                        else _uploadFailed++;
                     }
+                    else _uploadFailed++;
                 }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch
-                {
-                    _uploadFailed++;
-                }
+                catch (OperationCanceledException) { throw; }
+                catch { _uploadFailed++; }
 
+                Next:
                 _uploadCurrent++;
                 _uploadProgress = (double)_uploadCurrent / _uploadTotal * 100;
                 StateHasChanged();
             }
 
-            GroupAssets();
+            // Actualizar cache server check
+            Cache.SetServerExistingKeys(
+                _assets.Where(a => a.SyncStatus == AssetSyncStatus.Synced)
+                       .Select(a => $"{a.FileName}|{a.FileSize}")
+                       .ToHashSet());
 
+            GroupAssets();
             var summary = $"{_uploadSuccessful} subidas";
             if (_uploadSkipped > 0) summary += $", {_uploadSkipped} ya existían";
-            if (_uploadFailed > 0) summary += $", {_uploadFailed} fallidas";
+            if (_uploadFailed   > 0) summary += $", {_uploadFailed} fallidas";
             Snackbar.Add($"Completado: {summary}", _uploadFailed > 0 ? Severity.Warning : Severity.Success);
         }
-        catch (OperationCanceledException)
-        {
-            Snackbar.Add("Subida cancelada", Severity.Info);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error durante la subida: {ex.Message}", Severity.Error);
-        }
+        catch (OperationCanceledException) { Snackbar.Add("Subida cancelada", Severity.Info); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
         finally
         {
             _uploadingAll = false;
@@ -520,7 +609,7 @@
     {
         _cts?.Cancel();
         _cts?.Dispose();
-        if (_lightboxBlobUrl != null)
-            _ = LocalFolderService.RevokeBlobUrlAsync(_lightboxBlobUrl);
+        _thumbCts?.Cancel();
+        _thumbCts?.Dispose();
     }
 }

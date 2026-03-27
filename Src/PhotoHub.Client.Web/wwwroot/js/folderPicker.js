@@ -10,6 +10,7 @@ window.folderPicker = {
             const handle = await window.showDirectoryPicker({ mode: 'read' });
             this._handle = handle;
             await this._saveHandle(handle);
+            await this._deleteMetadataCache(handle.name); // carpeta nueva → invalidar cache
             return handle.name;
         } catch (e) {
             if (e.name === 'AbortError') return null;
@@ -40,6 +41,53 @@ window.folderPicker = {
         }
     },
 
+    // ── Metadata cache (IndexedDB) ──────────────────────────────────────────
+
+    async loadMetadataCache(folderName) {
+        try {
+            const db = await this._openDb();
+            return new Promise(resolve => {
+                const tx = db.transaction('metadata', 'readonly');
+                const req = tx.objectStore('metadata').get(folderName);
+                req.onsuccess = () => {
+                    const entry = req.result;
+                    if (!entry) { resolve(null); return; }
+                    const ageHours = (Date.now() - entry.cachedAt) / 3_600_000;
+                    resolve(ageHours < 24 ? entry.files : null);
+                };
+                req.onerror = () => resolve(null);
+            });
+        } catch {
+            return null;
+        }
+    },
+
+    async saveMetadataCache(folderName, files) {
+        try {
+            const db = await this._openDb();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction('metadata', 'readwrite');
+                tx.objectStore('metadata').put({ files, cachedAt: Date.now() }, folderName);
+                tx.oncomplete = resolve;
+                tx.onerror = () => reject(tx.error);
+            });
+        } catch { }
+    },
+
+    async _deleteMetadataCache(folderName) {
+        try {
+            const db = await this._openDb();
+            return new Promise(resolve => {
+                const tx = db.transaction('metadata', 'readwrite');
+                tx.objectStore('metadata').delete(folderName);
+                tx.oncomplete = resolve;
+                tx.onerror = resolve;
+            });
+        } catch { }
+    },
+
+    // ── Enumerar ficheros ────────────────────────────────────────────────────
+
     async enumerate() {
         try {
             if (!this._handle) this._handle = await this._loadHandle();
@@ -64,77 +112,70 @@ window.folderPicker = {
         const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'tiff', 'bmp', 'heic', 'heif']);
         const VIDEO_EXTS = new Set(['mp4', 'mov', 'avi', 'mkv', '3gp', 'm4v', 'webm']);
 
-        // Recoger primero todos los entries para poder procesarlos sin bloquear
         const entries = [];
-        for await (const entry of dirHandle.entries()) {
-            entries.push(entry);
-        }
+        for await (const entry of dirHandle.entries()) entries.push(entry);
 
         for (const [name, handle] of entries) {
             if (handle.kind === 'file') {
                 const ext = (name.split('.').pop() ?? '').toLowerCase();
                 const isImage = IMAGE_EXTS.has(ext);
-                const isVideo = VIDEO_EXTS.has(ext);
-                if (!isImage && !isVideo) continue;
+                if (!isImage && !VIDEO_EXTS.has(ext)) continue;
 
                 const file = await handle.getFile();
-                const relativePath = basePath ? `${basePath}/${name}` : name;
-
                 results.push({
                     name,
-                    relativePath,
+                    relativePath: basePath ? `${basePath}/${name}` : name,
                     size: file.size,
                     lastModified: file.lastModified,
                     isImage,
                     thumbnailUrl: null
                 });
             } else if (handle.kind === 'directory') {
-                const subPath = basePath ? `${basePath}/${name}` : name;
-                await this._collectFiles(handle, subPath, results);
+                await this._collectFiles(handle, basePath ? `${basePath}/${name}` : name, results);
             }
         }
     },
 
+    // ── Blob URLs (thumbnails) ───────────────────────────────────────────────
+
     async getBlobUrl(relativePath) {
         try {
-            if (!this._handle) this._handle = await this._loadHandle();
-            if (!this._handle) return null;
-
-            const parts = relativePath.split('/');
-            let current = this._handle;
-            for (let i = 0; i < parts.length - 1; i++) {
-                current = await current.getDirectoryHandle(parts[i]);
-            }
-            const fileHandle = await current.getFileHandle(parts[parts.length - 1]);
-            const file = await fileHandle.getFile();
-            return URL.createObjectURL(file);
+            const fh = await this._getFileHandle(relativePath);
+            return URL.createObjectURL(await fh.getFile());
         } catch (e) {
             console.error('folderPicker.getBlobUrl error:', e);
             return null;
         }
     },
 
+    // Genera blob URLs en paralelo para una lista de rutas.
+    // Devuelve { relativePath: blobUrl } — las rutas que fallen quedan fuera.
+    async getBlobUrlsBatch(relativePaths) {
+        if (!this._handle) this._handle = await this._loadHandle();
+        if (!this._handle) return {};
+
+        const result = {};
+        await Promise.all(relativePaths.map(async rp => {
+            try {
+                const fh = await this._getFileHandle(rp);
+                result[rp] = URL.createObjectURL(await fh.getFile());
+            } catch { }
+        }));
+        return result;
+    },
+
     revokeBlobUrl(url) {
         if (url) URL.revokeObjectURL(url);
     },
 
+    // ── Checksum + bytes ─────────────────────────────────────────────────────
+
     async computeChecksum(relativePath) {
         try {
-            if (!this._handle) this._handle = await this._loadHandle();
-            if (!this._handle) return null;
-
-            const parts = relativePath.split('/');
-            let current = this._handle;
-            for (let i = 0; i < parts.length - 1; i++) {
-                current = await current.getDirectoryHandle(parts[i]);
-            }
-            const fileHandle = await current.getFileHandle(parts[parts.length - 1]);
-            const file = await fileHandle.getFile();
-            const buffer = await file.arrayBuffer();
-            const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-            return Array.from(new Uint8Array(hashBuffer))
-                .map(b => b.toString(16).padStart(2, '0'))
-                .join('');
+            const fh = await this._getFileHandle(relativePath);
+            const buffer = await (await fh.getFile()).arrayBuffer();
+            const hash = await crypto.subtle.digest('SHA-256', buffer);
+            return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
         } catch (e) {
             console.error('folderPicker.computeChecksum error:', e);
             return null;
@@ -143,17 +184,8 @@ window.folderPicker = {
 
     async readFileBytes(relativePath) {
         try {
-            if (!this._handle) this._handle = await this._loadHandle();
-            if (!this._handle) return null;
-
-            const parts = relativePath.split('/');
-            let current = this._handle;
-            for (let i = 0; i < parts.length - 1; i++) {
-                current = await current.getDirectoryHandle(parts[i]);
-            }
-            const fileHandle = await current.getFileHandle(parts[parts.length - 1]);
-            const file = await fileHandle.getFile();
-            const buffer = await file.arrayBuffer();
+            const fh = await this._getFileHandle(relativePath);
+            const buffer = await (await fh.getFile()).arrayBuffer();
             return new Uint8Array(buffer);
         } catch (e) {
             console.error('folderPicker.readFileBytes error:', e);
@@ -161,9 +193,24 @@ window.folderPicker = {
         }
     },
 
+    // ── Clear ────────────────────────────────────────────────────────────────
+
     async clear() {
+        if (this._handle) await this._deleteMetadataCache(this._handle.name);
         this._handle = null;
         await this._deleteHandle();
+    },
+
+    // ── Helpers internos ─────────────────────────────────────────────────────
+
+    async _getFileHandle(relativePath) {
+        if (!this._handle) this._handle = await this._loadHandle();
+        const parts = relativePath.split('/');
+        let current = this._handle;
+        for (let i = 0; i < parts.length - 1; i++) {
+            current = await current.getDirectoryHandle(parts[i]);
+        }
+        return current.getFileHandle(parts[parts.length - 1]);
     },
 
     async _saveHandle(handle) {
@@ -178,7 +225,7 @@ window.folderPicker = {
 
     async _loadHandle() {
         const db = await this._openDb();
-        return new Promise((resolve) => {
+        return new Promise(resolve => {
             const tx = db.transaction('handles', 'readonly');
             const req = tx.objectStore('handles').get('selected');
             req.onsuccess = () => resolve(req.result || null);
@@ -188,7 +235,7 @@ window.folderPicker = {
 
     async _deleteHandle() {
         const db = await this._openDb();
-        return new Promise((resolve) => {
+        return new Promise(resolve => {
             const tx = db.transaction('handles', 'readwrite');
             tx.objectStore('handles').delete('selected');
             tx.oncomplete = resolve;
@@ -198,8 +245,12 @@ window.folderPicker = {
 
     _openDb() {
         return new Promise((resolve, reject) => {
-            const req = indexedDB.open('photohub-folder', 1);
-            req.onupgradeneeded = e => e.target.result.createObjectStore('handles');
+            const req = indexedDB.open('photohub-folder', 2); // v2: añade store 'metadata'
+            req.onupgradeneeded = e => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains('handles'))  db.createObjectStore('handles');
+                if (!db.objectStoreNames.contains('metadata')) db.createObjectStore('metadata');
+            };
             req.onsuccess = e => resolve(e.target.result);
             req.onerror = () => reject(req.error);
         });

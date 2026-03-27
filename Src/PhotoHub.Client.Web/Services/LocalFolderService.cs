@@ -29,14 +29,27 @@ public class LocalFolderService : ILocalFolderService
         return results ?? [];
     }
 
-    public async Task<byte[]?> ReadFileBytesAsync(string relativePath)
-        => await _js.InvokeAsync<byte[]?>("folderPicker.readFileBytes", relativePath);
+    public async Task<List<LocalFileInfo>?> LoadMetadataCacheAsync(string folderName)
+        => await _js.InvokeAsync<List<LocalFileInfo>?>("folderPicker.loadMetadataCache", folderName);
+
+    public async Task SaveMetadataCacheAsync(string folderName, IEnumerable<LocalFileInfo> files)
+        => await _js.InvokeVoidAsync("folderPicker.saveMetadataCache", folderName, files);
+
+    public async Task<Dictionary<string, string>> GetBlobUrlsBatchAsync(IEnumerable<string> relativePaths)
+    {
+        var result = await _js.InvokeAsync<Dictionary<string, string>?>(
+            "folderPicker.getBlobUrlsBatch", relativePaths);
+        return result ?? [];
+    }
 
     public async Task<string?> GetBlobUrlAsync(string relativePath)
         => await _js.InvokeAsync<string?>("folderPicker.getBlobUrl", relativePath);
 
     public async Task RevokeBlobUrlAsync(string url)
         => await _js.InvokeVoidAsync("folderPicker.revokeBlobUrl", url);
+
+    public async Task<byte[]?> ReadFileBytesAsync(string relativePath)
+        => await _js.InvokeAsync<byte[]?>("folderPicker.readFileBytes", relativePath);
 
     public async Task<string?> ComputeChecksumAsync(string relativePath)
         => await _js.InvokeAsync<string?>("folderPicker.computeChecksum", relativePath);

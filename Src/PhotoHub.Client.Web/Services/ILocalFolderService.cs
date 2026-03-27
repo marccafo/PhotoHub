@@ -16,9 +16,12 @@ public interface ILocalFolderService
     Task<string?> GetStoredFolderNameAsync();
     Task<bool> RequestPermissionAsync();
     Task<List<LocalFileInfo>> EnumerateFilesAsync();
-    Task<byte[]?> ReadFileBytesAsync(string relativePath);
+    Task<List<LocalFileInfo>?> LoadMetadataCacheAsync(string folderName);
+    Task SaveMetadataCacheAsync(string folderName, IEnumerable<LocalFileInfo> files);
+    Task<Dictionary<string, string>> GetBlobUrlsBatchAsync(IEnumerable<string> relativePaths);
     Task<string?> GetBlobUrlAsync(string relativePath);
     Task RevokeBlobUrlAsync(string url);
+    Task<byte[]?> ReadFileBytesAsync(string relativePath);
     Task<string?> ComputeChecksumAsync(string relativePath);
     Task ClearAsync();
 }
