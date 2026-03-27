@@ -32,7 +32,17 @@ public class AssetIndexingService
         _dbContext = dbContext;
     }
 
-    public async Task<Asset?> IndexFileAsync(string physicalPath, Guid userId, CancellationToken ct)
+    /// <summary>
+    /// Indexes a single file into the database. When <paramref name="externalLibraryId"/> is set
+    /// the file is treated as part of an external library: the physical path is stored as-is,
+    /// the provided <paramref name="userId"/> is used as owner, and no checksum-based rename
+    /// detection is performed (to avoid matching unrelated internal assets).
+    /// </summary>
+    public async Task<Asset?> IndexFileAsync(
+        string physicalPath,
+        Guid userId,
+        CancellationToken ct,
+        Guid? externalLibraryId = null)
     {
         if (!File.Exists(physicalPath))
         {
@@ -42,31 +52,41 @@ public class AssetIndexingService
 
         try
         {
-            var virtualPath = NormalizeVirtualPath(await _settingsService.VirtualizePathAsync(physicalPath));
+            // External library assets store the physical path directly;
+            // internal assets use a normalized virtual path.
+            var storedPath = externalLibraryId.HasValue
+                ? NormalizeVirtualPath(physicalPath)
+                : NormalizeVirtualPath(await _settingsService.VirtualizePathAsync(physicalPath));
+
             var checksum = await _hashService.CalculateFileHashAsync(physicalPath, ct);
 
             // Check if already indexed by path
             var existingByPath = await _dbContext.Assets
                 .Include(a => a.Thumbnails)
                 .Include(a => a.Exif)
-                .FirstOrDefaultAsync(a => a.FullPath == virtualPath && a.DeletedAt == null, ct);
+                .FirstOrDefaultAsync(a => a.FullPath == storedPath && a.DeletedAt == null, ct);
 
             if (existingByPath != null && existingByPath.Thumbnails.Any())
             {
-                Console.WriteLine($"[INDEX-FILE] Already indexed: {virtualPath}");
+                Console.WriteLine($"[INDEX-FILE] Already indexed: {storedPath}");
                 return existingByPath;
             }
 
-            // Check by checksum (handles renames/moves)
-            var existingByChecksum = await _dbContext.Assets
-                .Include(a => a.Thumbnails)
-                .Include(a => a.Exif)
-                .FirstOrDefaultAsync(a => a.Checksum == checksum && a.DeletedAt == null, ct);
-
-            if (existingByChecksum != null && existingByChecksum.Thumbnails.Any())
+            // Check by checksum (handles renames/moves) — only for internal assets to avoid
+            // accidentally matching unrelated files from different sources.
+            Asset? existingByChecksum = null;
+            if (!externalLibraryId.HasValue)
             {
-                Console.WriteLine($"[INDEX-FILE] Already indexed by checksum: {virtualPath}");
-                return existingByChecksum;
+                existingByChecksum = await _dbContext.Assets
+                    .Include(a => a.Thumbnails)
+                    .Include(a => a.Exif)
+                    .FirstOrDefaultAsync(a => a.Checksum == checksum && a.DeletedAt == null, ct);
+
+                if (existingByChecksum != null && existingByChecksum.Thumbnails.Any())
+                {
+                    Console.WriteLine($"[INDEX-FILE] Already indexed by checksum: {storedPath}");
+                    return existingByChecksum;
+                }
             }
 
             var fileInfo = new FileInfo(physicalPath);
@@ -82,13 +102,14 @@ public class AssetIndexingService
                 existingByPath.Checksum = checksum;
                 existingByPath.FileSize = fileInfo.Length;
                 existingByPath.ModifiedDate = fileInfo.LastWriteTimeUtc;
+                existingByPath.IsOffline = false;
                 asset = existingByPath;
                 isNew = false;
             }
             else if (existingByChecksum != null)
             {
                 // File moved/renamed — update path
-                existingByChecksum.FullPath = virtualPath;
+                existingByChecksum.FullPath = storedPath;
                 existingByChecksum.FileName = fileInfo.Name;
                 existingByChecksum.ModifiedDate = fileInfo.LastWriteTimeUtc;
                 asset = existingByChecksum;
@@ -99,7 +120,7 @@ public class AssetIndexingService
                 asset = new Asset
                 {
                     FileName = fileInfo.Name,
-                    FullPath = virtualPath,
+                    FullPath = storedPath,
                     FileSize = fileInfo.Length,
                     Checksum = checksum,
                     Type = assetType,
@@ -111,26 +132,35 @@ public class AssetIndexingService
                 isNew = true;
             }
 
-            // Owner from path — validate that the extracted user actually exists in the DB.
-            // If not, fall back to the primary admin to avoid FK constraint violations.
-            if (TryGetOwnerIdFromVirtualPath(virtualPath, out var parsedOwner))
+            // Owner & library assignment
+            if (externalLibraryId.HasValue)
             {
-                var ownerExists = await _dbContext.Users.AnyAsync(u => u.Id == parsedOwner, ct);
-                if (ownerExists)
-                {
-                    asset.OwnerId = parsedOwner;
-                }
-                else
-                {
-                    var primaryAdmin = await GetPrimaryAdminIdAsync(ct);
-                    asset.OwnerId = primaryAdmin;
-                    Console.WriteLine($"[INDEX-FILE] Owner {parsedOwner} not found, assigned to primary admin ({primaryAdmin}).");
-                }
+                asset.OwnerId = userId;
+                asset.ExternalLibraryId = externalLibraryId;
             }
             else
             {
-                // Non-user path (e.g. /shared) — assign to primary admin
-                asset.OwnerId = await GetPrimaryAdminIdAsync(ct);
+                // Owner from path — validate that the extracted user actually exists in the DB.
+                // If not, fall back to the primary admin to avoid FK constraint violations.
+                if (TryGetOwnerIdFromVirtualPath(storedPath, out var parsedOwner))
+                {
+                    var ownerExists = await _dbContext.Users.AnyAsync(u => u.Id == parsedOwner, ct);
+                    if (ownerExists)
+                    {
+                        asset.OwnerId = parsedOwner;
+                    }
+                    else
+                    {
+                        var primaryAdmin = await GetPrimaryAdminIdAsync(ct);
+                        asset.OwnerId = primaryAdmin;
+                        Console.WriteLine($"[INDEX-FILE] Owner {parsedOwner} not found, assigned to primary admin ({primaryAdmin}).");
+                    }
+                }
+                else
+                {
+                    // Non-user path (e.g. /shared) — assign to primary admin
+                    asset.OwnerId = await GetPrimaryAdminIdAsync(ct);
+                }
             }
 
             // Folder
@@ -180,7 +210,7 @@ public class AssetIndexingService
                 await _mlJobService.EnqueueMlJobAsync(asset.Id, MlJobType.ObjectRecognition, ct);
             }
 
-            Console.WriteLine($"[INDEX-FILE] Indexed successfully: {virtualPath} (id={asset.Id})");
+            Console.WriteLine($"[INDEX-FILE] Indexed successfully: {storedPath} (id={asset.Id})");
             return asset;
         }
         catch (Exception ex)

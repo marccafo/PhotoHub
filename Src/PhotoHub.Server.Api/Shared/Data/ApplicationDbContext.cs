@@ -27,6 +27,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<RefreshToken> RefreshTokens { get; set; }
     public DbSet<SharedLink> SharedLinks { get; set; }
     public DbSet<Notification> Notifications { get; set; }
+    public DbSet<ExternalLibrary> ExternalLibraries { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -137,7 +138,15 @@ public class ApplicationDbContext : DbContext
                 .WithMany(f => f.Assets)
                 .HasForeignKey(e => e.FolderId)
                 .OnDelete(DeleteBehavior.SetNull);
-            
+
+            entity.HasOne(e => e.ExternalLibrary)
+                .WithMany(l => l.Assets)
+                .HasForeignKey(e => e.ExternalLibraryId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => e.ExternalLibraryId);
+            entity.HasIndex(e => e.IsOffline);
+
             entity.Property(e => e.CreatedDate)
                 .HasColumnType("timestamp without time zone")
                 .HasConversion(
@@ -482,6 +491,38 @@ public class ApplicationDbContext : DbContext
                 .HasConversion(
                     v => v.Kind == DateTimeKind.Utc ? DateTime.SpecifyKind(v, DateTimeKind.Unspecified) : v,
                     v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+        });
+
+        // Configure ExternalLibrary entity
+        modelBuilder.Entity<ExternalLibrary>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Path).IsRequired().HasMaxLength(1000);
+            entity.Property(e => e.CronSchedule).HasMaxLength(100);
+
+            entity.HasOne(e => e.Owner)
+                .WithMany(u => u.ExternalLibraries)
+                .HasForeignKey(e => e.OwnerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.OwnerId);
+
+            entity.Property(e => e.CreatedAt)
+                .HasColumnType("timestamp without time zone")
+                .HasConversion(
+                    v => v.Kind == DateTimeKind.Utc ? DateTime.SpecifyKind(v, DateTimeKind.Unspecified) : v,
+                    v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+
+            entity.Property(e => e.LastScannedAt)
+                .HasColumnType("timestamp without time zone")
+                .HasConversion(
+                    v => v.HasValue && v.Value.Kind == DateTimeKind.Utc
+                        ? DateTime.SpecifyKind(v.Value, DateTimeKind.Unspecified)
+                        : v,
+                    v => v.HasValue
+                        ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc)
+                        : null);
         });
 
         // Configure RefreshToken entity

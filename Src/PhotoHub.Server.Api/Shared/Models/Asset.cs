@@ -40,9 +40,16 @@ public class Asset
     
     public Guid? OwnerId { get; set; }
     public User? Owner { get; set; }
-    
+
     public Guid? FolderId { get; set; }
     public Folder? Folder { get; set; }
+
+    // External library support. Null = asset uploaded normally (managed by PhotoHub).
+    public Guid? ExternalLibraryId { get; set; }
+    public ExternalLibrary? ExternalLibrary { get; set; }
+
+    // True when the file no longer exists at FullPath (detected during library scan).
+    public bool IsOffline { get; set; }
 
     public bool IsFavorite { get; set; }
 

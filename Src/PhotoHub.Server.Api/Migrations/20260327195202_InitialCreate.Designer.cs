@@ -12,7 +12,7 @@ using PhotoHub.Server.Api.Shared.Data;
 namespace PhotoHub.Server.Api.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260319085701_InitialCreate")]
+    [Migration("20260327195202_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -171,6 +171,9 @@ namespace PhotoHub.Server.Api.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)");
 
+                    b.Property<Guid?>("ExternalLibraryId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("FileName")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -193,6 +196,9 @@ namespace PhotoHub.Server.Api.Migrations
                     b.Property<bool>("IsFavorite")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsOffline")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime>("ModifiedDate")
                         .HasColumnType("timestamp without time zone");
 
@@ -209,12 +215,16 @@ namespace PhotoHub.Server.Api.Migrations
 
                     b.HasIndex("Checksum");
 
+                    b.HasIndex("ExternalLibraryId");
+
                     b.HasIndex("FileName");
 
                     b.HasIndex("FolderId");
 
                     b.HasIndex("FullPath")
                         .IsUnique();
+
+                    b.HasIndex("IsOffline");
 
                     b.HasIndex("OwnerId");
 
@@ -417,6 +427,57 @@ namespace PhotoHub.Server.Api.Migrations
                     b.HasIndex("UserTagId");
 
                     b.ToTable("AssetUserTags");
+                });
+
+            modelBuilder.Entity("PhotoHub.Server.Api.Shared.Models.ExternalLibrary", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CronSchedule")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("ImportSubfolders")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("LastScanAssetsAdded")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("LastScanAssetsFound")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("LastScanAssetsRemoved")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LastScanStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastScannedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerId");
+
+                    b.ToTable("ExternalLibraries");
                 });
 
             modelBuilder.Entity("PhotoHub.Server.Api.Shared.Models.Folder", b =>
@@ -819,6 +880,11 @@ namespace PhotoHub.Server.Api.Migrations
 
             modelBuilder.Entity("PhotoHub.Server.Api.Shared.Models.Asset", b =>
                 {
+                    b.HasOne("PhotoHub.Server.Api.Shared.Models.ExternalLibrary", "ExternalLibrary")
+                        .WithMany("Assets")
+                        .HasForeignKey("ExternalLibraryId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("PhotoHub.Server.Api.Shared.Models.Folder", "Folder")
                         .WithMany("Assets")
                         .HasForeignKey("FolderId")
@@ -828,6 +894,8 @@ namespace PhotoHub.Server.Api.Migrations
                         .WithMany("Assets")
                         .HasForeignKey("OwnerId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("ExternalLibrary");
 
                     b.Navigation("Folder");
 
@@ -895,6 +963,17 @@ namespace PhotoHub.Server.Api.Migrations
                     b.Navigation("Asset");
 
                     b.Navigation("UserTag");
+                });
+
+            modelBuilder.Entity("PhotoHub.Server.Api.Shared.Models.ExternalLibrary", b =>
+                {
+                    b.HasOne("PhotoHub.Server.Api.Shared.Models.User", "Owner")
+                        .WithMany("ExternalLibraries")
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Owner");
                 });
 
             modelBuilder.Entity("PhotoHub.Server.Api.Shared.Models.Folder", b =>
@@ -1011,6 +1090,11 @@ namespace PhotoHub.Server.Api.Migrations
                     b.Navigation("UserTags");
                 });
 
+            modelBuilder.Entity("PhotoHub.Server.Api.Shared.Models.ExternalLibrary", b =>
+                {
+                    b.Navigation("Assets");
+                });
+
             modelBuilder.Entity("PhotoHub.Server.Api.Shared.Models.Folder", b =>
                 {
                     b.Navigation("Assets");
@@ -1025,6 +1109,8 @@ namespace PhotoHub.Server.Api.Migrations
                     b.Navigation("AlbumPermissions");
 
                     b.Navigation("Assets");
+
+                    b.Navigation("ExternalLibraries");
 
                     b.Navigation("FolderPermissions");
 

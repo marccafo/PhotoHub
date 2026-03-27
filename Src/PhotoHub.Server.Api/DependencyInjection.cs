@@ -19,6 +19,8 @@ public static class DependencyInjection
         builder.Services.AddScoped<SettingsService>();
         builder.Services.AddScoped<IMlJobService, MlJobService>();
         builder.Services.AddHostedService<MlJobProcessorService>();
+        builder.Services.AddScoped<ExternalLibraryScanService>();
+        builder.Services.AddHostedService<ExternalLibrarySchedulerService>();
         
         // Registrar AuthService
         builder.Services.AddScoped<IAuthService, AuthService>();

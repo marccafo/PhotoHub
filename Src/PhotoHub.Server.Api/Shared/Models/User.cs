@@ -46,5 +46,6 @@ public class User
     public ICollection<Album> OwnedAlbums { get; set; } = new List<Album>();
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     public ICollection<UserTag> Tags { get; set; } = new List<UserTag>();
+    public ICollection<ExternalLibrary> ExternalLibraries { get; set; } = new List<ExternalLibrary>();
 }
 
