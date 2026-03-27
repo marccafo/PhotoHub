@@ -219,10 +219,10 @@
             <div class="pwa-update-banner">
                 <MudIcon Icon="@Icons.Material.Filled.SystemUpdate" Size="Size.Small" Color="Color.Primary" Class="flex-shrink-0" />
                 <MudText Typo="Typo.body2" Class="flex-grow-1">Nueva versión disponible</MudText>
-                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
-                           OnClick="@PwaUpdateService.ApplyUpdateAsync">
-                    Actualizar ahora
-                </MudButton>
+                <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small"
+                               Variant="Variant.Filled" Color="Color.Primary"
+                               Title="Actualizar ahora"
+                               OnClick="@PwaUpdateService.ApplyUpdateAsync" />
             </div>
         }
         <div class="page-content" style="flex-grow: 1;">
