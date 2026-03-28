@@ -1,6 +1,8 @@
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using PhotoHub.Server.Api.Shared.Data;
 using PhotoHub.Server.Api.Shared.Models;
 
@@ -19,16 +21,16 @@ public class ExternalLibraryScanService
 {
     private readonly ApplicationDbContext _dbContext;
     private readonly DirectoryScanner _scanner;
-    private readonly AssetIndexingService _indexingService;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     public ExternalLibraryScanService(
         ApplicationDbContext dbContext,
         DirectoryScanner scanner,
-        AssetIndexingService indexingService)
+        IServiceScopeFactory scopeFactory)
     {
         _dbContext = dbContext;
         _scanner = scanner;
-        _indexingService = indexingService;
+        _scopeFactory = scopeFactory;
     }
 
     public async IAsyncEnumerable<ScanProgressUpdate> ScanAsync(
@@ -90,6 +92,16 @@ public class ExternalLibraryScanService
         await writer.WriteAsync(new ScanProgressUpdate(
             "Scanning directory...", 5, 0, 0, 0, false), ct);
 
+        // Read worker count from the shared TaskSettings.ThumbnailWorkers setting
+        // (same setting used by IndexAssetsEndpoint — no new setting needed)
+        int workers;
+        using (var settingsScope = _scopeFactory.CreateScope())
+        {
+            var settingsService = settingsScope.ServiceProvider.GetRequiredService<SettingsService>();
+            var raw = await settingsService.GetSettingAsync("TaskSettings.ThumbnailWorkers", Guid.Empty, "2");
+            workers = Math.Clamp(int.TryParse(raw, out var n) ? n : 2, 1, 16);
+        }
+
         // Discover files
         var scannedFiles = (await _scanner.ScanDirectoryAsync(library.Path, ct)).ToList();
 
@@ -106,7 +118,7 @@ public class ExternalLibraryScanService
 
         var total = scannedFiles.Count;
         await writer.WriteAsync(new ScanProgressUpdate(
-            $"Found {total} files. Indexing...", 10, total, 0, 0, false), ct);
+            $"Found {total} files. Indexing with {workers} workers...", 10, total, 0, 0, false), ct);
 
         // Track existing paths to detect offline files after the scan
         var existingPaths = await _dbContext.Assets
@@ -114,31 +126,40 @@ public class ExternalLibraryScanService
             .Select(a => a.FullPath)
             .ToHashSetAsync(StringComparer.OrdinalIgnoreCase, ct);
 
-        var scannedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Thread-safe collections for parallel processing
+        var scannedPaths = new ConcurrentBag<string>();
         int indexed = 0;
+        int processed = 0;
 
-        for (int i = 0; i < scannedFiles.Count; i++)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var file = scannedFiles[i];
-            var normalizedPath = file.FullPath.Replace('\\', '/').TrimEnd('/');
-            scannedPaths.Add(normalizedPath);
-
-            await _indexingService.IndexFileAsync(file.FullPath, library.OwnerId, ct, libraryId);
-            indexed++;
-
-            if (i % 10 == 0 || i == scannedFiles.Count - 1)
+        // Parallel indexing — each task gets its own DI scope (own DbContext + services)
+        await Parallel.ForEachAsync(
+            scannedFiles,
+            new ParallelOptions { MaxDegreeOfParallelism = workers, CancellationToken = ct },
+            async (file, innerCt) =>
             {
-                var pct = 10 + (int)((double)(i + 1) / Math.Max(total, 1) * 80);
-                await writer.WriteAsync(new ScanProgressUpdate(
-                    $"Indexed {indexed}/{total}: {file.FileName}",
-                    pct, total, indexed, 0, false), ct);
-            }
-        }
+                using var scope = _scopeFactory.CreateScope();
+                var indexingService = scope.ServiceProvider.GetRequiredService<AssetIndexingService>();
+
+                var normalizedPath = file.FullPath.Replace('\\', '/').TrimEnd('/');
+                scannedPaths.Add(normalizedPath);
+
+                await indexingService.IndexFileAsync(file.FullPath, library.OwnerId, innerCt, libraryId);
+
+                Interlocked.Increment(ref indexed);
+                var current = Interlocked.Increment(ref processed);
+
+                if (current % 10 == 0 || current == total)
+                {
+                    var pct = 10 + (int)((double)current / Math.Max(total, 1) * 80);
+                    await writer.WriteAsync(new ScanProgressUpdate(
+                        $"Indexed {current}/{total}: {file.FileName}",
+                        pct, total, indexed, 0, false), innerCt);
+                }
+            });
 
         // Mark missing files as offline
-        var offlinePaths = existingPaths.Except(scannedPaths).ToList();
+        var scannedPathsSet = new HashSet<string>(scannedPaths, StringComparer.OrdinalIgnoreCase);
+        var offlinePaths = existingPaths.Except(scannedPathsSet).ToList();
         int markedOffline = 0;
 
         if (offlinePaths.Count > 0)
@@ -162,11 +183,10 @@ public class ExternalLibraryScanService
         }
 
         // Update library stats
-        var prevTotal = existingPaths.Count;
         library.LastScannedAt = DateTime.UtcNow;
         library.LastScanStatus = ExternalLibraryScanStatus.Completed;
         library.LastScanAssetsFound = total;
-        library.LastScanAssetsAdded = scannedPaths.Except(existingPaths).Count();
+        library.LastScanAssetsAdded = scannedPathsSet.Except(existingPaths).Count();
         library.LastScanAssetsRemoved = markedOffline;
         await _dbContext.SaveChangesAsync(ct);
 
