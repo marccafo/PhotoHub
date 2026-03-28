@@ -1,6 +1,7 @@
-// Blazor PWA service worker — cache app shell, skip /api/ requests
+// Blazor PWA service worker — cache app shell, cache-first for thumbnails
 
 const CACHE_NAME = 'photohub-cache-v1';
+const THUMBNAIL_CACHE = 'photohub-thumbnails-v1';
 
 self.addEventListener('install', event => {
     event.waitUntil(
@@ -22,10 +23,12 @@ self.addEventListener('install', event => {
     // and call it explicitly via the SKIP_WAITING message below.
 });
 
+const KNOWN_CACHES = [CACHE_NAME, THUMBNAIL_CACHE];
+
 self.addEventListener('activate', event => {
     event.waitUntil(
         caches.keys().then(keys =>
-            Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+            Promise.all(keys.filter(k => !KNOWN_CACHES.includes(k)).map(k => caches.delete(k)))
         )
     );
     self.clients.claim();
@@ -40,7 +43,23 @@ self.addEventListener('message', event => {
 self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
 
-    // Always go to network for API calls
+    // Cache-first for thumbnails (immutable per assetId+size, safe to cache long-term)
+    if (/^\/api\/assets\/[^/]+\/thumbnail$/.test(url.pathname)) {
+        event.respondWith(
+            caches.open(THUMBNAIL_CACHE).then(cache =>
+                cache.match(event.request).then(cached => {
+                    if (cached) return cached;
+                    return fetch(event.request).then(response => {
+                        if (response.ok) cache.put(event.request, response.clone());
+                        return response;
+                    });
+                })
+            )
+        );
+        return;
+    }
+
+    // Always go to network for other API calls
     if (url.pathname.startsWith('/api/')) {
         return;
     }

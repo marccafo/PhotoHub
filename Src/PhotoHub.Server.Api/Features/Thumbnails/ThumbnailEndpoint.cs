@@ -31,6 +31,7 @@ public class ThumbnailEndpoint : IEndpoint
         [FromServices] ApplicationDbContext dbContext,
         [FromServices] ThumbnailGeneratorService thumbnailService,
         [FromServices] SettingsService settingsService,
+        HttpContext httpContext,
         [FromRoute] Guid assetId,
         [FromQuery] string size = "Medium",
         CancellationToken cancellationToken = default)
@@ -97,6 +98,9 @@ public class ThumbnailEndpoint : IEndpoint
             // Return file
             var fileBytes = await File.ReadAllBytesAsync(thumbnail.FilePath, cancellationToken);
             var contentType = thumbnail.Format == "WebP" ? "image/webp" : "image/jpeg";
+
+            // Thumbnails are immutable (keyed by assetId + size) — cache aggressively
+            httpContext.Response.Headers.CacheControl = "public, max-age=2592000, immutable";
 
             return Results.File(fileBytes, contentType, $"{asset.FileName}_thumb_{size}.jpg");
         }
